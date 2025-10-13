@@ -71,20 +71,125 @@ export function PedidosTable({ pedidos, loading, onRefresh }: PedidosTableProps)
 
     setGenerating(pedido.id);
     try {
-      // Buscar mockup pelo código do produto
-      const { data: mockup, error: mockupError } = await supabase
+      // Buscar mockups pelo código do produto (aprovacao e molde)
+      const { data: mockups, error: mockupError } = await supabase
         .from("mockups")
         .select("*, mockup_areas(*)")
-        .eq("codigo_mockup", pedido.codigo_produto)
-        .single();
+        .eq("codigo_mockup", pedido.codigo_produto);
 
-      if (mockupError || !mockup) {
+      if (mockupError || !mockups || mockups.length === 0) {
         toast.error("Nenhum mockup encontrado para este código de produto");
         return;
       }
 
-      toast.success("Geração de mockups iniciada (funcionalidade em desenvolvimento)");
-      // TODO: Implementar lógica de geração de imagens com canvas
+      // Processar cada tipo de mockup
+      const results: { tipo: string; url: string }[] = [];
+      
+      for (const mockup of mockups) {
+        const areas = mockup.mockup_areas.filter((a: any) => a.field_key === "fotocliente");
+        
+        if (areas.length === 0) continue;
+
+        // Criar canvas
+        const canvas = document.createElement("canvas");
+        const ctx = canvas.getContext("2d");
+        if (!ctx) continue;
+
+        // Carregar imagem base
+        const baseImg = new Image();
+        baseImg.crossOrigin = "anonymous";
+        
+        await new Promise<void>((resolve, reject) => {
+          baseImg.onload = () => resolve();
+          baseImg.onerror = reject;
+          baseImg.src = mockup.imagem_base;
+        });
+
+        canvas.width = baseImg.width;
+        canvas.height = baseImg.height;
+        ctx.drawImage(baseImg, 0, 0);
+
+        // Carregar foto do cliente
+        const clientImg = new Image();
+        clientImg.crossOrigin = "anonymous";
+        
+        await new Promise<void>((resolve, reject) => {
+          clientImg.onload = () => resolve();
+          clientImg.onerror = reject;
+          clientImg.src = pedido.foto_cliente;
+        });
+
+        // Aplicar foto em cada área
+        for (const area of areas) {
+          const aspectRatio = clientImg.width / clientImg.height;
+          const areaAspect = area.width / area.height;
+          
+          let drawWidth = area.width;
+          let drawHeight = area.height;
+          let offsetX = 0;
+          let offsetY = 0;
+
+          // Manter proporção (contain)
+          if (aspectRatio > areaAspect) {
+            drawHeight = area.width / aspectRatio;
+            offsetY = (area.height - drawHeight) / 2;
+          } else {
+            drawWidth = area.height * aspectRatio;
+            offsetX = (area.width - drawWidth) / 2;
+          }
+
+          ctx.drawImage(
+            clientImg,
+            area.x + offsetX,
+            area.y + offsetY,
+            drawWidth,
+            drawHeight
+          );
+        }
+
+        // Converter para blob
+        const blob = await new Promise<Blob>((resolve) => {
+          canvas.toBlob((b) => resolve(b!), "image/png");
+        });
+
+        // Upload para storage
+        const fileName = `${mockup.tipo}/${pedido.numero_pedido}-${mockup.tipo}-${Date.now()}.png`;
+        const { error: uploadError } = await supabase.storage
+          .from("mockup-images")
+          .upload(fileName, blob);
+
+        if (uploadError) {
+          console.error("Erro ao fazer upload:", uploadError);
+          continue;
+        }
+
+        const { data: { publicUrl } } = supabase.storage
+          .from("mockup-images")
+          .getPublicUrl(fileName);
+
+        results.push({ tipo: mockup.tipo, url: publicUrl });
+      }
+
+      // Atualizar pedido com as URLs geradas
+      const updateData: any = {};
+      results.forEach(r => {
+        if (r.tipo === "aprovacao") updateData.foto_aprovacao = r.url;
+        if (r.tipo === "molde") updateData.molde_producao = r.url;
+      });
+
+      if (Object.keys(updateData).length > 0) {
+        updateData.mensagem_enviada = "enviada";
+        
+        const { error: updateError } = await supabase
+          .from("pedidos")
+          .update(updateData)
+          .eq("id", pedido.id);
+
+        if (updateError) throw updateError;
+      }
+
+      toast.success("Mockups gerados com sucesso!");
+      onRefresh();
     } catch (error) {
       console.error("Erro ao gerar mockups:", error);
       toast.error("Erro ao gerar mockups");
