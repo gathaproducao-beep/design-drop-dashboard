@@ -74,17 +74,23 @@ export function PedidosTable({
   };
 
   const handleGerarMockups = async (pedido: any) => {
-    if (!pedido.foto_cliente) {
-      toast.error("É necessário ter uma foto do cliente para gerar mockups");
+    if (!pedido.fotos_cliente || pedido.fotos_cliente.length === 0) {
+      toast.error("É necessário ter pelo menos uma foto do cliente para gerar mockups");
       return;
     }
 
     setGenerating(pedido.id);
     try {
-      // Buscar mockups pelo código do produto (aprovacao e molde)
+      // Buscar mockups e seus canvases/áreas
       const { data: mockups, error: mockupError } = await supabase
         .from("mockups")
-        .select("*, mockup_areas(*)")
+        .select(`
+          *,
+          mockup_canvases (
+            *,
+            mockup_areas (*)
+          )
+        `)
         .eq("codigo_mockup", pedido.codigo_produto);
 
       if (mockupError || !mockups || mockups.length === 0) {
@@ -92,100 +98,150 @@ export function PedidosTable({
         return;
       }
 
-      // Processar cada tipo de mockup
+      // Processar cada mockup
       const results: { tipo: string; url: string }[] = [];
       
       for (const mockup of mockups) {
-        const areas = mockup.mockup_areas.filter((a: any) => a.field_key === "fotocliente");
+        const canvases = mockup.mockup_canvases || [];
         
-        if (areas.length === 0) continue;
-
-        // Criar canvas
-        const canvas = document.createElement("canvas");
-        const ctx = canvas.getContext("2d");
-        if (!ctx) continue;
-
-        // Carregar imagem base
-        const baseImg = new Image();
-        baseImg.crossOrigin = "anonymous";
-        
-        await new Promise<void>((resolve, reject) => {
-          baseImg.onload = () => resolve();
-          baseImg.onerror = reject;
-          baseImg.src = mockup.imagem_base;
-        });
-
-        canvas.width = baseImg.width;
-        canvas.height = baseImg.height;
-        ctx.drawImage(baseImg, 0, 0);
-
-        // Carregar foto do cliente
-        const clientImg = new Image();
-        clientImg.crossOrigin = "anonymous";
-        
-        await new Promise<void>((resolve, reject) => {
-          clientImg.onload = () => resolve();
-          clientImg.onerror = reject;
-          clientImg.src = pedido.foto_cliente;
-        });
-
-        // Aplicar foto em cada área
-        for (const area of areas) {
-          const aspectRatio = clientImg.width / clientImg.height;
-          const areaAspect = area.width / area.height;
-          
-          let drawWidth = area.width;
-          let drawHeight = area.height;
-          let offsetX = 0;
-          let offsetY = 0;
-
-          // Manter proporção (contain)
-          if (aspectRatio > areaAspect) {
-            drawHeight = area.width / aspectRatio;
-            offsetY = (area.height - drawHeight) / 2;
-          } else {
-            drawWidth = area.height * aspectRatio;
-            offsetX = (area.width - drawWidth) / 2;
-          }
-
-          ctx.drawImage(
-            clientImg,
-            area.x + offsetX,
-            area.y + offsetY,
-            drawWidth,
-            drawHeight
-          );
-        }
-
-        // Converter para blob
-        const blob = await new Promise<Blob>((resolve) => {
-          canvas.toBlob((b) => resolve(b!), "image/png");
-        });
-
-        // Upload para storage
-        const fileName = `${mockup.tipo}/${pedido.numero_pedido}-${mockup.tipo}-${Date.now()}.png`;
-        const { error: uploadError } = await supabase.storage
-          .from("mockup-images")
-          .upload(fileName, blob);
-
-        if (uploadError) {
-          console.error("Erro ao fazer upload:", uploadError);
+        if (canvases.length === 0) {
+          console.warn("Mockup sem canvases:", mockup.id);
           continue;
         }
 
-        const { data: { publicUrl } } = supabase.storage
-          .from("mockup-images")
-          .getPublicUrl(fileName);
+        // Para cada canvas do mockup
+        for (const canvasData of canvases) {
+          const areas = canvasData.mockup_areas || [];
+          
+          // Criar canvas HTML
+          const canvas = document.createElement("canvas");
+          const ctx = canvas.getContext("2d");
+          if (!ctx) continue;
 
-        results.push({ tipo: mockup.tipo, url: publicUrl });
+          // Carregar imagem base do canvas
+          const baseImg = new Image();
+          baseImg.crossOrigin = "anonymous";
+          
+          await new Promise<void>((resolve, reject) => {
+            baseImg.onload = () => resolve();
+            baseImg.onerror = reject;
+            baseImg.src = canvasData.imagem_base;
+          });
+
+          canvas.width = baseImg.width;
+          canvas.height = baseImg.height;
+          ctx.drawImage(baseImg, 0, 0);
+
+          // Processar cada área
+          for (const area of areas) {
+            if (area.kind === "image") {
+              // Extrair índice da foto (ex: fotocliente[1] -> 1)
+              const match = area.field_key.match(/fotocliente\[(\d+)\]/);
+              const photoIndex = match ? parseInt(match[1]) - 1 : 0;
+              
+              const photoUrl = pedido.fotos_cliente[photoIndex];
+              if (!photoUrl) continue;
+
+              // Carregar foto do cliente
+              const clientImg = new Image();
+              clientImg.crossOrigin = "anonymous";
+              
+              await new Promise<void>((resolve, reject) => {
+                clientImg.onload = () => resolve();
+                clientImg.onerror = reject;
+                clientImg.src = photoUrl;
+              });
+
+              // Calcular dimensões mantendo proporção (contain)
+              const aspectRatio = clientImg.width / clientImg.height;
+              const areaAspect = area.width / area.height;
+              
+              let drawWidth = area.width;
+              let drawHeight = area.height;
+              let offsetX = 0;
+              let offsetY = 0;
+
+              if (aspectRatio > areaAspect) {
+                drawHeight = area.width / aspectRatio;
+                offsetY = (area.height - drawHeight) / 2;
+              } else {
+                drawWidth = area.height * aspectRatio;
+                offsetX = (area.width - drawWidth) / 2;
+              }
+
+              ctx.drawImage(
+                clientImg,
+                area.x + offsetX,
+                area.y + offsetY,
+                drawWidth,
+                drawHeight
+              );
+            } else if (area.kind === "text") {
+              // Renderizar texto
+              let textValue = "";
+              switch (area.field_key) {
+                case "numero_pedido":
+                  textValue = pedido.numero_pedido || "";
+                  break;
+                case "codigo_produto":
+                  textValue = pedido.codigo_produto || "";
+                  break;
+                case "data_pedido":
+                  textValue = pedido.data_pedido ? new Date(pedido.data_pedido).toLocaleDateString() : "";
+                  break;
+                case "observacao":
+                  textValue = pedido.observacao || "";
+                  break;
+              }
+
+              if (textValue) {
+                ctx.save();
+                ctx.font = `${area.font_weight || "normal"} ${area.font_size || 16}px ${area.font_family || "Arial"}`;
+                ctx.fillStyle = area.color || "#000000";
+                ctx.textAlign = (area.text_align || "left") as CanvasTextAlign;
+                
+                // Posição do texto
+                let textX = area.x;
+                if (area.text_align === "center") textX = area.x + area.width / 2;
+                else if (area.text_align === "right") textX = area.x + area.width;
+
+                ctx.fillText(textValue, textX, area.y + (area.font_size || 16));
+                ctx.restore();
+              }
+            }
+          }
+
+          // Converter para blob
+          const blob = await new Promise<Blob>((resolve) => {
+            canvas.toBlob((b) => resolve(b!), "image/png");
+          });
+
+          // Upload para storage
+          const fileName = `${mockup.tipo}/${pedido.numero_pedido}-${mockup.tipo}-${canvasData.nome}-${Date.now()}.png`;
+          const { error: uploadError } = await supabase.storage
+            .from("mockup-images")
+            .upload(fileName, blob);
+
+          if (uploadError) {
+            console.error("Erro ao fazer upload:", uploadError);
+            continue;
+          }
+
+          const { data: { publicUrl } } = supabase.storage
+            .from("mockup-images")
+            .getPublicUrl(fileName);
+
+          results.push({ tipo: mockup.tipo, url: publicUrl });
+        }
       }
 
-      // Atualizar pedido com as URLs geradas
+      // Atualizar pedido com as URLs geradas (usar a primeira de cada tipo)
       const updateData: any = {};
-      results.forEach(r => {
-        if (r.tipo === "aprovacao") updateData.foto_aprovacao = r.url;
-        if (r.tipo === "molde") updateData.molde_producao = r.url;
-      });
+      const aprovacaoResult = results.find(r => r.tipo === "aprovacao");
+      const moldeResult = results.find(r => r.tipo === "molde");
+      
+      if (aprovacaoResult) updateData.foto_aprovacao = aprovacaoResult.url;
+      if (moldeResult) updateData.molde_producao = moldeResult.url;
 
       if (Object.keys(updateData).length > 0) {
         updateData.mensagem_enviada = "enviada";
@@ -298,7 +354,7 @@ export function PedidosTable({
                     onClick={() => handleImageClick(pedido, "cliente")}
                     className="hover:bg-primary/10"
                   >
-                    <ImageIcon className="h-4 w-4" />
+                    <ImageIcon className={pedido.fotos_cliente?.length > 0 ? "h-4 w-4 text-primary" : "h-4 w-4"} />
                   </Button>
                 </TableCell>
                 <TableCell>
@@ -383,7 +439,7 @@ export function PedidosTable({
                   <Button
                     size="sm"
                     onClick={() => handleGerarMockups(pedido)}
-                    disabled={generating === pedido.id || !pedido.foto_cliente}
+                    disabled={generating === pedido.id || !pedido.fotos_cliente || pedido.fotos_cliente.length === 0}
                     className="bg-gradient-to-r from-accent to-accent/80"
                   >
                     {generating === pedido.id ? (
