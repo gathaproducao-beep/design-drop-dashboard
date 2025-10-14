@@ -25,7 +25,7 @@ export function ImageUploadDialog({
   onSuccess,
 }: ImageUploadDialogProps) {
   const [uploading, setUploading] = useState(false);
-  const [preview, setPreview] = useState<string | null>(pedido?.foto_cliente || null);
+  const [previews, setPreviews] = useState<string[]>(pedido?.fotos_cliente || []);
 
   const handleFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -49,16 +49,17 @@ export function ImageUploadDialog({
         .from("mockup-images")
         .getPublicUrl(filePath);
 
-      // Atualizar pedido
-      const { error: updateError } = await supabase
+      // Atualizar pedido com array de fotos
+      const novasFotos = [...previews, urlData.publicUrl];
+      const { error: updateError } = await (supabase as any)
         .from("pedidos")
-        .update({ foto_cliente: urlData.publicUrl })
+        .update({ fotos_cliente: novasFotos })
         .eq("id", pedido.id);
 
       if (updateError) throw updateError;
 
       toast.success("Foto enviada com sucesso!");
-      setPreview(urlData.publicUrl);
+      setPreviews(novasFotos);
       onSuccess();
       onOpenChange(false);
     } catch (error) {
@@ -76,13 +77,17 @@ export function ImageUploadDialog({
           <DialogTitle>Upload da Foto do Cliente</DialogTitle>
         </DialogHeader>
         <div className="space-y-4">
-          {preview && (
-            <div className="relative w-full h-64 bg-muted rounded-lg overflow-hidden">
-              <img
-                src={preview}
-                alt="Preview"
-                className="w-full h-full object-contain"
-              />
+          {previews.length > 0 && (
+            <div className="grid grid-cols-2 gap-2">
+              {previews.map((url, idx) => (
+                <div key={idx} className="relative w-full h-32 bg-muted rounded-lg overflow-hidden">
+                  <img
+                    src={url}
+                    alt={`Foto ${idx + 1}`}
+                    className="w-full h-full object-contain"
+                  />
+                </div>
+              ))}
             </div>
           )}
           <div className="flex items-center gap-4">
@@ -96,7 +101,7 @@ export function ImageUploadDialog({
             {uploading && <Loader2 className="h-4 w-4 animate-spin" />}
           </div>
           <p className="text-sm text-muted-foreground">
-            Selecione uma imagem para fazer upload
+            Adicione múltiplas fotos do cliente
           </p>
         </div>
       </DialogContent>

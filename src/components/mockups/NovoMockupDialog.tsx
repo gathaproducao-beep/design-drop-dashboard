@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import {
   Dialog,
   DialogContent,
@@ -32,76 +32,81 @@ export function NovoMockupDialog({
   onSuccess,
 }: NovoMockupDialogProps) {
   const [loading, setLoading] = useState(false);
-  const [uploading, setUploading] = useState(false);
   const [formData, setFormData] = useState({
     codigo_mockup: "",
     tipo: "aprovacao" as "aprovacao" | "molde",
+    mockup_aprovacao_vinculado_id: null as string | null,
   });
-  const [imageFile, setImageFile] = useState<File | null>(null);
-  const [preview, setPreview] = useState<string | null>(null);
+  const [mockupsAprovacao, setMockupsAprovacao] = useState<any[]>([]);
 
-  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (file) {
-      setImageFile(file);
-      const reader = new FileReader();
-      reader.onloadend = () => {
-        setPreview(reader.result as string);
-      };
-      reader.readAsDataURL(file);
+  useEffect(() => {
+    if (open && formData.tipo === "molde") {
+      carregarMockupsAprovacao();
+    }
+  }, [open, formData.tipo]);
+
+  const carregarMockupsAprovacao = async () => {
+    try {
+      const { data, error } = await supabase
+        .from("mockups")
+        .select("id, codigo_mockup")
+        .eq("tipo", "aprovacao")
+        .order("codigo_mockup");
+
+      if (error) throw error;
+      setMockupsAprovacao(data || []);
+    } catch (error) {
+      console.error("Erro ao carregar mockups de aprovação:", error);
     }
   };
 
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!imageFile) {
-      toast.error("Selecione uma imagem base");
-      return;
-    }
 
     setLoading(true);
-    setUploading(true);
-
     try {
-      // Upload da imagem
-      const fileExt = imageFile.name.split(".").pop();
-      const fileName = `${formData.codigo_mockup}-${Date.now()}.${fileExt}`;
-      const filePath = `mockups/${fileName}`;
-
-      const { error: uploadError } = await supabase.storage
-        .from("mockup-images")
-        .upload(filePath, imageFile);
-
-      if (uploadError) throw uploadError;
-
-      const { data: urlData } = supabase.storage
-        .from("mockup-images")
-        .getPublicUrl(filePath);
-
-      setUploading(false);
-
       // Criar mockup
-      const { error } = await supabase.from("mockups").insert([
+      const { data: mockupData, error: mockupError } = await supabase
+        .from("mockups")
+        .insert([
+          {
+            codigo_mockup: formData.codigo_mockup,
+            tipo: formData.tipo,
+            mockup_aprovacao_vinculado_id: formData.mockup_aprovacao_vinculado_id,
+            imagem_base: "", // Será atualizado pelo canvas padrão
+          },
+        ])
+        .select()
+        .single();
+
+      if (mockupError) throw mockupError;
+
+      // Criar canvas padrão "Frente"
+      const { error: canvasError } = await (supabase as any).from("mockup_canvases").insert([
         {
-          ...formData,
-          imagem_base: urlData.publicUrl,
+          mockup_id: mockupData.id,
+          nome: "Frente",
+          imagem_base: "",
+          ordem: 0,
         },
       ]);
 
-      if (error) throw error;
+      if (canvasError) throw canvasError;
 
       toast.success("Mockup criado com sucesso!");
       onSuccess();
       onOpenChange(false);
-      setFormData({ codigo_mockup: "", tipo: "aprovacao" });
-      setImageFile(null);
-      setPreview(null);
+      setFormData({ 
+        codigo_mockup: "", 
+        tipo: "aprovacao",
+        mockup_aprovacao_vinculado_id: null 
+      });
     } catch (error: any) {
       console.error("Erro ao criar mockup:", error);
       toast.error(error.message || "Erro ao criar mockup");
     } finally {
       setLoading(false);
-      setUploading(false);
     }
   };
 
@@ -143,32 +148,35 @@ export function NovoMockupDialog({
             </Select>
           </div>
 
-          <div className="space-y-2">
-            <Label htmlFor="imagem">Imagem Base *</Label>
-            {preview && (
-              <div className="relative w-full h-48 bg-muted rounded-lg overflow-hidden mb-2">
-                <img
-                  src={preview}
-                  alt="Preview"
-                  className="w-full h-full object-contain"
-                />
-              </div>
-            )}
-            <Input
-              id="imagem"
-              type="file"
-              accept="image/*"
-              onChange={handleFileChange}
-              required
-              disabled={uploading}
-            />
-            {uploading && (
-              <p className="text-sm text-muted-foreground flex items-center gap-2">
-                <Loader2 className="h-4 w-4 animate-spin" />
-                Fazendo upload...
+          {formData.tipo === "molde" && (
+            <div className="space-y-2">
+              <Label htmlFor="vinculado">Mockup de Aprovação Vinculado (Opcional)</Label>
+              <Select
+                value={formData.mockup_aprovacao_vinculado_id || ""}
+                onValueChange={(value) =>
+                  setFormData((prev) => ({ 
+                    ...prev, 
+                    mockup_aprovacao_vinculado_id: value || null 
+                  }))
+                }
+              >
+                <SelectTrigger>
+                  <SelectValue placeholder="Selecione um mockup de aprovação" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="">Nenhum</SelectItem>
+                  {mockupsAprovacao.map((m) => (
+                    <SelectItem key={m.id} value={m.id}>
+                      {m.codigo_mockup}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+              <p className="text-xs text-muted-foreground">
+                Ao gerar, criará também o mockup de aprovação vinculado
               </p>
-            )}
-          </div>
+            </div>
+          )}
 
           <DialogFooter>
             <Button

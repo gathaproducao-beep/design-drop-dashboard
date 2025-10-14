@@ -1,7 +1,7 @@
 import { Card, CardContent, CardFooter, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { Edit, Loader2, Trash2 } from "lucide-react";
+import { Edit, Loader2, Trash2, Copy } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
 import { useState } from "react";
@@ -15,6 +15,7 @@ interface MockupsListProps {
 
 export function MockupsList({ mockups, loading, onEdit, onRefresh }: MockupsListProps) {
   const [deleting, setDeleting] = useState<string | null>(null);
+  const [duplicating, setDuplicating] = useState<string | null>(null);
 
   const handleDelete = async (mockupId: string) => {
     if (!confirm("Tem certeza que deseja excluir este mockup?")) return;
@@ -34,6 +35,99 @@ export function MockupsList({ mockups, loading, onEdit, onRefresh }: MockupsList
       toast.error("Erro ao excluir mockup");
     } finally {
       setDeleting(null);
+    }
+  };
+
+  const handleDuplicate = async (mockup: any) => {
+    const novoCodigo = prompt("Código do novo mockup:", `${mockup.codigo_mockup}-COPIA`);
+    if (!novoCodigo) return;
+
+    setDuplicating(mockup.id);
+    try {
+      // Criar novo mockup
+      const { data: novoMockup, error: mockupError } = await supabase
+        .from("mockups")
+        .insert([
+          {
+            codigo_mockup: novoCodigo,
+            tipo: mockup.tipo,
+            mockup_aprovacao_vinculado_id: mockup.mockup_aprovacao_vinculado_id,
+            imagem_base: mockup.imagem_base,
+          },
+        ])
+        .select()
+        .single();
+
+      if (mockupError) throw mockupError;
+
+      // Carregar canvases originais
+      const { data: canvases, error: canvasError } = await (supabase as any)
+        .from("mockup_canvases")
+        .select("*")
+        .eq("mockup_id", mockup.id);
+
+      if (canvasError) throw canvasError;
+
+      // Duplicar cada canvas
+      for (const canvas of canvases || []) {
+        const { data: novoCanvas, error: novoCanvasError } = await (supabase as any)
+          .from("mockup_canvases")
+          .insert([
+            {
+              mockup_id: novoMockup.id,
+              nome: canvas.nome,
+              imagem_base: canvas.imagem_base,
+              ordem: canvas.ordem,
+            },
+          ])
+          .select()
+          .single();
+
+        if (novoCanvasError) throw novoCanvasError;
+
+        // Carregar e duplicar áreas do canvas
+        const { data: areas, error: areasError } = await (supabase as any)
+          .from("mockup_areas")
+          .select("*")
+          .eq("canvas_id", canvas.id);
+
+        if (areasError) throw areasError;
+
+        if (areas && areas.length > 0) {
+          const novasAreas = areas.map((area: any) => ({
+            mockup_id: novoMockup.id,
+            canvas_id: novoCanvas.id,
+            kind: area.kind,
+            field_key: area.field_key,
+            x: area.x,
+            y: area.y,
+            width: area.width,
+            height: area.height,
+            z_index: area.z_index,
+            font_family: area.font_family,
+            font_size: area.font_size,
+            font_weight: area.font_weight,
+            color: area.color,
+            text_align: area.text_align,
+            letter_spacing: area.letter_spacing,
+            line_height: area.line_height,
+          }));
+
+          const { error: insertAreasError } = await (supabase as any)
+            .from("mockup_areas")
+            .insert(novasAreas);
+
+          if (insertAreasError) throw insertAreasError;
+        }
+      }
+
+      toast.success("Mockup duplicado com sucesso!");
+      onRefresh();
+    } catch (error) {
+      console.error("Erro ao duplicar:", error);
+      toast.error("Erro ao duplicar mockup");
+    } finally {
+      setDuplicating(null);
     }
   };
 
@@ -89,6 +183,17 @@ export function MockupsList({ mockups, loading, onEdit, onRefresh }: MockupsList
             >
               <Edit className="mr-2 h-4 w-4" />
               Editar
+            </Button>
+            <Button
+              variant="outline"
+              onClick={() => handleDuplicate(mockup)}
+              disabled={duplicating === mockup.id}
+            >
+              {duplicating === mockup.id ? (
+                <Loader2 className="h-4 w-4 animate-spin" />
+              ) : (
+                <Copy className="h-4 w-4" />
+              )}
             </Button>
             <Button
               variant="destructive"
