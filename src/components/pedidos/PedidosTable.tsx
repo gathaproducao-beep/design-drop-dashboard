@@ -9,20 +9,30 @@ import {
 } from "@/components/ui/table";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { Checkbox } from "@/components/ui/checkbox";
 import { ExternalLink, Image as ImageIcon, Loader2 } from "lucide-react";
 import { ImageUploadDialog } from "./ImageUploadDialog";
 import { ImageViewDialog } from "./ImageViewDialog";
 import { EditableCell } from "./EditableCell";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
+import { cn } from "@/lib/utils";
 
 interface PedidosTableProps {
   pedidos: any[];
   loading: boolean;
   onRefresh: () => void;
+  selectedIds: Set<string>;
+  onSelectionChange: (ids: Set<string>) => void;
 }
 
-export function PedidosTable({ pedidos, loading, onRefresh }: PedidosTableProps) {
+export function PedidosTable({ 
+  pedidos, 
+  loading, 
+  onRefresh, 
+  selectedIds, 
+  onSelectionChange 
+}: PedidosTableProps) {
   const [uploadDialogOpen, setUploadDialogOpen] = useState(false);
   const [viewDialogOpen, setViewDialogOpen] = useState(false);
   const [selectedPedido, setSelectedPedido] = useState<any>(null);
@@ -198,6 +208,30 @@ export function PedidosTable({ pedidos, loading, onRefresh }: PedidosTableProps)
     }
   };
 
+  const handleToggleAll = () => {
+    if (selectedIds.size === pedidos.length) {
+      onSelectionChange(new Set());
+    } else {
+      onSelectionChange(new Set(pedidos.map(p => p.id)));
+    }
+  };
+
+  const handleToggle = (id: string) => {
+    const newSet = new Set(selectedIds);
+    if (newSet.has(id)) {
+      newSet.delete(id);
+    } else {
+      newSet.add(id);
+    }
+    onSelectionChange(newSet);
+  };
+
+  const getRowClassName = (layoutAprovado: string) => {
+    if (layoutAprovado === "aprovado") return "bg-green-50 hover:bg-green-100";
+    if (layoutAprovado === "reprovado") return "bg-red-50 hover:bg-red-100";
+    return "hover:bg-muted/30";
+  };
+
   const getBadgeVariant = (value: string) => {
     if (value === "enviada" || value === "aprovado") return "default";
     if (value === "erro" || value === "reprovado") return "destructive";
@@ -218,6 +252,12 @@ export function PedidosTable({ pedidos, loading, onRefresh }: PedidosTableProps)
         <Table>
           <TableHeader>
             <TableRow className="bg-muted/50">
+              <TableHead className="w-12">
+                <Checkbox
+                  checked={pedidos.length > 0 && selectedIds.size === pedidos.length}
+                  onCheckedChange={handleToggleAll}
+                />
+              </TableHead>
               <TableHead className="font-semibold">Número</TableHead>
               <TableHead className="font-semibold">Cliente</TableHead>
               <TableHead className="font-semibold">Código Produto</TableHead>
@@ -236,7 +276,16 @@ export function PedidosTable({ pedidos, loading, onRefresh }: PedidosTableProps)
           </TableHeader>
           <TableBody>
             {pedidos.map((pedido) => (
-              <TableRow key={pedido.id} className="hover:bg-muted/30 transition-colors">
+              <TableRow 
+                key={pedido.id} 
+                className={cn("transition-colors", getRowClassName(pedido.layout_aprovado))}
+              >
+                <TableCell>
+                  <Checkbox
+                    checked={selectedIds.has(pedido.id)}
+                    onCheckedChange={() => handleToggle(pedido.id)}
+                  />
+                </TableCell>
                 <TableCell className="font-medium">{pedido.numero_pedido}</TableCell>
                 <TableCell>{pedido.nome_cliente}</TableCell>
                 <TableCell>{pedido.codigo_produto}</TableCell>

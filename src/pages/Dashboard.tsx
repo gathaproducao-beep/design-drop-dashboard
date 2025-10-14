@@ -2,11 +2,12 @@ import { useState, useEffect } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Plus, Search, Filter } from "lucide-react";
+import { Plus, Search, Filter, Trash2, Upload, FileSpreadsheet } from "lucide-react";
 import { toast } from "sonner";
 import { PedidosTable } from "@/components/pedidos/PedidosTable";
 import { NovoPedidoDialog } from "@/components/pedidos/NovoPedidoDialog";
 import { Navigation } from "@/components/Navigation";
+import { Checkbox } from "@/components/ui/checkbox";
 import {
   Select,
   SelectContent,
@@ -21,7 +22,11 @@ export default function Dashboard() {
   const [searchTerm, setSearchTerm] = useState("");
   const [filterMensagem, setFilterMensagem] = useState<string>("todos");
   const [filterLayout, setFilterLayout] = useState<string>("todos");
+  const [filterDataInicio, setFilterDataInicio] = useState("");
+  const [filterDataFim, setFilterDataFim] = useState("");
   const [novoPedidoOpen, setNovoPedidoOpen] = useState(false);
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
+  const [gerarFotoAuto, setGerarFotoAuto] = useState(false);
 
   useEffect(() => {
     carregarPedidos();
@@ -44,6 +49,58 @@ export default function Dashboard() {
     }
   };
 
+  const handleExcluirSelecionados = async () => {
+    if (selectedIds.size === 0) return;
+    
+    try {
+      const { error } = await supabase
+        .from("pedidos")
+        .delete()
+        .in("id", Array.from(selectedIds));
+
+      if (error) throw error;
+      
+      toast.success(`${selectedIds.size} pedido(s) excluído(s)`);
+      setSelectedIds(new Set());
+      carregarPedidos();
+    } catch (error) {
+      console.error("Erro ao excluir:", error);
+      toast.error("Erro ao excluir pedidos");
+    }
+  };
+
+  const handleAdicionarLinhas = async () => {
+    const numLinhas = 5; // Criar 5 linhas por padrão
+    try {
+      const novasLinhas = Array.from({ length: numLinhas }, (_, i) => ({
+        numero_pedido: `NOVO-${Date.now()}-${i}`,
+        nome_cliente: "",
+        codigo_produto: "",
+        data_pedido: new Date().toISOString().split('T')[0],
+      }));
+
+      const { error } = await supabase.from("pedidos").insert(novasLinhas);
+      
+      if (error) throw error;
+      
+      toast.success(`${numLinhas} linha(s) adicionada(s)`);
+      carregarPedidos();
+    } catch (error) {
+      console.error("Erro ao adicionar linhas:", error);
+      toast.error("Erro ao adicionar linhas");
+    }
+  };
+
+  const handleImportarFotos = () => {
+    // TODO: Implementar importação de fotos
+    toast.info("Funcionalidade em desenvolvimento");
+  };
+
+  const handleImportarPedidos = () => {
+    // TODO: Implementar importação de pedidos
+    toast.info("Funcionalidade em desenvolvimento");
+  };
+
   const pedidosFiltrados = pedidos.filter((pedido) => {
     const matchSearch =
       !searchTerm ||
@@ -57,7 +114,13 @@ export default function Dashboard() {
     const matchLayout =
       filterLayout === "todos" || pedido.layout_aprovado === filterLayout;
 
-    return matchSearch && matchMensagem && matchLayout;
+    const matchDataInicio = 
+      !filterDataInicio || new Date(pedido.data_pedido) >= new Date(filterDataInicio);
+    
+    const matchDataFim = 
+      !filterDataFim || new Date(pedido.data_pedido) <= new Date(filterDataFim);
+
+    return matchSearch && matchMensagem && matchLayout && matchDataInicio && matchDataFim;
   });
 
   return (
@@ -74,13 +137,38 @@ export default function Dashboard() {
                 Gerencie pedidos e mockups de produção
               </p>
             </div>
-            <Button
-              onClick={() => setNovoPedidoOpen(true)}
-              className="bg-gradient-to-r from-primary to-primary/80 hover:shadow-lg transition-all"
+            <div className="flex gap-2">
+              {selectedIds.size > 0 && (
+                <Button
+                  variant="destructive"
+                  onClick={handleExcluirSelecionados}
+                >
+                  <Trash2 className="mr-2 h-4 w-4" />
+                  Excluir selecionados ({selectedIds.size})
+                </Button>
+              )}
+              <Button
+                onClick={() => setNovoPedidoOpen(true)}
+                className="bg-gradient-to-r from-primary to-primary/80 hover:shadow-lg transition-all"
+              >
+                <Plus className="mr-2 h-4 w-4" />
+                Novo Pedido
+              </Button>
+            </div>
+          </div>
+
+          <div className="flex items-center gap-2 p-4 bg-muted/30 rounded-lg border">
+            <Checkbox
+              id="gerar-auto"
+              checked={gerarFotoAuto}
+              onCheckedChange={(checked) => setGerarFotoAuto(checked as boolean)}
+            />
+            <label
+              htmlFor="gerar-auto"
+              className="text-sm font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70 cursor-pointer"
             >
-              <Plus className="mr-2 h-4 w-4" />
-              Novo Pedido
-            </Button>
+              Gerar foto aprovação automaticamente
+            </label>
           </div>
 
           <div className="flex flex-col sm:flex-row gap-4">
@@ -94,7 +182,22 @@ export default function Dashboard() {
               />
             </div>
 
-            <div className="flex gap-2">
+            <div className="flex gap-2 flex-wrap">
+              <Input
+                type="date"
+                value={filterDataInicio}
+                onChange={(e) => setFilterDataInicio(e.target.value)}
+                className="w-[160px]"
+                placeholder="Data início"
+              />
+              <Input
+                type="date"
+                value={filterDataFim}
+                onChange={(e) => setFilterDataFim(e.target.value)}
+                className="w-[160px]"
+                placeholder="Data fim"
+              />
+              
               <Select value={filterMensagem} onValueChange={setFilterMensagem}>
                 <SelectTrigger className="w-[180px]">
                   <Filter className="mr-2 h-4 w-4" />
@@ -128,7 +231,36 @@ export default function Dashboard() {
           pedidos={pedidosFiltrados}
           loading={loading}
           onRefresh={carregarPedidos}
+          selectedIds={selectedIds}
+          onSelectionChange={setSelectedIds}
         />
+
+        <div className="mt-6 flex gap-4 justify-between items-center">
+          <Button
+            onClick={handleAdicionarLinhas}
+            variant="outline"
+          >
+            <Plus className="mr-2 h-4 w-4" />
+            Adicionar linhas
+          </Button>
+
+          <div className="flex gap-2">
+            <Button
+              onClick={handleImportarFotos}
+              variant="outline"
+            >
+              <Upload className="mr-2 h-4 w-4" />
+              Importar Fotos
+            </Button>
+            <Button
+              onClick={handleImportarPedidos}
+              variant="outline"
+            >
+              <FileSpreadsheet className="mr-2 h-4 w-4" />
+              Importar Pedidos
+            </Button>
+          </div>
+        </div>
 
         <NovoPedidoDialog
           open={novoPedidoOpen}
