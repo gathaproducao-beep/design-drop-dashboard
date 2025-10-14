@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -7,7 +7,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
-import { ArrowLeft, Plus, Trash2 } from "lucide-react";
+import { ArrowLeft, Plus, Trash2, GripVertical } from "lucide-react";
 
 interface MockupEditorProps {
   mockup: any;
@@ -54,7 +54,11 @@ export function MockupEditor({ mockup, onClose }: MockupEditorProps) {
   const [areas, setAreas] = useState<Area[]>([]);
   const [selectedArea, setSelectedArea] = useState<string | null>(null);
   const [uploading, setUploading] = useState(false);
+  const [dragging, setDragging] = useState<{ areaId: string; startX: number; startY: number } | null>(null);
+  const [resizing, setResizing] = useState<{ areaId: string; startX: number; startY: number; startWidth: number; startHeight: number } | null>(null);
+  const canvasRef = useRef<HTMLDivElement>(null);
   
+  const [showNewAreaForm, setShowNewAreaForm] = useState(false);
   const [newArea, setNewArea] = useState<Partial<Area>>({
     kind: "image",
     field_key: "fotocliente[1]",
@@ -164,9 +168,94 @@ export function MockupEditor({ mockup, onClose }: MockupEditorProps) {
         { ...newArea, canvas_id: activeCanvas, mockup_id: mockup.id },
       ]);
       toast.success("Área adicionada");
+      setShowNewAreaForm(false);
       carregarAreas(activeCanvas);
     } catch (error) {
       toast.error("Erro ao adicionar área");
+    }
+  };
+
+  const handleUpdateArea = async (areaId: string, updates: Partial<Area>) => {
+    try {
+      await (supabase as any)
+        .from("mockup_areas")
+        .update(updates)
+        .eq("id", areaId);
+      
+      setAreas(prev => prev.map(a => a.id === areaId ? { ...a, ...updates } : a));
+    } catch (error) {
+      toast.error("Erro ao atualizar área");
+    }
+  };
+
+  const handleMouseDown = (e: React.MouseEvent, areaId: string, isResize = false) => {
+    e.stopPropagation();
+    const area = areas.find(a => a.id === areaId);
+    if (!area) return;
+
+    if (isResize) {
+      setResizing({
+        areaId,
+        startX: e.clientX,
+        startY: e.clientY,
+        startWidth: area.width,
+        startHeight: area.height,
+      });
+    } else {
+      setDragging({
+        areaId,
+        startX: e.clientX,
+        startY: e.clientY,
+      });
+    }
+    setSelectedArea(areaId);
+  };
+
+  const handleMouseMove = (e: React.MouseEvent) => {
+    if (dragging) {
+      const area = areas.find(a => a.id === dragging.areaId);
+      if (!area || !canvasRef.current) return;
+
+      const deltaX = e.clientX - dragging.startX;
+      const deltaY = e.clientY - dragging.startY;
+
+      const newX = Math.max(0, area.x + deltaX);
+      const newY = Math.max(0, area.y + deltaY);
+
+      setAreas(prev => prev.map(a => 
+        a.id === dragging.areaId ? { ...a, x: newX, y: newY } : a
+      ));
+
+      setDragging({ ...dragging, startX: e.clientX, startY: e.clientY });
+    } else if (resizing) {
+      const area = areas.find(a => a.id === resizing.areaId);
+      if (!area) return;
+
+      const deltaX = e.clientX - resizing.startX;
+      const deltaY = e.clientY - resizing.startY;
+
+      const newWidth = Math.max(20, resizing.startWidth + deltaX);
+      const newHeight = Math.max(20, resizing.startHeight + deltaY);
+
+      setAreas(prev => prev.map(a => 
+        a.id === resizing.areaId ? { ...a, width: newWidth, height: newHeight } : a
+      ));
+    }
+  };
+
+  const handleMouseUp = () => {
+    if (dragging) {
+      const area = areas.find(a => a.id === dragging.areaId);
+      if (area) {
+        handleUpdateArea(area.id!, { x: area.x, y: area.y });
+      }
+      setDragging(null);
+    } else if (resizing) {
+      const area = areas.find(a => a.id === resizing.areaId);
+      if (area) {
+        handleUpdateArea(area.id!, { width: area.width, height: area.height });
+      }
+      setResizing(null);
     }
   };
 
@@ -203,96 +292,245 @@ export function MockupEditor({ mockup, onClose }: MockupEditorProps) {
 
         {canvases.map((canvas) => (
           <TabsContent key={canvas.id} value={canvas.id}>
-            <div className="grid grid-cols-2 gap-6">
+            <div className="grid grid-cols-[1fr_400px] gap-6">
+              {/* Visual Canvas Editor */}
               <Card>
-                <CardHeader>
+                <CardHeader className="flex flex-row items-center justify-between">
                   <CardTitle>{canvas.nome}</CardTitle>
+                  <div className="flex gap-2">
+                    <Input
+                      type="file"
+                      accept="image/*"
+                      onChange={(e) => {
+                        const file = e.target.files?.[0];
+                        if (file) handleUploadCanvasImage(canvas.id, file);
+                      }}
+                      disabled={uploading}
+                      className="max-w-[200px]"
+                    />
+                  </div>
                 </CardHeader>
                 <CardContent>
-                  <Input
-                    type="file"
-                    accept="image/*"
-                    onChange={(e) => {
-                      const file = e.target.files?.[0];
-                      if (file) handleUploadCanvasImage(canvas.id, file);
-                    }}
-                    disabled={uploading}
-                  />
-                  {canvas.imagem_base && (
-                    <img src={canvas.imagem_base} alt={canvas.nome} className="w-full mt-4" />
-                  )}
-                </CardContent>
-              </Card>
-
-              <Card>
-                <CardHeader>
-                  <CardTitle>Nova Área</CardTitle>
-                </CardHeader>
-                <CardContent className="space-y-4">
-                  <Select
-                    value={newArea.kind}
-                    onValueChange={(v: "image" | "text") => setNewArea({ ...newArea, kind: v })}
-                  >
-                    <SelectTrigger><SelectValue /></SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="image">Imagem</SelectItem>
-                      <SelectItem value="text">Texto</SelectItem>
-                    </SelectContent>
-                  </Select>
-
-                  {newArea.kind === "image" ? (
-                    <Select
-                      value={newArea.field_key}
-                      onValueChange={(v) => setNewArea({ ...newArea, field_key: v })}
+                  {canvas.imagem_base ? (
+                    <div 
+                      ref={canvasRef}
+                      className="relative border border-border rounded-lg overflow-hidden bg-muted"
+                      style={{ cursor: dragging || resizing ? 'grabbing' : 'default' }}
+                      onMouseMove={handleMouseMove}
+                      onMouseUp={handleMouseUp}
+                      onMouseLeave={handleMouseUp}
                     >
-                      <SelectTrigger><SelectValue /></SelectTrigger>
-                      <SelectContent>
-                        {[1, 2, 3, 4, 5].map((i) => (
-                          <SelectItem key={i} value={`fotocliente[${i}]`}>Foto {i}</SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
+                      <img 
+                        src={canvas.imagem_base} 
+                        alt={canvas.nome} 
+                        className="w-full h-auto block"
+                        draggable={false}
+                      />
+                      
+                      {/* Áreas sobrepostas */}
+                      {areas.map((area) => (
+                        <div
+                          key={area.id}
+                          className={`absolute border-2 ${
+                            selectedArea === area.id 
+                              ? 'border-primary bg-primary/10' 
+                              : 'border-blue-500 bg-blue-500/20'
+                          } cursor-move transition-all`}
+                          style={{
+                            left: `${area.x}px`,
+                            top: `${area.y}px`,
+                            width: `${area.width}px`,
+                            height: `${area.height}px`,
+                            zIndex: area.z_index,
+                          }}
+                          onMouseDown={(e) => handleMouseDown(e, area.id!, false)}
+                        >
+                          {/* Label da área */}
+                          <div className="absolute -top-6 left-0 bg-primary text-primary-foreground text-xs px-2 py-1 rounded whitespace-nowrap flex items-center gap-1">
+                            {area.kind === "image" ? "📷" : "📝"} {area.field_key}
+                          </div>
+
+                          {/* Grip para mover */}
+                          <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
+                            <GripVertical className="w-6 h-6 text-primary" />
+                          </div>
+
+                          {/* Handle de redimensionamento */}
+                          <div
+                            className="absolute bottom-0 right-0 w-4 h-4 bg-primary cursor-nwse-resize"
+                            onMouseDown={(e) => handleMouseDown(e, area.id!, true)}
+                          />
+
+                          {/* Botão de deletar */}
+                          <Button
+                            variant="destructive"
+                            size="icon"
+                            className="absolute -top-2 -right-2 h-6 w-6 rounded-full"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              handleDeleteArea(area.id!);
+                            }}
+                          >
+                            <Trash2 className="h-3 w-3" />
+                          </Button>
+                        </div>
+                      ))}
+                    </div>
                   ) : (
-                    <Select
-                      value={newArea.field_key}
-                      onValueChange={(v) => setNewArea({ ...newArea, field_key: v })}
-                    >
-                      <SelectTrigger><SelectValue /></SelectTrigger>
-                      <SelectContent>
-                        {TEXT_FIELDS.map((f) => (
-                          <SelectItem key={f.value} value={f.value}>{f.label}</SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
+                    <div className="text-center text-muted-foreground py-12">
+                      Nenhum arquivo selecionado.
+                    </div>
                   )}
-
-                  <div className="grid grid-cols-2 gap-2">
-                    <Input type="number" placeholder="X" value={newArea.x} onChange={(e) => setNewArea({ ...newArea, x: +e.target.value })} />
-                    <Input type="number" placeholder="Y" value={newArea.y} onChange={(e) => setNewArea({ ...newArea, y: +e.target.value })} />
-                    <Input type="number" placeholder="Largura" value={newArea.width} onChange={(e) => setNewArea({ ...newArea, width: +e.target.value })} />
-                    <Input type="number" placeholder="Altura" value={newArea.height} onChange={(e) => setNewArea({ ...newArea, height: +e.target.value })} />
-                  </div>
-
-                  <Button onClick={handleAddArea} className="w-full">
-                    <Plus className="mr-2 h-4 w-4" />Adicionar
-                  </Button>
                 </CardContent>
               </Card>
-            </div>
 
-            <Card className="mt-4">
-              <CardHeader><CardTitle>Áreas ({areas.length})</CardTitle></CardHeader>
-              <CardContent>
-                {areas.map((area) => (
-                  <div key={area.id} className="flex justify-between p-2 border-b">
-                    <span>{area.kind === "image" ? "📷" : "📝"} {area.field_key}</span>
-                    <Button variant="ghost" size="sm" onClick={() => handleDeleteArea(area.id!)}>
-                      <Trash2 className="h-4 w-4" />
-                    </Button>
-                  </div>
-                ))}
-              </CardContent>
-            </Card>
+              {/* Sidebar de controle */}
+              <div className="space-y-4">
+                {!showNewAreaForm ? (
+                  <Button 
+                    onClick={() => setShowNewAreaForm(true)} 
+                    className="w-full"
+                  >
+                    <Plus className="mr-2 h-4 w-4" />
+                    Nova Área
+                  </Button>
+                ) : (
+                  <Card>
+                    <CardHeader>
+                      <CardTitle className="text-base">Nova Área</CardTitle>
+                    </CardHeader>
+                    <CardContent className="space-y-4">
+                      <div>
+                        <Label>Tipo</Label>
+                        <Select
+                          value={newArea.kind}
+                          onValueChange={(v: "image" | "text") => setNewArea({ ...newArea, kind: v })}
+                        >
+                          <SelectTrigger><SelectValue /></SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="image">Imagem</SelectItem>
+                            <SelectItem value="text">Texto</SelectItem>
+                          </SelectContent>
+                        </Select>
+                      </div>
+
+                      <div>
+                        <Label>Campo</Label>
+                        {newArea.kind === "image" ? (
+                          <Select
+                            value={newArea.field_key}
+                            onValueChange={(v) => setNewArea({ ...newArea, field_key: v })}
+                          >
+                            <SelectTrigger><SelectValue /></SelectTrigger>
+                            <SelectContent>
+                              {[1, 2, 3, 4, 5].map((i) => (
+                                <SelectItem key={i} value={`fotocliente[${i}]`}>Foto {i}</SelectItem>
+                              ))}
+                            </SelectContent>
+                          </Select>
+                        ) : (
+                          <Select
+                            value={newArea.field_key}
+                            onValueChange={(v) => setNewArea({ ...newArea, field_key: v })}
+                          >
+                            <SelectTrigger><SelectValue /></SelectTrigger>
+                            <SelectContent>
+                              {TEXT_FIELDS.map((f) => (
+                                <SelectItem key={f.value} value={f.value}>{f.label}</SelectItem>
+                              ))}
+                            </SelectContent>
+                          </Select>
+                        )}
+                      </div>
+
+                      <div className="grid grid-cols-2 gap-2">
+                        <div>
+                          <Label className="text-xs">X</Label>
+                          <Input 
+                            type="number" 
+                            value={newArea.x} 
+                            onChange={(e) => setNewArea({ ...newArea, x: +e.target.value })} 
+                          />
+                        </div>
+                        <div>
+                          <Label className="text-xs">Y</Label>
+                          <Input 
+                            type="number" 
+                            value={newArea.y} 
+                            onChange={(e) => setNewArea({ ...newArea, y: +e.target.value })} 
+                          />
+                        </div>
+                        <div>
+                          <Label className="text-xs">Largura</Label>
+                          <Input 
+                            type="number" 
+                            value={newArea.width} 
+                            onChange={(e) => setNewArea({ ...newArea, width: +e.target.value })} 
+                          />
+                        </div>
+                        <div>
+                          <Label className="text-xs">Altura</Label>
+                          <Input 
+                            type="number" 
+                            value={newArea.height} 
+                            onChange={(e) => setNewArea({ ...newArea, height: +e.target.value })} 
+                          />
+                        </div>
+                      </div>
+
+                      <div className="flex gap-2">
+                        <Button onClick={handleAddArea} className="flex-1">
+                          <Plus className="mr-2 h-4 w-4" />Adicionar
+                        </Button>
+                        <Button 
+                          variant="outline" 
+                          onClick={() => setShowNewAreaForm(false)}
+                        >
+                          Cancelar
+                        </Button>
+                      </div>
+                    </CardContent>
+                  </Card>
+                )}
+
+                <Card>
+                  <CardHeader>
+                    <CardTitle className="text-base">Áreas ({areas.length})</CardTitle>
+                  </CardHeader>
+                  <CardContent className="space-y-2">
+                    {areas.length === 0 ? (
+                      <p className="text-sm text-muted-foreground text-center py-4">
+                        Nenhuma área adicionada
+                      </p>
+                    ) : (
+                      areas.map((area) => (
+                        <div 
+                          key={area.id} 
+                          className={`flex items-center justify-between p-3 rounded-lg border cursor-pointer transition-colors ${
+                            selectedArea === area.id 
+                              ? 'border-primary bg-primary/5' 
+                              : 'border-border hover:bg-accent'
+                          }`}
+                          onClick={() => setSelectedArea(area.id!)}
+                        >
+                          <div className="flex items-center gap-2">
+                            <span className="text-lg">
+                              {area.kind === "image" ? "📷" : "📝"}
+                            </span>
+                            <div className="text-sm">
+                              <div className="font-medium">{area.field_key}</div>
+                              <div className="text-xs text-muted-foreground">
+                                {area.x}x{area.y} • {area.width}x{area.height}
+                              </div>
+                            </div>
+                          </div>
+                        </div>
+                      ))
+                    )}
+                  </CardContent>
+                </Card>
+              </div>
+            </div>
           </TabsContent>
         ))}
       </Tabs>
