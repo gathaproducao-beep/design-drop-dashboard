@@ -152,11 +152,11 @@ export function NovoMockupDialog({
             <div className="space-y-2">
               <Label htmlFor="vinculado">Mockup de Aprovação Vinculado (Opcional)</Label>
               <Select
-                value={formData.mockup_aprovacao_vinculado_id || ""}
+                value={formData.mockup_aprovacao_vinculado_id || "none"}
                 onValueChange={(value) =>
                   setFormData((prev) => ({ 
                     ...prev, 
-                    mockup_aprovacao_vinculado_id: value || null 
+                    mockup_aprovacao_vinculado_id: value === "none" ? null : value 
                   }))
                 }
               >
@@ -164,7 +164,7 @@ export function NovoMockupDialog({
                   <SelectValue placeholder="Selecione um mockup de aprovação" />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="">Nenhum</SelectItem>
+                  <SelectItem value="none">Nenhum</SelectItem>
                   {mockupsAprovacao.map((m) => (
                     <SelectItem key={m.id} value={m.id}>
                       {m.codigo_mockup}
