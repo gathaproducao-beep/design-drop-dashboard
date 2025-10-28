@@ -125,12 +125,53 @@ export const NovaMensagemDialog = ({
     }
   };
 
-  const getPreviewMensagem = () => {
-    let preview = formData.mensagem;
-    VARIAVEIS.forEach((variavel) => {
-      preview = preview.replace(new RegExp(variavel.key.replace(/[{}]/g, '\\$&'), 'g'), variavel.exemplo);
-    });
-    return preview;
+  const renderPreviewMensagem = () => {
+    let mensagem = formData.mensagem;
+    
+    // Check if message contains foto_aprovacao variable
+    const hasFotoAprovacao = mensagem.includes('{foto_aprovacao}');
+    
+    if (!hasFotoAprovacao) {
+      // Simple text replacement for messages without images
+      VARIAVEIS.forEach((variavel) => {
+        mensagem = mensagem.replace(
+          new RegExp(variavel.key.replace(/[{}]/g, '\\$&'), 'g'),
+          variavel.exemplo
+        );
+      });
+      return <p className="text-sm">{mensagem}</p>;
+    }
+    
+    // Split message by foto_aprovacao variable
+    const parts = mensagem.split('{foto_aprovacao}');
+    
+    return (
+      <div className="space-y-2">
+        {parts.map((part, index) => {
+          // Replace other variables in this part
+          let processedPart = part;
+          VARIAVEIS.filter(v => v.key !== '{foto_aprovacao}').forEach((variavel) => {
+            processedPart = processedPart.replace(
+              new RegExp(variavel.key.replace(/[{}]/g, '\\$&'), 'g'),
+              variavel.exemplo
+            );
+          });
+          
+          return (
+            <div key={index}>
+              {processedPart && <p className="text-sm whitespace-pre-wrap">{processedPart}</p>}
+              {index < parts.length - 1 && (
+                <img 
+                  src="https://images.unsplash.com/photo-1521572163474-6864f9cf17ab?w=400&h=300&fit=crop" 
+                  alt="Exemplo de foto de aprovação"
+                  className="rounded-md my-2 max-w-full h-auto"
+                />
+              )}
+            </div>
+          );
+        })}
+      </div>
+    );
   };
 
   return (
@@ -193,9 +234,9 @@ export const NovaMensagemDialog = ({
 
             <div className="space-y-2">
               <Label>Pré-visualização</Label>
-              <div className="min-h-[200px] p-4 rounded-md border bg-muted/50 whitespace-pre-wrap">
+              <div className="min-h-[200px] p-4 rounded-md border bg-muted/50">
                 {formData.mensagem ? (
-                  <p className="text-sm">{getPreviewMensagem()}</p>
+                  renderPreviewMensagem()
                 ) : (
                   <p className="text-sm text-muted-foreground italic">
                     A pré-visualização aparecerá aqui conforme você digita...
