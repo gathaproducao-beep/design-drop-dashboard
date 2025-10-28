@@ -28,11 +28,12 @@ interface NovaMensagemDialogProps {
 }
 
 const VARIAVEIS = [
-  { key: "{nome_cliente}", label: "Nome do Cliente" },
-  { key: "{codigo_produto}", label: "Código do Produto" },
-  { key: "{data_pedido}", label: "Data do Pedido" },
-  { key: "{observacao}", label: "Observação" },
-  { key: "{foto_aprovacao}", label: "Foto Aprovação" },
+  { key: "{numero_pedido}", label: "Número do Pedido", exemplo: "PED-2024-001" },
+  { key: "{nome_cliente}", label: "Nome do Cliente", exemplo: "João Silva" },
+  { key: "{codigo_produto}", label: "Código do Produto", exemplo: "CAMISETA-PRETA-G" },
+  { key: "{data_pedido}", label: "Data do Pedido", exemplo: "28/10/2024" },
+  { key: "{observacao}", label: "Observação", exemplo: "Entrega urgente" },
+  { key: "{foto_aprovacao}", label: "Foto Aprovação", exemplo: "[Link da Foto]" },
 ];
 
 export const NovaMensagemDialog = ({
@@ -124,9 +125,17 @@ export const NovaMensagemDialog = ({
     }
   };
 
+  const getPreviewMensagem = () => {
+    let preview = formData.mensagem;
+    VARIAVEIS.forEach((variavel) => {
+      preview = preview.replace(new RegExp(variavel.key.replace(/[{}]/g, '\\$&'), 'g'), variavel.exemplo);
+    });
+    return preview;
+  };
+
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-2xl">
+      <DialogContent className="max-w-5xl max-h-[90vh] overflow-y-auto">
         <DialogHeader>
           <DialogTitle>
             {editingMensagem ? "Editar Mensagem" : "Nova Mensagem WhatsApp"}
@@ -168,17 +177,32 @@ export const NovaMensagemDialog = ({
             </p>
           </div>
 
-          <div className="space-y-2">
-            <Label htmlFor="mensagem">Mensagem</Label>
-            <Textarea
-              id="mensagem"
-              name="mensagem"
-              value={formData.mensagem}
-              onChange={handleChange}
-              placeholder="Digite sua mensagem aqui. Use as variáveis acima para personalizar."
-              className="min-h-[200px]"
-              required
-            />
+          <div className="grid grid-cols-2 gap-4">
+            <div className="space-y-2">
+              <Label htmlFor="mensagem">Mensagem</Label>
+              <Textarea
+                id="mensagem"
+                name="mensagem"
+                value={formData.mensagem}
+                onChange={handleChange}
+                placeholder="Digite sua mensagem aqui. Use as variáveis acima para personalizar."
+                className="min-h-[200px]"
+                required
+              />
+            </div>
+
+            <div className="space-y-2">
+              <Label>Pré-visualização</Label>
+              <div className="min-h-[200px] p-4 rounded-md border bg-muted/50 whitespace-pre-wrap">
+                {formData.mensagem ? (
+                  <p className="text-sm">{getPreviewMensagem()}</p>
+                ) : (
+                  <p className="text-sm text-muted-foreground italic">
+                    A pré-visualização aparecerá aqui conforme você digita...
+                  </p>
+                )}
+              </div>
+            </div>
           </div>
 
           <DialogFooter>
