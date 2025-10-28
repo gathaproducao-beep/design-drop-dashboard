@@ -14,35 +14,86 @@ export type Database = {
   }
   public: {
     Tables: {
-      mockup_areas: {
+      mensagens_whatsapp: {
         Row: {
           created_at: string | null
+          id: string
+          mensagem: string
+          nome: string
+          updated_at: string | null
+        }
+        Insert: {
+          created_at?: string | null
+          id?: string
+          mensagem: string
+          nome: string
+          updated_at?: string | null
+        }
+        Update: {
+          created_at?: string | null
+          id?: string
+          mensagem?: string
+          nome?: string
+          updated_at?: string | null
+        }
+        Relationships: []
+      }
+      mockup_areas: {
+        Row: {
+          canvas_id: string | null
+          color: string | null
+          created_at: string | null
           field_key: string
+          font_family: string | null
+          font_size: number | null
+          font_weight: string | null
           height: number
           id: string
+          kind: string
+          letter_spacing: number | null
+          line_height: number | null
           mockup_id: string
+          text_align: string | null
           width: number
           x: number
           y: number
           z_index: number | null
         }
         Insert: {
+          canvas_id?: string | null
+          color?: string | null
           created_at?: string | null
           field_key: string
+          font_family?: string | null
+          font_size?: number | null
+          font_weight?: string | null
           height: number
           id?: string
+          kind?: string
+          letter_spacing?: number | null
+          line_height?: number | null
           mockup_id: string
+          text_align?: string | null
           width: number
           x: number
           y: number
           z_index?: number | null
         }
         Update: {
+          canvas_id?: string | null
+          color?: string | null
           created_at?: string | null
           field_key?: string
+          font_family?: string | null
+          font_size?: number | null
+          font_weight?: string | null
           height?: number
           id?: string
+          kind?: string
+          letter_spacing?: number | null
+          line_height?: number | null
           mockup_id?: string
+          text_align?: string | null
           width?: number
           x?: number
           y?: number
@@ -50,7 +101,52 @@ export type Database = {
         }
         Relationships: [
           {
+            foreignKeyName: "mockup_areas_canvas_id_fkey"
+            columns: ["canvas_id"]
+            isOneToOne: false
+            referencedRelation: "mockup_canvases"
+            referencedColumns: ["id"]
+          },
+          {
             foreignKeyName: "mockup_areas_mockup_id_fkey"
+            columns: ["mockup_id"]
+            isOneToOne: false
+            referencedRelation: "mockups"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      mockup_canvases: {
+        Row: {
+          created_at: string | null
+          id: string
+          imagem_base: string
+          mockup_id: string
+          nome: string
+          ordem: number
+          updated_at: string | null
+        }
+        Insert: {
+          created_at?: string | null
+          id?: string
+          imagem_base: string
+          mockup_id: string
+          nome: string
+          ordem?: number
+          updated_at?: string | null
+        }
+        Update: {
+          created_at?: string | null
+          id?: string
+          imagem_base?: string
+          mockup_id?: string
+          nome?: string
+          ordem?: number
+          updated_at?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "mockup_canvases_mockup_id_fkey"
             columns: ["mockup_id"]
             isOneToOne: false
             referencedRelation: "mockups"
@@ -64,6 +160,7 @@ export type Database = {
           created_at: string | null
           id: string
           imagem_base: string
+          mockup_aprovacao_vinculado_id: string | null
           tipo: string
           updated_at: string | null
         }
@@ -72,6 +169,7 @@ export type Database = {
           created_at?: string | null
           id?: string
           imagem_base: string
+          mockup_aprovacao_vinculado_id?: string | null
           tipo: string
           updated_at?: string | null
         }
@@ -80,10 +178,19 @@ export type Database = {
           created_at?: string | null
           id?: string
           imagem_base?: string
+          mockup_aprovacao_vinculado_id?: string | null
           tipo?: string
           updated_at?: string | null
         }
-        Relationships: []
+        Relationships: [
+          {
+            foreignKeyName: "mockups_mockup_aprovacao_vinculado_id_fkey"
+            columns: ["mockup_aprovacao_vinculado_id"]
+            isOneToOne: false
+            referencedRelation: "mockups"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       pedidos: {
         Row: {
@@ -93,6 +200,7 @@ export type Database = {
           data_pedido: string
           foto_aprovacao: string | null
           foto_cliente: string | null
+          fotos_cliente: string[] | null
           id: string
           layout_aprovado: string | null
           mensagem_enviada: string | null
@@ -111,6 +219,7 @@ export type Database = {
           data_pedido?: string
           foto_aprovacao?: string | null
           foto_cliente?: string | null
+          fotos_cliente?: string[] | null
           id?: string
           layout_aprovado?: string | null
           mensagem_enviada?: string | null
@@ -129,6 +238,7 @@ export type Database = {
           data_pedido?: string
           foto_aprovacao?: string | null
           foto_cliente?: string | null
+          fotos_cliente?: string[] | null
           id?: string
           layout_aprovado?: string | null
           mensagem_enviada?: string | null

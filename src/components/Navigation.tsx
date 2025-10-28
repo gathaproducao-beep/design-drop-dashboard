@@ -1,5 +1,5 @@
 import { Link, useLocation } from "react-router-dom";
-import { LayoutDashboard, Image } from "lucide-react";
+import { LayoutDashboard, Image, MessageSquare } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 export function Navigation() {
@@ -8,6 +8,7 @@ export function Navigation() {
   const links = [
     { to: "/", icon: LayoutDashboard, label: "Pedidos" },
     { to: "/mockups", icon: Image, label: "Mockups" },
+    { to: "/mensagens", icon: MessageSquare, label: "Mensagens" },
   ];
 
   return (
