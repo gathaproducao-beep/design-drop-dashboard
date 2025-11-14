@@ -284,18 +284,49 @@ export function PedidosTable({
             }
           }
 
-          // Converter para blob
-          console.log(`[generateMockups] Preparando exportação - Canvas: ${canvas.width}x${canvas.height}px`);
+          // Criar canvas limpo para exportação (sem metadados problemáticos)
+          console.log(`[generateMockups] Preparando exportação - Canvas original: ${canvas.width}x${canvas.height}px`);
+          
+          const exportCanvas = document.createElement('canvas');
+          exportCanvas.width = canvas.width;
+          exportCanvas.height = canvas.height;
+          
+          const exportCtx = exportCanvas.getContext('2d', { 
+            alpha: true,
+            willReadFrequently: false,
+            desynchronized: false
+          });
+          
+          if (!exportCtx) {
+            console.error('[generateMockups] Falha ao criar contexto de exportação');
+            continue;
+          }
+          
+          // Resetar transformações
+          exportCtx.setTransform(1, 0, 0, 1, 0, 0);
+          exportCtx.imageSmoothingEnabled = false; // Desabilitar suavização para cópia pixel-perfect
+          
+          // Copiar conteúdo do canvas original para o canvas de exportação
+          exportCtx.drawImage(canvas, 0, 0, canvas.width, canvas.height, 0, 0, exportCanvas.width, exportCanvas.height);
+          
+          console.log(`[generateMockups] Canvas de exportação criado: ${exportCanvas.width}x${exportCanvas.height}px`);
+          
+          // Exportar do canvas limpo
           const blob = await new Promise<Blob>((resolve) => {
-            canvas.toBlob((b) => {
+            exportCanvas.toBlob((b) => {
+              if (!b) {
+                console.error('[generateMockups] Falha ao gerar blob');
+                resolve(new Blob());
+                return;
+              }
               console.log(`[generateMockups] Blob gerado:`, {
-                size: `${((b?.size || 0) / 1024 / 1024).toFixed(2)} MB`,
-                canvasWidth: canvas.width,
-                canvasHeight: canvas.height,
-                type: b?.type
+                size: `${(b.size / 1024 / 1024).toFixed(2)} MB`,
+                width: exportCanvas.width,
+                height: exportCanvas.height,
+                type: b.type
               });
-              resolve(b!);
-            }, "image/png", 1.0); // Qualidade máxima para PNG
+              resolve(b);
+            }, "image/png", 1.0);
           });
 
           // Upload para storage
