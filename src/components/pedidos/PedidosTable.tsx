@@ -153,9 +153,19 @@ export function PedidosTable({
             baseImg.src = canvasData.imagem_base;
           });
 
-          canvas.width = baseImg.width;
-          canvas.height = baseImg.height;
-          ctx.drawImage(baseImg, 0, 0);
+          console.log(`[generateMockups] Imagem base carregada:`, {
+            width: baseImg.width,
+            height: baseImg.height,
+            naturalWidth: baseImg.naturalWidth,
+            naturalHeight: baseImg.naturalHeight,
+            devicePixelRatio: window.devicePixelRatio
+          });
+
+          // Usar dimensões naturais da imagem (originais, sem escala do navegador)
+          canvas.width = baseImg.naturalWidth;
+          canvas.height = baseImg.naturalHeight;
+          ctx.drawImage(baseImg, 0, 0, baseImg.naturalWidth, baseImg.naturalHeight);
+          console.log(`[generateMockups] Canvas criado: ${canvas.width}x${canvas.height}px`);
 
           // Processar cada área
           for (const area of areas) {
@@ -177,25 +187,41 @@ export function PedidosTable({
                 clientImg.src = photoUrl;
               });
 
-              // Usar dimensões exatas da área (cover - preenche toda a área)
-              const aspectRatio = clientImg.width / clientImg.height;
+              console.log(`[generateMockups] Foto cliente carregada:`, {
+                width: clientImg.width,
+                height: clientImg.height,
+                naturalWidth: clientImg.naturalWidth,
+                naturalHeight: clientImg.naturalHeight
+              });
+
+              // Usar dimensões naturais da imagem do cliente
+              const aspectRatio = clientImg.naturalWidth / clientImg.naturalHeight;
               const areaAspect = area.width / area.height;
               
               let sourceX = 0;
               let sourceY = 0;
-              let sourceWidth = clientImg.width;
-              let sourceHeight = clientImg.height;
+              let sourceWidth = clientImg.naturalWidth;
+              let sourceHeight = clientImg.naturalHeight;
 
               // Recortar a imagem para manter proporção e preencher toda a área (cover)
               if (aspectRatio > areaAspect) {
                 // Imagem mais larga - recortar largura
-                sourceWidth = clientImg.height * areaAspect;
-                sourceX = (clientImg.width - sourceWidth) / 2;
+                sourceWidth = clientImg.naturalHeight * areaAspect;
+                sourceX = (clientImg.naturalWidth - sourceWidth) / 2;
               } else {
                 // Imagem mais alta - recortar altura
-                sourceHeight = clientImg.width / areaAspect;
-                sourceY = (clientImg.height - sourceHeight) / 2;
+                sourceHeight = clientImg.naturalWidth / areaAspect;
+                sourceY = (clientImg.naturalHeight - sourceHeight) / 2;
               }
+
+              console.log(`[generateMockups] Desenhando área:`, {
+                areaId: area.id?.substring(0, 8),
+                x: area.x,
+                y: area.y,
+                width: area.width,
+                height: area.height,
+                canvasSize: `${canvas.width}x${canvas.height}`
+              });
 
               // Desenhar usando as dimensões exatas da área
               ctx.drawImage(
