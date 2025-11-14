@@ -57,6 +57,8 @@ export function MockupEditor({ mockup, onClose }: MockupEditorProps) {
   const [dragging, setDragging] = useState<{ areaId: string; startX: number; startY: number } | null>(null);
   const [resizing, setResizing] = useState<{ areaId: string; startX: number; startY: number; startWidth: number; startHeight: number } | null>(null);
   const canvasRef = useRef<HTMLDivElement>(null);
+  const imageRef = useRef<HTMLImageElement>(null);
+  const [scale, setScale] = useState<number>(1);
   
   const [showNewAreaForm, setShowNewAreaForm] = useState(false);
   const [newArea, setNewArea] = useState<Partial<Area>>({
@@ -86,6 +88,38 @@ export function MockupEditor({ mockup, onClose }: MockupEditorProps) {
     }
   }, [activeCanvas]);
 
+  // Calcular escala quando a imagem carregar
+  useEffect(() => {
+    const updateScale = () => {
+      if (imageRef.current) {
+        const naturalWidth = imageRef.current.naturalWidth;
+        const renderedWidth = imageRef.current.width;
+        const newScale = naturalWidth / renderedWidth;
+        setScale(newScale);
+        console.log(`Escala calculada: ${newScale} (Natural: ${naturalWidth}px, Renderizado: ${renderedWidth}px)`);
+      }
+    };
+
+    const img = imageRef.current;
+    if (img) {
+      if (img.complete) {
+        updateScale();
+      } else {
+        img.addEventListener('load', updateScale);
+        return () => img.removeEventListener('load', updateScale);
+      }
+    }
+  }, [activeCanvas, canvases]);
+
+  // Funções de conversão de coordenadas
+  const toRealCoordinates = (editorValue: number) => {
+    return Math.round(editorValue * scale);
+  };
+
+  const toEditorCoordinates = (realValue: number) => {
+    return Math.round(realValue / scale);
+  };
+
   const carregarCanvases = async () => {
     try {
       const { data, error } = await (supabase as any)
@@ -111,7 +145,17 @@ export function MockupEditor({ mockup, onClose }: MockupEditorProps) {
         .order("z_index");
 
       if (error) throw error;
-      setAreas(data || []);
+      
+      // Converter coordenadas do banco (real) para editor (escalado)
+      const areasConvertidas = (data || []).map((area: Area) => ({
+        ...area,
+        x: toEditorCoordinates(area.x),
+        y: toEditorCoordinates(area.y),
+        width: toEditorCoordinates(area.width),
+        height: toEditorCoordinates(area.height),
+      }));
+      
+      setAreas(areasConvertidas);
     } catch (error) {
       toast.error("Erro ao carregar áreas");
     }
@@ -164,9 +208,18 @@ export function MockupEditor({ mockup, onClose }: MockupEditorProps) {
     if (!activeCanvas) return;
 
     try {
-      await (supabase as any).from("mockup_areas").insert([
-        { ...newArea, canvas_id: activeCanvas, mockup_id: mockup.id },
-      ]);
+      // Converter coordenadas do editor (escalado) para real antes de salvar
+      const areaReal = {
+        ...newArea,
+        canvas_id: activeCanvas,
+        mockup_id: mockup.id,
+        x: toRealCoordinates(newArea.x || 0),
+        y: toRealCoordinates(newArea.y || 0),
+        width: toRealCoordinates(newArea.width || 0),
+        height: toRealCoordinates(newArea.height || 0),
+      };
+      
+      await (supabase as any).from("mockup_areas").insert([areaReal]);
       toast.success("Área adicionada");
       setShowNewAreaForm(false);
       carregarAreas(activeCanvas);
@@ -177,11 +230,19 @@ export function MockupEditor({ mockup, onClose }: MockupEditorProps) {
 
   const handleUpdateArea = async (areaId: string, updates: Partial<Area>) => {
     try {
+      // Converter coordenadas do editor (escalado) para real antes de salvar
+      const updatesReal: Partial<Area> = { ...updates };
+      if (updates.x !== undefined) updatesReal.x = toRealCoordinates(updates.x);
+      if (updates.y !== undefined) updatesReal.y = toRealCoordinates(updates.y);
+      if (updates.width !== undefined) updatesReal.width = toRealCoordinates(updates.width);
+      if (updates.height !== undefined) updatesReal.height = toRealCoordinates(updates.height);
+      
       await (supabase as any)
         .from("mockup_areas")
-        .update(updates)
+        .update(updatesReal)
         .eq("id", areaId);
       
+      // Atualizar estado local com valores do editor (escalado)
       setAreas(prev => prev.map(a => a.id === areaId ? { ...a, ...updates } : a));
     } catch (error) {
       toast.error("Erro ao atualizar área");
@@ -321,6 +382,7 @@ export function MockupEditor({ mockup, onClose }: MockupEditorProps) {
                       onMouseLeave={handleMouseUp}
                     >
                       <img 
+                        ref={imageRef}
                         src={canvas.imagem_base} 
                         alt={canvas.nome} 
                         className="w-full h-auto block"
