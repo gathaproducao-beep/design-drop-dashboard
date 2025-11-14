@@ -53,6 +53,7 @@ export type Database = {
           letter_spacing: number | null
           line_height: number | null
           mockup_id: string
+          rotation: number | null
           text_align: string | null
           width: number
           x: number
@@ -73,6 +74,7 @@ export type Database = {
           letter_spacing?: number | null
           line_height?: number | null
           mockup_id: string
+          rotation?: number | null
           text_align?: string | null
           width: number
           x: number
@@ -93,6 +95,7 @@ export type Database = {
           letter_spacing?: number | null
           line_height?: number | null
           mockup_id?: string
+          rotation?: number | null
           text_align?: string | null
           width?: number
           x?: number
