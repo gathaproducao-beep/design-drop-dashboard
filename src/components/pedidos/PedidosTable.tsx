@@ -140,8 +140,17 @@ export function PedidosTable({
           
           // Criar canvas HTML
           const canvas = document.createElement("canvas");
-          const ctx = canvas.getContext("2d");
+          // Forçar contexto sem scaling automático
+          const ctx = canvas.getContext("2d", { 
+            alpha: true,
+            willReadFrequently: false 
+          });
           if (!ctx) continue;
+
+          // Resetar qualquer transformação que possa existir
+          ctx.setTransform(1, 0, 0, 1, 0, 0);
+          ctx.imageSmoothingEnabled = true;
+          ctx.imageSmoothingQuality = 'high';
 
           // Carregar imagem base do canvas
           const baseImg = new Image();
@@ -162,10 +171,15 @@ export function PedidosTable({
           });
 
           // Usar dimensões naturais da imagem (originais, sem escala do navegador)
-          canvas.width = baseImg.naturalWidth;
-          canvas.height = baseImg.naturalHeight;
-          ctx.drawImage(baseImg, 0, 0, baseImg.naturalWidth, baseImg.naturalHeight);
-          console.log(`[generateMockups] Canvas criado: ${canvas.width}x${canvas.height}px`);
+          canvas.width = Math.round(baseImg.naturalWidth);
+          canvas.height = Math.round(baseImg.naturalHeight);
+          
+          // Garantir que o backing store seja 1:1
+          canvas.style.width = `${canvas.width}px`;
+          canvas.style.height = `${canvas.height}px`;
+          
+          ctx.drawImage(baseImg, 0, 0, canvas.width, canvas.height);
+          console.log(`[generateMockups] Canvas criado: ${canvas.width}x${canvas.height}px (style: ${canvas.style.width}x${canvas.style.height})`);
 
           // Processar cada área
           for (const area of areas) {
@@ -271,8 +285,17 @@ export function PedidosTable({
           }
 
           // Converter para blob
+          console.log(`[generateMockups] Preparando exportação - Canvas: ${canvas.width}x${canvas.height}px`);
           const blob = await new Promise<Blob>((resolve) => {
-            canvas.toBlob((b) => resolve(b!), "image/png");
+            canvas.toBlob((b) => {
+              console.log(`[generateMockups] Blob gerado:`, {
+                size: `${((b?.size || 0) / 1024 / 1024).toFixed(2)} MB`,
+                canvasWidth: canvas.width,
+                canvasHeight: canvas.height,
+                type: b?.type
+              });
+              resolve(b!);
+            }, "image/png", 1.0); // Qualidade máxima para PNG
           });
 
           // Upload para storage
