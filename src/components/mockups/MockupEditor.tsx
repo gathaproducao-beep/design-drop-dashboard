@@ -576,14 +576,14 @@ export function MockupEditor({ mockup, onClose, onSave }: MockupEditorProps) {
             <div>
               <Label>Mockup de Aprovação Vinculado</Label>
               <Select
-                value={mockupInfo.mockup_aprovacao_vinculado_id || ""}
-                onValueChange={(v) => setMockupInfo({ ...mockupInfo, mockup_aprovacao_vinculado_id: v || null })}
+                value={mockupInfo.mockup_aprovacao_vinculado_id || "none"}
+                onValueChange={(v) => setMockupInfo({ ...mockupInfo, mockup_aprovacao_vinculado_id: v === "none" ? null : v })}
               >
                 <SelectTrigger>
                   <SelectValue placeholder="Selecione um mockup de aprovação" />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="">Nenhum</SelectItem>
+                  <SelectItem value="none">Nenhum</SelectItem>
                   {mockupsAprovacao.map((m) => (
                     <SelectItem key={m.id} value={m.id}>
                       {m.codigo_mockup}
