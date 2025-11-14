@@ -152,29 +152,37 @@ export function PedidosTable({
                 clientImg.src = photoUrl;
               });
 
-              // Calcular dimensões mantendo proporção (contain)
+              // Usar dimensões exatas da área (cover - preenche toda a área)
               const aspectRatio = clientImg.width / clientImg.height;
               const areaAspect = area.width / area.height;
               
-              let drawWidth = area.width;
-              let drawHeight = area.height;
-              let offsetX = 0;
-              let offsetY = 0;
+              let sourceX = 0;
+              let sourceY = 0;
+              let sourceWidth = clientImg.width;
+              let sourceHeight = clientImg.height;
 
+              // Recortar a imagem para manter proporção e preencher toda a área (cover)
               if (aspectRatio > areaAspect) {
-                drawHeight = area.width / aspectRatio;
-                offsetY = (area.height - drawHeight) / 2;
+                // Imagem mais larga - recortar largura
+                sourceWidth = clientImg.height * areaAspect;
+                sourceX = (clientImg.width - sourceWidth) / 2;
               } else {
-                drawWidth = area.height * aspectRatio;
-                offsetX = (area.width - drawWidth) / 2;
+                // Imagem mais alta - recortar altura
+                sourceHeight = clientImg.width / areaAspect;
+                sourceY = (clientImg.height - sourceHeight) / 2;
               }
 
+              // Desenhar usando as dimensões exatas da área
               ctx.drawImage(
                 clientImg,
-                area.x + offsetX,
-                area.y + offsetY,
-                drawWidth,
-                drawHeight
+                sourceX,
+                sourceY,
+                sourceWidth,
+                sourceHeight,
+                area.x,
+                area.y,
+                area.width,
+                area.height
               );
             } else if (area.kind === "text") {
               // Renderizar texto
