@@ -81,8 +81,8 @@ export function PedidosTable({
 
     setGenerating(pedido.id);
     try {
-      // Buscar mockups e seus canvases/áreas
-      const { data: mockups, error: mockupError } = await supabase
+      // Buscar mockup principal pelo código do produto
+      const { data: mockupsPrincipais, error: mockupError } = await supabase
         .from("mockups")
         .select(`
           *,
@@ -93,9 +93,34 @@ export function PedidosTable({
         `)
         .eq("codigo_mockup", pedido.codigo_produto);
 
-      if (mockupError || !mockups || mockups.length === 0) {
+      if (mockupError || !mockupsPrincipais || mockupsPrincipais.length === 0) {
         toast.error("Nenhum mockup encontrado para este código de produto");
         return;
+      }
+
+      let mockups = mockupsPrincipais;
+
+      // Se o mockup principal for do tipo "molde" e tiver vinculação com mockup de aprovação
+      const mockupPrincipal = mockupsPrincipais[0];
+      if (mockupPrincipal.tipo === "molde" && mockupPrincipal.mockup_aprovacao_vinculado_id) {
+        // Buscar também o mockup de aprovação vinculado
+        const { data: mockupAprovacao, error: aprovacaoError } = await supabase
+          .from("mockups")
+          .select(`
+            *,
+            mockup_canvases (
+              *,
+              mockup_areas (*)
+            )
+          `)
+          .eq("id", mockupPrincipal.mockup_aprovacao_vinculado_id)
+          .single();
+
+        if (!aprovacaoError && mockupAprovacao) {
+          // Adicionar mockup de aprovação no início do array (será gerado primeiro)
+          mockups = [mockupAprovacao, ...mockupsPrincipais];
+          console.log("Gerando mockup de aprovação vinculado:", mockupAprovacao.codigo_mockup);
+        }
       }
 
       // Processar cada mockup
