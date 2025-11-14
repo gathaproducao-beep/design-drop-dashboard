@@ -95,8 +95,8 @@ export function MockupEditor({ mockup, onClose, onSave }: MockupEditorProps) {
   }, []);
 
   useEffect(() => {
-    // Só carregar áreas se activeCanvas E scale estiverem prontos
-    if (activeCanvas && scale > 1) {
+    // Carregar áreas quando activeCanvas estiver pronto e scale calculado (>= 1)
+    if (activeCanvas && scale >= 1) {
       console.log(`[useEffect] Carregando áreas com escala: ${scale}`);
       carregarAreas(activeCanvas);
     }
