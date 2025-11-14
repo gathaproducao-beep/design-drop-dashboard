@@ -18,6 +18,53 @@ import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
 
+// Função para remover chunk pHYs do PNG (metadados DPI problemáticos)
+function removePHYsChunk(pngData: Uint8Array): Uint8Array {
+  const result: number[] = [];
+  let i = 0;
+  
+  // PNG signature (8 bytes) - copiar sempre
+  for (let j = 0; j < 8; j++) {
+    result.push(pngData[i++]);
+  }
+  
+  // Processar chunks
+  while (i < pngData.length) {
+    // Ler tamanho do chunk (4 bytes)
+    const length = (pngData[i] << 24) | (pngData[i+1] << 16) | 
+                   (pngData[i+2] << 8) | pngData[i+3];
+    
+    // Ler tipo do chunk (4 bytes)
+    const type = String.fromCharCode(
+      pngData[i+4], pngData[i+5], pngData[i+6], pngData[i+7]
+    );
+    
+    // Se for pHYs, pular este chunk
+    if (type === 'pHYs') {
+      console.log('[removePHYsChunk] Chunk pHYs encontrado e removido');
+      i += 12 + length; // length(4) + type(4) + data(length) + crc(4)
+      continue;
+    }
+    
+    // Copiar chunk completo
+    const chunkSize = 12 + length;
+    for (let j = 0; j < chunkSize; j++) {
+      result.push(pngData[i++]);
+    }
+    
+    // Se chegou no IEND, terminar
+    if (type === 'IEND') break;
+  }
+  
+  console.log('[removePHYsChunk] PNG processado:', {
+    tamanhoOriginal: pngData.length,
+    tamanhoNovo: result.length,
+    reducao: `${((1 - result.length / pngData.length) * 100).toFixed(2)}%`
+  });
+  
+  return new Uint8Array(result);
+}
+
 interface PedidosTableProps {
   pedidos: any[];
   loading: boolean;
@@ -284,56 +331,45 @@ export function PedidosTable({
             }
           }
 
-          // Criar canvas limpo para exportação (sem metadados problemáticos)
-          console.log(`[generateMockups] Preparando exportação - Canvas original: ${canvas.width}x${canvas.height}px`);
+          // Converter canvas para blob
+          console.log(`[generateMockups] Preparando exportação - Canvas: ${canvas.width}x${canvas.height}px`);
           
-          const exportCanvas = document.createElement('canvas');
-          exportCanvas.width = canvas.width;
-          exportCanvas.height = canvas.height;
-          
-          const exportCtx = exportCanvas.getContext('2d', { 
-            alpha: true,
-            willReadFrequently: false,
-            desynchronized: false
-          });
-          
-          if (!exportCtx) {
-            console.error('[generateMockups] Falha ao criar contexto de exportação');
-            continue;
-          }
-          
-          // Resetar transformações
-          exportCtx.setTransform(1, 0, 0, 1, 0, 0);
-          exportCtx.imageSmoothingEnabled = false; // Desabilitar suavização para cópia pixel-perfect
-          
-          // Copiar conteúdo do canvas original para o canvas de exportação
-          exportCtx.drawImage(canvas, 0, 0, canvas.width, canvas.height, 0, 0, exportCanvas.width, exportCanvas.height);
-          
-          console.log(`[generateMockups] Canvas de exportação criado: ${exportCanvas.width}x${exportCanvas.height}px`);
-          
-          // Exportar do canvas limpo
           const blob = await new Promise<Blob>((resolve) => {
-            exportCanvas.toBlob((b) => {
+            canvas.toBlob((b) => {
               if (!b) {
                 console.error('[generateMockups] Falha ao gerar blob');
                 resolve(new Blob());
                 return;
               }
-              console.log(`[generateMockups] Blob gerado:`, {
+              console.log(`[generateMockups] Blob inicial gerado:`, {
                 size: `${(b.size / 1024 / 1024).toFixed(2)} MB`,
-                width: exportCanvas.width,
-                height: exportCanvas.height,
+                width: canvas.width,
+                height: canvas.height,
                 type: b.type
               });
               resolve(b);
             }, "image/png", 1.0);
           });
+          
+          // Processar PNG para remover metadados pHYs (DPI problemáticos)
+          console.log('[generateMockups] Processando PNG para remover metadados DPI...');
+          const arrayBuffer = await blob.arrayBuffer();
+          const uint8Array = new Uint8Array(arrayBuffer);
+          const cleanedPng = removePHYsChunk(uint8Array);
+          // Criar novo ArrayBuffer para garantir compatibilidade de tipos
+          const cleanBuffer = cleanedPng.buffer.slice(cleanedPng.byteOffset, cleanedPng.byteOffset + cleanedPng.byteLength) as ArrayBuffer;
+          const cleanBlob = new Blob([cleanBuffer], { type: 'image/png' });
+          
+          console.log(`[generateMockups] PNG limpo criado:`, {
+            size: `${(cleanBlob.size / 1024 / 1024).toFixed(2)} MB`,
+            pixels: `${canvas.width}x${canvas.height}px`
+          });
 
-          // Upload para storage
+          // Upload para storage usando o PNG limpo (sem metadados DPI)
           const fileName = `${mockup.tipo}/${pedido.numero_pedido}-${mockup.tipo}-${canvasData.nome}-${Date.now()}.png`;
           const { error: uploadError } = await supabase.storage
             .from("mockup-images")
-            .upload(fileName, blob);
+            .upload(fileName, cleanBlob);
 
           if (uploadError) {
             console.error("Erro ao fazer upload:", uploadError);
