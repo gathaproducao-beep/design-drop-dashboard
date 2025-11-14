@@ -7,7 +7,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
-import { ArrowLeft, Plus, Trash2, GripVertical } from "lucide-react";
+import { ArrowLeft, Plus, Trash2, GripVertical, Edit, Copy } from "lucide-react";
 
 interface MockupEditorProps {
   mockup: any;
@@ -32,6 +32,7 @@ interface Area {
   width: number;
   height: number;
   z_index: number;
+  rotation?: number;
   font_family?: string;
   font_size?: number;
   font_weight?: string;
@@ -60,6 +61,7 @@ export function MockupEditor({ mockup, onClose, onSave }: MockupEditorProps) {
   const imageRef = useRef<HTMLImageElement>(null);
   const [scale, setScale] = useState<number>(1);
   
+  const [editingArea, setEditingArea] = useState<Area | null>(null);
   const [showNewAreaForm, setShowNewAreaForm] = useState(false);
   const [newArea, setNewArea] = useState<Partial<Area>>({
     kind: "image",
@@ -69,6 +71,7 @@ export function MockupEditor({ mockup, onClose, onSave }: MockupEditorProps) {
     width: 200,
     height: 200,
     z_index: 1,
+    rotation: 0,
     font_family: "Arial",
     font_size: 16,
     font_weight: "normal",
@@ -373,6 +376,114 @@ export function MockupEditor({ mockup, onClose, onSave }: MockupEditorProps) {
     }
   };
 
+  const handleEditArea = (area: Area) => {
+    setEditingArea(area);
+    setNewArea({
+      kind: area.kind,
+      field_key: area.field_key,
+      x: area.x,
+      y: area.y,
+      width: area.width,
+      height: area.height,
+      z_index: area.z_index,
+      rotation: area.rotation || 0,
+      font_family: area.font_family,
+      font_size: area.font_size,
+      font_weight: area.font_weight,
+      color: area.color,
+      text_align: area.text_align,
+      letter_spacing: area.letter_spacing,
+      line_height: area.line_height,
+    });
+    setShowNewAreaForm(true);
+  };
+
+  const handleSaveEditArea = async () => {
+    if (!editingArea?.id) return;
+
+    try {
+      const updates = {
+        kind: newArea.kind,
+        field_key: newArea.field_key,
+        x: toRealCoordinates(newArea.x!),
+        y: toRealCoordinates(newArea.y!),
+        width: toRealCoordinates(newArea.width!),
+        height: toRealCoordinates(newArea.height!),
+        z_index: newArea.z_index,
+        rotation: newArea.rotation,
+        font_family: newArea.font_family,
+        font_size: newArea.font_size,
+        font_weight: newArea.font_weight,
+        color: newArea.color,
+        text_align: newArea.text_align,
+        letter_spacing: newArea.letter_spacing,
+        line_height: newArea.line_height,
+      };
+      
+      await handleUpdateArea(editingArea.id, updates);
+      toast.success("Área atualizada");
+      handleCancelForm();
+      carregarAreas(activeCanvas!);
+    } catch (error) {
+      toast.error("Erro ao atualizar área");
+    }
+  };
+
+  const handleDuplicateArea = async (area: Area) => {
+    if (!activeCanvas) return;
+
+    try {
+      const areaDuplicada = {
+        canvas_id: activeCanvas,
+        mockup_id: mockup.id,
+        kind: area.kind,
+        field_key: area.field_key,
+        x: toRealCoordinates(area.x + 20),
+        y: toRealCoordinates(area.y + 20),
+        width: toRealCoordinates(area.width),
+        height: toRealCoordinates(area.height),
+        z_index: area.z_index,
+        rotation: area.rotation || 0,
+        font_family: area.font_family,
+        font_size: area.font_size,
+        font_weight: area.font_weight,
+        color: area.color,
+        text_align: area.text_align,
+        letter_spacing: area.letter_spacing,
+        line_height: area.line_height,
+      };
+      
+      await (supabase as any).from("mockup_areas").insert([areaDuplicada]);
+      toast.success("Área duplicada");
+      carregarAreas(activeCanvas);
+    } catch (error) {
+      console.error("Erro ao duplicar área:", error);
+      toast.error("Erro ao duplicar área");
+    }
+  };
+
+  const handleCancelForm = () => {
+    setShowNewAreaForm(false);
+    setEditingArea(null);
+    setNewArea({
+      kind: "image",
+      field_key: "fotocliente[1]",
+      x: 50,
+      y: 50,
+      width: 200,
+      height: 200,
+      z_index: 1,
+      rotation: 0,
+      font_family: "Arial",
+      font_size: 16,
+      font_weight: "normal",
+      color: "#000000",
+      text_align: "left",
+      letter_spacing: 0,
+      line_height: 1.2,
+    });
+  };
+
   return (
     <div className="space-y-6">
       <div className="flex items-center justify-between">
@@ -490,6 +601,8 @@ export function MockupEditor({ mockup, onClose, onSave }: MockupEditorProps) {
                             width: `${area.width}px`,
                             height: `${area.height}px`,
                             zIndex: area.z_index,
+                            transform: `rotate(${area.rotation || 0}deg)`,
+                            transformOrigin: 'center',
                           }}
                           onMouseDown={(e) => handleMouseDown(e, area.id!, false)}
                         >
@@ -566,10 +679,12 @@ export function MockupEditor({ mockup, onClose, onSave }: MockupEditorProps) {
                     Nova Área
                   </Button>
                 ) : (
-                  <Card>
-                    <CardHeader>
-                      <CardTitle className="text-base">Nova Área</CardTitle>
-                    </CardHeader>
+              <Card>
+                <CardHeader>
+                  <CardTitle className="text-base">
+                    {editingArea ? "Editar Área" : "Nova Área"}
+                  </CardTitle>
+                </CardHeader>
                     <CardContent className="space-y-4">
                       <div>
                         <Label>Tipo</Label>
@@ -768,13 +883,36 @@ export function MockupEditor({ mockup, onClose, onSave }: MockupEditorProps) {
                         </div>
                       </div>
 
+                      <div>
+                        <Label className="text-xs">Rotação (graus)</Label>
+                        <div className="flex gap-2 items-center">
+                          <Input 
+                            type="number" 
+                            value={newArea.rotation || 0} 
+                            onChange={(e) => setNewArea({ ...newArea, rotation: +e.target.value })} 
+                            min="0"
+                            max="360"
+                            step="1"
+                          />
+                          <span className="text-xs text-muted-foreground">{newArea.rotation || 0}°</span>
+                        </div>
+                      </div>
+
                       <div className="flex gap-2">
-                        <Button onClick={handleAddArea} className="flex-1">
-                          <Plus className="mr-2 h-4 w-4" />Adicionar
-                        </Button>
+                        {editingArea ? (
+                          <Button onClick={handleSaveEditArea} className="flex-1">
+                            <Plus className="mr-2 h-4 w-4" />
+                            Salvar Alterações
+                          </Button>
+                        ) : (
+                          <Button onClick={handleAddArea} className="flex-1">
+                            <Plus className="mr-2 h-4 w-4" />
+                            Adicionar Área
+                          </Button>
+                        )}
                         <Button 
                           variant="outline" 
-                          onClick={() => setShowNewAreaForm(false)}
+                          onClick={handleCancelForm}
                         >
                           Cancelar
                         </Button>
@@ -796,23 +934,72 @@ export function MockupEditor({ mockup, onClose, onSave }: MockupEditorProps) {
                       areas.map((area) => (
                         <div 
                           key={area.id} 
-                          className={`flex items-center justify-between p-3 rounded-lg border cursor-pointer transition-colors ${
+                          className={`flex items-center justify-between p-3 rounded-lg border ${
                             selectedArea === area.id 
                               ? 'border-primary bg-primary/5' 
                               : 'border-border hover:bg-accent'
                           }`}
-                          onClick={() => setSelectedArea(area.id!)}
                         >
-                          <div className="flex items-center gap-2">
+                          <div 
+                            className="flex items-center gap-2 flex-1 cursor-pointer"
+                            onClick={() => setSelectedArea(area.id!)}
+                          >
                             <span className="text-lg">
                               {area.kind === "image" ? "📷" : "📝"}
                             </span>
                             <div className="text-sm">
-                              <div className="font-medium">{area.field_key}</div>
+                              <div className="font-medium">
+                                {area.kind === "text" 
+                                  ? TEXT_FIELDS.find(f => f.value === area.field_key)?.label 
+                                  : area.field_key
+                                }
+                              </div>
                               <div className="text-xs text-muted-foreground">
-                                {area.x}x{area.y} • {area.width}x{area.height}
+                                {Math.round(area.x)}x{Math.round(area.y)} • {Math.round(area.width)}x{Math.round(area.height)}
+                                {area.rotation ? ` • ${area.rotation}°` : ''}
                               </div>
                             </div>
+                          </div>
+                          
+                          <div className="flex gap-1">
+                            <Button
+                              variant="ghost"
+                              size="icon"
+                              className="h-8 w-8"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                handleEditArea(area);
+                              }}
+                              title="Editar área"
+                            >
+                              <Edit className="h-4 w-4" />
+                            </Button>
+                            
+                            <Button
+                              variant="ghost"
+                              size="icon"
+                              className="h-8 w-8"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                handleDuplicateArea(area);
+                              }}
+                              title="Duplicar área"
+                            >
+                              <Copy className="h-4 w-4" />
+                            </Button>
+                            
+                            <Button
+                              variant="ghost"
+                              size="icon"
+                              className="h-8 w-8 text-destructive hover:text-destructive"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                handleDeleteArea(area.id!);
+                              }}
+                              title="Excluir área"
+                            >
+                              <Trash2 className="h-4 w-4" />
+                            </Button>
                           </div>
                         </div>
                       ))
