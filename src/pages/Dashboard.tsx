@@ -2,7 +2,7 @@ import { useState, useEffect } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Plus, Search, Filter, Trash2, Upload, FileSpreadsheet } from "lucide-react";
+import { Plus, Search, Filter, Trash2, Upload, FileSpreadsheet, Download } from "lucide-react";
 import { toast } from "sonner";
 import { PedidosTable } from "@/components/pedidos/PedidosTable";
 import { NovoPedidoDialog } from "@/components/pedidos/NovoPedidoDialog";
@@ -66,6 +66,61 @@ export default function Dashboard() {
     } catch (error) {
       console.error("Erro ao excluir:", error);
       toast.error("Erro ao excluir pedidos");
+    }
+  };
+
+  const handleDownloadMoldes = async () => {
+    // Filtrar apenas pedidos selecionados que têm molde_producao
+    const pedidosComMolde = pedidos.filter(p => 
+      selectedIds.has(p.id) && p.molde_producao
+    );
+    
+    if (pedidosComMolde.length === 0) {
+      toast.error("Nenhum molde encontrado nos pedidos selecionados");
+      return;
+    }
+    
+    const toastId = toast.loading(`Baixando ${pedidosComMolde.length} molde(s)...`);
+    
+    try {
+      // Importar JSZip dinamicamente
+      const JSZip = (await import('jszip')).default;
+      const zip = new JSZip();
+      
+      // Para cada pedido, fazer fetch da imagem e adicionar ao ZIP
+      for (const pedido of pedidosComMolde) {
+        try {
+          const response = await fetch(pedido.molde_producao);
+          const blob = await response.blob();
+          
+          // Nome do arquivo: NumPedido_CodigoProduto.png
+          const nomeArquivo = `${pedido.numero_pedido}_${pedido.codigo_produto}.png`;
+          zip.file(nomeArquivo, blob);
+        } catch (error) {
+          console.error(`Erro ao baixar molde ${pedido.numero_pedido}:`, error);
+        }
+      }
+      
+      // Gerar o ZIP sem compressão para manter qualidade máxima
+      const zipBlob = await zip.generateAsync({ 
+        type: 'blob',
+        compression: "STORE"
+      });
+      
+      // Criar link de download
+      const url = URL.createObjectURL(zipBlob);
+      const link = document.createElement('a');
+      link.href = url;
+      link.download = `moldes_${new Date().toISOString().split('T')[0]}.zip`;
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      URL.revokeObjectURL(url);
+      
+      toast.success(`${pedidosComMolde.length} molde(s) baixado(s)`, { id: toastId });
+    } catch (error) {
+      console.error("Erro ao gerar ZIP:", error);
+      toast.error("Erro ao baixar moldes", { id: toastId });
     }
   };
 
@@ -139,13 +194,25 @@ export default function Dashboard() {
             </div>
             <div className="flex gap-2">
               {selectedIds.size > 0 && (
-                <Button
-                  variant="destructive"
-                  onClick={handleExcluirSelecionados}
-                >
-                  <Trash2 className="mr-2 h-4 w-4" />
-                  Excluir selecionados ({selectedIds.size})
-                </Button>
+                <>
+                  <Button
+                    variant="outline"
+                    onClick={handleDownloadMoldes}
+                    className="bg-blue-50 hover:bg-blue-100 border-blue-200"
+                  >
+                    <Download className="mr-2 h-4 w-4" />
+                    Download Moldes ({
+                      pedidos.filter(p => selectedIds.has(p.id) && p.molde_producao).length
+                    })
+                  </Button>
+                  <Button
+                    variant="destructive"
+                    onClick={handleExcluirSelecionados}
+                  >
+                    <Trash2 className="mr-2 h-4 w-4" />
+                    Excluir selecionados ({selectedIds.size})
+                  </Button>
+                </>
               )}
               <Button
                 onClick={() => setNovoPedidoOpen(true)}
