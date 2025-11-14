@@ -95,10 +95,12 @@ export function MockupEditor({ mockup, onClose, onSave }: MockupEditorProps) {
   }, []);
 
   useEffect(() => {
-    if (activeCanvas) {
+    // Só carregar áreas se activeCanvas E scale estiverem prontos
+    if (activeCanvas && scale > 1) {
+      console.log(`[useEffect] Carregando áreas com escala: ${scale}`);
       carregarAreas(activeCanvas);
     }
-  }, [activeCanvas]);
+  }, [activeCanvas, scale]); // Adicionar scale como dependência
 
   // Calcular escala quando a imagem carregar
   useEffect(() => {
@@ -108,7 +110,8 @@ export function MockupEditor({ mockup, onClose, onSave }: MockupEditorProps) {
         const renderedWidth = imageRef.current.width;
         const newScale = naturalWidth / renderedWidth;
         setScale(newScale);
-        console.log(`Escala calculada: ${newScale} (Natural: ${naturalWidth}px, Renderizado: ${renderedWidth}px)`);
+        console.log(`[Scale] Scale anterior: ${scale}, novo scale: ${newScale}`);
+        console.log(`[Scale] Escala calculada: ${newScale} (Natural: ${naturalWidth}px, Renderizado: ${renderedWidth}px)`);
       }
     };
 
@@ -183,6 +186,7 @@ export function MockupEditor({ mockup, onClose, onSave }: MockupEditorProps) {
   };
 
   const carregarAreas = async (canvasId: string) => {
+    console.log(`[carregarAreas] Iniciando com scale: ${scale}`);
     try {
       const { data, error } = await (supabase as any)
         .from("mockup_areas")
@@ -192,6 +196,14 @@ export function MockupEditor({ mockup, onClose, onSave }: MockupEditorProps) {
 
       if (error) throw error;
       
+      console.log(`[carregarAreas] Áreas do banco (real):`, data?.map(a => ({ 
+        id: a.id.substring(0, 8), 
+        x: a.x, 
+        y: a.y, 
+        w: a.width, 
+        h: a.height 
+      })));
+      
       // Converter coordenadas do banco (real) para editor (escalado)
       const areasConvertidas = (data || []).map((area: Area) => ({
         ...area,
@@ -200,6 +212,14 @@ export function MockupEditor({ mockup, onClose, onSave }: MockupEditorProps) {
         width: toEditorCoordinates(area.width),
         height: toEditorCoordinates(area.height),
       }));
+      
+      console.log(`[carregarAreas] Áreas convertidas (editor):`, areasConvertidas.map(a => ({ 
+        id: a.id?.substring(0, 8), 
+        x: a.x, 
+        y: a.y, 
+        w: a.width, 
+        h: a.height 
+      })));
       
       setAreas(areasConvertidas);
     } catch (error) {
@@ -402,6 +422,13 @@ export function MockupEditor({ mockup, onClose, onSave }: MockupEditorProps) {
     if (!editingArea?.id) return;
 
     try {
+      console.log(`[handleSaveEditArea] Valores do formulário (editor):`, {
+        x: newArea.x,
+        y: newArea.y,
+        w: newArea.width,
+        h: newArea.height,
+      });
+      
       // Converter coordenadas do editor para real APENAS UMA VEZ
       const updates = {
         kind: newArea.kind,
@@ -420,6 +447,14 @@ export function MockupEditor({ mockup, onClose, onSave }: MockupEditorProps) {
         letter_spacing: newArea.letter_spacing,
         line_height: newArea.line_height,
       };
+      
+      console.log(`[handleSaveEditArea] Valores a salvar (real):`, {
+        x: updates.x,
+        y: updates.y,
+        w: updates.width,
+        h: updates.height,
+      });
+      console.log(`[handleSaveEditArea] Scale usado: ${scale}`);
       
       // Salvar DIRETAMENTE no banco (não usar handleUpdateArea para evitar dupla conversão)
       const { error } = await supabase
@@ -442,6 +477,13 @@ export function MockupEditor({ mockup, onClose, onSave }: MockupEditorProps) {
     if (!activeCanvas) return;
 
     try {
+      console.log(`[handleDuplicateArea] Área original (editor):`, {
+        x: area.x,
+        y: area.y,
+        w: area.width,
+        h: area.height,
+      });
+      
       const areaDuplicada = {
         canvas_id: activeCanvas,
         mockup_id: mockup.id,
@@ -461,6 +503,14 @@ export function MockupEditor({ mockup, onClose, onSave }: MockupEditorProps) {
         letter_spacing: area.letter_spacing,
         line_height: area.line_height,
       };
+      
+      console.log(`[handleDuplicateArea] Área duplicada (real):`, {
+        x: areaDuplicada.x,
+        y: areaDuplicada.y,
+        w: areaDuplicada.width,
+        h: areaDuplicada.height,
+      });
+      console.log(`[handleDuplicateArea] Scale usado: ${scale}`);
       
       await (supabase as any).from("mockup_areas").insert([areaDuplicada]);
       toast.success("Área duplicada");
