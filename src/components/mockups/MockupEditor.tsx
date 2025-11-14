@@ -48,7 +48,7 @@ const TEXT_FIELDS = [
   { value: "observacao", label: "Observação" },
 ];
 
-export function MockupEditor({ mockup, onClose }: MockupEditorProps) {
+export function MockupEditor({ mockup, onClose, onSave }: MockupEditorProps) {
   const [canvases, setCanvases] = useState<Canvas[]>([]);
   const [activeCanvas, setActiveCanvas] = useState<string>("");
   const [areas, setAreas] = useState<Area[]>([]);
@@ -78,8 +78,17 @@ export function MockupEditor({ mockup, onClose }: MockupEditorProps) {
     line_height: 1.2,
   });
 
+  const [mockupInfo, setMockupInfo] = useState({
+    codigo_mockup: mockup.codigo_mockup,
+    mockup_aprovacao_vinculado_id: mockup.mockup_aprovacao_vinculado_id
+  });
+  const [mockupsAprovacao, setMockupsAprovacao] = useState<any[]>([]);
+
   useEffect(() => {
     carregarCanvases();
+    if (mockup.tipo === "molde") {
+      carregarMockupsAprovacao();
+    }
   }, []);
 
   useEffect(() => {
@@ -118,6 +127,40 @@ export function MockupEditor({ mockup, onClose }: MockupEditorProps) {
 
   const toEditorCoordinates = (realValue: number) => {
     return Math.round(realValue / scale);
+  };
+
+  const carregarMockupsAprovacao = async () => {
+    try {
+      const { data, error } = await supabase
+        .from("mockups")
+        .select("id, codigo_mockup")
+        .eq("tipo", "aprovacao")
+        .order("codigo_mockup");
+      
+      if (error) throw error;
+      setMockupsAprovacao(data || []);
+    } catch (error) {
+      console.error("Erro ao carregar mockups de aprovação:", error);
+    }
+  };
+
+  const handleUpdateMockupInfo = async () => {
+    try {
+      const { error } = await supabase
+        .from("mockups")
+        .update({
+          codigo_mockup: mockupInfo.codigo_mockup,
+          mockup_aprovacao_vinculado_id: mockupInfo.mockup_aprovacao_vinculado_id
+        })
+        .eq("id", mockup.id);
+      
+      if (error) throw error;
+      toast.success("Informações atualizadas");
+      onSave();
+    } catch (error) {
+      console.error("Erro ao atualizar informações:", error);
+      toast.error("Erro ao atualizar informações");
+    }
   };
 
   const carregarCanvases = async () => {
@@ -344,6 +387,49 @@ export function MockupEditor({ mockup, onClose }: MockupEditorProps) {
         </Button>
       </div>
 
+      {/* Informações do Mockup */}
+      <Card>
+        <CardHeader>
+          <CardTitle>Informações do Mockup</CardTitle>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          <div>
+            <Label>Código do Mockup</Label>
+            <Input
+              value={mockupInfo.codigo_mockup}
+              onChange={(e) => setMockupInfo({ ...mockupInfo, codigo_mockup: e.target.value })}
+              placeholder="Ex: PIMASC-1364"
+            />
+          </div>
+          
+          {mockup.tipo === "molde" && (
+            <div>
+              <Label>Mockup de Aprovação Vinculado</Label>
+              <Select
+                value={mockupInfo.mockup_aprovacao_vinculado_id || ""}
+                onValueChange={(v) => setMockupInfo({ ...mockupInfo, mockup_aprovacao_vinculado_id: v || null })}
+              >
+                <SelectTrigger>
+                  <SelectValue placeholder="Selecione um mockup de aprovação" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="">Nenhum</SelectItem>
+                  {mockupsAprovacao.map((m) => (
+                    <SelectItem key={m.id} value={m.id}>
+                      {m.codigo_mockup}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+          )}
+
+          <Button onClick={handleUpdateMockupInfo}>
+            Salvar Alterações
+          </Button>
+        </CardContent>
+      </Card>
+
       <Tabs value={activeCanvas} onValueChange={setActiveCanvas}>
         <TabsList>
           {canvases.map((c) => (
@@ -409,8 +495,31 @@ export function MockupEditor({ mockup, onClose }: MockupEditorProps) {
                         >
                           {/* Label da área */}
                           <div className="absolute -top-6 left-0 bg-primary text-primary-foreground text-xs px-2 py-1 rounded whitespace-nowrap flex items-center gap-1">
-                            {area.kind === "image" ? "📷" : "📝"} {area.field_key}
+                            {area.kind === "image" ? "📷" : "📝"} 
+                            {area.kind === "text" 
+                              ? TEXT_FIELDS.find(f => f.value === area.field_key)?.label || area.field_key
+                              : area.field_key}
                           </div>
+
+                          {/* Preview de texto */}
+                          {area.kind === "text" && (
+                            <div 
+                              className="absolute inset-0 flex items-center justify-center p-2 pointer-events-none overflow-hidden"
+                              style={{
+                                fontFamily: area.font_family,
+                                fontSize: `${(area.font_size || 16) / scale}px`,
+                                fontWeight: area.font_weight,
+                                color: area.color,
+                                textAlign: area.text_align as any,
+                                letterSpacing: `${(area.letter_spacing || 0) / scale}px`,
+                                lineHeight: area.line_height
+                              }}
+                            >
+                              <span className="opacity-50">
+                                {TEXT_FIELDS.find(f => f.value === area.field_key)?.label}
+                              </span>
+                            </div>
+                          )}
 
                           {/* Grip para mover */}
                           <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
@@ -477,33 +586,152 @@ export function MockupEditor({ mockup, onClose }: MockupEditorProps) {
                       </div>
 
                       <div>
-                        <Label>Campo</Label>
                         {newArea.kind === "image" ? (
-                          <Select
-                            value={newArea.field_key}
-                            onValueChange={(v) => setNewArea({ ...newArea, field_key: v })}
-                          >
-                            <SelectTrigger><SelectValue /></SelectTrigger>
-                            <SelectContent>
-                              {[1, 2, 3, 4, 5].map((i) => (
-                                <SelectItem key={i} value={`fotocliente[${i}]`}>Foto {i}</SelectItem>
-                              ))}
-                            </SelectContent>
-                          </Select>
+                          <>
+                            <Label>Campo</Label>
+                            <Select
+                              value={newArea.field_key}
+                              onValueChange={(v) => setNewArea({ ...newArea, field_key: v })}
+                            >
+                              <SelectTrigger><SelectValue /></SelectTrigger>
+                              <SelectContent>
+                                {[1, 2, 3, 4, 5].map((i) => (
+                                  <SelectItem key={i} value={`fotocliente[${i}]`}>
+                                    Foto do Cliente {i}
+                                  </SelectItem>
+                                ))}
+                              </SelectContent>
+                            </Select>
+                          </>
                         ) : (
-                          <Select
-                            value={newArea.field_key}
-                            onValueChange={(v) => setNewArea({ ...newArea, field_key: v })}
-                          >
-                            <SelectTrigger><SelectValue /></SelectTrigger>
-                            <SelectContent>
-                              {TEXT_FIELDS.map((f) => (
-                                <SelectItem key={f.value} value={f.value}>{f.label}</SelectItem>
-                              ))}
-                            </SelectContent>
-                          </Select>
+                          <>
+                            <Label>Texto Variável</Label>
+                            <p className="text-xs text-muted-foreground mb-2">
+                              Escolha qual informação do pedido será exibida nesta área
+                            </p>
+                            <Select
+                              value={newArea.field_key}
+                              onValueChange={(v) => setNewArea({ ...newArea, field_key: v })}
+                            >
+                              <SelectTrigger><SelectValue /></SelectTrigger>
+                              <SelectContent>
+                                {TEXT_FIELDS.map((field) => (
+                                  <SelectItem key={field.value} value={field.value}>
+                                    {field.label}
+                                  </SelectItem>
+                                ))}
+                              </SelectContent>
+                            </Select>
+                          </>
                         )}
                       </div>
+
+                      {newArea.kind === "text" && (
+                        <>
+                          <div className="grid grid-cols-2 gap-2">
+                            <div>
+                              <Label>Fonte</Label>
+                              <Select
+                                value={newArea.font_family}
+                                onValueChange={(v) => setNewArea({ ...newArea, font_family: v })}
+                              >
+                                <SelectTrigger><SelectValue /></SelectTrigger>
+                                <SelectContent>
+                                  <SelectItem value="Arial">Arial</SelectItem>
+                                  <SelectItem value="Times New Roman">Times New Roman</SelectItem>
+                                  <SelectItem value="Courier New">Courier New</SelectItem>
+                                  <SelectItem value="Georgia">Georgia</SelectItem>
+                                  <SelectItem value="Verdana">Verdana</SelectItem>
+                                </SelectContent>
+                              </Select>
+                            </div>
+                            
+                            <div>
+                              <Label>Tamanho (px)</Label>
+                              <Input
+                                type="number"
+                                value={newArea.font_size}
+                                onChange={(e) => setNewArea({ ...newArea, font_size: parseInt(e.target.value) })}
+                                min="8"
+                                max="200"
+                              />
+                            </div>
+                          </div>
+
+                          <div className="grid grid-cols-2 gap-2">
+                            <div>
+                              <Label>Peso</Label>
+                              <Select
+                                value={newArea.font_weight}
+                                onValueChange={(v) => setNewArea({ ...newArea, font_weight: v })}
+                              >
+                                <SelectTrigger><SelectValue /></SelectTrigger>
+                                <SelectContent>
+                                  <SelectItem value="normal">Normal</SelectItem>
+                                  <SelectItem value="bold">Negrito</SelectItem>
+                                </SelectContent>
+                              </Select>
+                            </div>
+                            
+                            <div>
+                              <Label>Alinhamento</Label>
+                              <Select
+                                value={newArea.text_align}
+                                onValueChange={(v) => setNewArea({ ...newArea, text_align: v })}
+                              >
+                                <SelectTrigger><SelectValue /></SelectTrigger>
+                                <SelectContent>
+                                  <SelectItem value="left">Esquerda</SelectItem>
+                                  <SelectItem value="center">Centro</SelectItem>
+                                  <SelectItem value="right">Direita</SelectItem>
+                                </SelectContent>
+                              </Select>
+                            </div>
+                          </div>
+
+                          <div>
+                            <Label>Cor</Label>
+                            <div className="flex gap-2">
+                              <Input
+                                type="color"
+                                value={newArea.color}
+                                onChange={(e) => setNewArea({ ...newArea, color: e.target.value })}
+                                className="w-20"
+                              />
+                              <Input
+                                type="text"
+                                value={newArea.color}
+                                onChange={(e) => setNewArea({ ...newArea, color: e.target.value })}
+                                placeholder="#000000"
+                              />
+                            </div>
+                          </div>
+
+                          <div className="grid grid-cols-2 gap-2">
+                            <div>
+                              <Label>Espaçamento</Label>
+                              <Input
+                                type="number"
+                                value={newArea.letter_spacing}
+                                onChange={(e) => setNewArea({ ...newArea, letter_spacing: parseFloat(e.target.value) })}
+                                step="0.1"
+                              />
+                            </div>
+                            
+                            <div>
+                              <Label>Altura de Linha</Label>
+                              <Input
+                                type="number"
+                                value={newArea.line_height}
+                                onChange={(e) => setNewArea({ ...newArea, line_height: parseFloat(e.target.value) })}
+                                step="0.1"
+                                min="0.5"
+                                max="3"
+                              />
+                            </div>
+                          </div>
+                        </>
+                      )}
 
                       <div className="grid grid-cols-2 gap-2">
                         <div>
