@@ -402,6 +402,7 @@ export function MockupEditor({ mockup, onClose, onSave }: MockupEditorProps) {
     if (!editingArea?.id) return;
 
     try {
+      // Converter coordenadas do editor para real APENAS UMA VEZ
       const updates = {
         kind: newArea.kind,
         field_key: newArea.field_key,
@@ -420,11 +421,19 @@ export function MockupEditor({ mockup, onClose, onSave }: MockupEditorProps) {
         line_height: newArea.line_height,
       };
       
-      await handleUpdateArea(editingArea.id, updates);
+      // Salvar DIRETAMENTE no banco (não usar handleUpdateArea para evitar dupla conversão)
+      const { error } = await supabase
+        .from("mockup_areas")
+        .update(updates)
+        .eq("id", editingArea.id);
+      
+      if (error) throw error;
+      
       toast.success("Área atualizada");
       handleCancelForm();
-      carregarAreas(activeCanvas!);
+      carregarAreas(activeCanvas!); // Recarregar do banco com conversão correta
     } catch (error) {
+      console.error("Erro ao atualizar área:", error);
       toast.error("Erro ao atualizar área");
     }
   };
