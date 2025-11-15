@@ -18,10 +18,78 @@ import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
 
-// Função para remover chunk pHYs do PNG (metadados DPI problemáticos)
-function removePHYsChunk(pngData: Uint8Array): Uint8Array {
+// CRC32 table para calcular checksum do PNG
+const crcTable = (() => {
+  const table = new Uint32Array(256);
+  for (let i = 0; i < 256; i++) {
+    let c = i;
+    for (let k = 0; k < 8; k++) {
+      c = (c & 1) ? (0xEDB88320 ^ (c >>> 1)) : (c >>> 1);
+    }
+    table[i] = c;
+  }
+  return table;
+})();
+
+function crc32(data: Uint8Array): number {
+  let crc = 0xFFFFFFFF;
+  for (let i = 0; i < data.length; i++) {
+    crc = (crc >>> 8) ^ crcTable[(crc ^ data[i]) & 0xFF];
+  }
+  return (crc ^ 0xFFFFFFFF) >>> 0;
+}
+
+// Extrair dimensões do chunk IHDR
+function getIHDRDimensions(pngData: Uint8Array): { width: number; height: number } {
+  // IHDR está logo após a assinatura PNG (8 bytes)
+  // Formato: length(4) + "IHDR"(4) + width(4) + height(4) + ...
+  const width = (pngData[16] << 24) | (pngData[17] << 16) | (pngData[18] << 8) | pngData[19];
+  const height = (pngData[20] << 24) | (pngData[21] << 16) | (pngData[22] << 8) | pngData[23];
+  return { width, height };
+}
+
+// Função para definir chunk pHYs com 300 DPI
+function setPHYsTo300DPI(pngData: Uint8Array): Uint8Array {
   const result: number[] = [];
   let i = 0;
+  let physFound = false;
+  let ihdrProcessed = false;
+  
+  // 300 DPI = 11811 pixels/metro (300 / 0.0254 ≈ 11811)
+  const ppm = 11811; // pixels per meter
+  
+  // Criar chunk pHYs correto
+  const createPHYsChunk = (): number[] => {
+    const chunk: number[] = [];
+    
+    // Length (4 bytes) - pHYs data tem 9 bytes
+    chunk.push(0, 0, 0, 9);
+    
+    // Type "pHYs" (4 bytes)
+    chunk.push(112, 72, 89, 115); // "pHYs"
+    
+    // Data (9 bytes):
+    // - pixels per unit, X axis (4 bytes)
+    chunk.push((ppm >>> 24) & 0xFF, (ppm >>> 16) & 0xFF, (ppm >>> 8) & 0xFF, ppm & 0xFF);
+    // - pixels per unit, Y axis (4 bytes)
+    chunk.push((ppm >>> 24) & 0xFF, (ppm >>> 16) & 0xFF, (ppm >>> 8) & 0xFF, ppm & 0xFF);
+    // - unit specifier (1 byte): 1 = meters
+    chunk.push(1);
+    
+    // Calcular CRC dos dados (type + data)
+    const crcData = new Uint8Array([
+      112, 72, 89, 115, // "pHYs"
+      (ppm >>> 24) & 0xFF, (ppm >>> 16) & 0xFF, (ppm >>> 8) & 0xFF, ppm & 0xFF,
+      (ppm >>> 24) & 0xFF, (ppm >>> 16) & 0xFF, (ppm >>> 8) & 0xFF, ppm & 0xFF,
+      1
+    ]);
+    const crc = crc32(crcData);
+    
+    // CRC (4 bytes)
+    chunk.push((crc >>> 24) & 0xFF, (crc >>> 16) & 0xFF, (crc >>> 8) & 0xFF, crc & 0xFF);
+    
+    return chunk;
+  };
   
   // PNG signature (8 bytes) - copiar sempre
   for (let j = 0; j < 8; j++) {
@@ -39,10 +107,47 @@ function removePHYsChunk(pngData: Uint8Array): Uint8Array {
       pngData[i+4], pngData[i+5], pngData[i+6], pngData[i+7]
     );
     
-    // Se for pHYs, pular este chunk
+    // Se for IHDR, copiar e marcar que pode inserir pHYs depois
+    if (type === 'IHDR') {
+      const chunkSize = 12 + length;
+      for (let j = 0; j < chunkSize; j++) {
+        result.push(pngData[i++]);
+      }
+      ihdrProcessed = true;
+      
+      // Se não houver pHYs no arquivo original, inserir agora
+      // (verificamos se há pHYs fazendo uma busca rápida)
+      let hasPhys = false;
+      let tempI = i;
+      while (tempI < pngData.length) {
+        const tempType = String.fromCharCode(
+          pngData[tempI+4], pngData[tempI+5], pngData[tempI+6], pngData[tempI+7]
+        );
+        if (tempType === 'pHYs') {
+          hasPhys = true;
+          break;
+        }
+        if (tempType === 'IDAT' || tempType === 'IEND') break;
+        const tempLength = (pngData[tempI] << 24) | (pngData[tempI+1] << 16) | 
+                          (pngData[tempI+2] << 8) | pngData[tempI+3];
+        tempI += 12 + tempLength;
+      }
+      
+      if (!hasPhys) {
+        console.log('[setPHYsTo300DPI] Chunk pHYs não encontrado, inserindo novo com 300 DPI');
+        result.push(...createPHYsChunk());
+        physFound = true;
+      }
+      
+      continue;
+    }
+    
+    // Se for pHYs, substituir por versão com 300 DPI
     if (type === 'pHYs') {
-      console.log('[removePHYsChunk] Chunk pHYs encontrado e removido');
-      i += 12 + length; // length(4) + type(4) + data(length) + crc(4)
+      console.log('[setPHYsTo300DPI] Chunk pHYs encontrado, substituindo por 300 DPI');
+      i += 12 + length; // Pular chunk original
+      result.push(...createPHYsChunk());
+      physFound = true;
       continue;
     }
     
@@ -56,13 +161,18 @@ function removePHYsChunk(pngData: Uint8Array): Uint8Array {
     if (type === 'IEND') break;
   }
   
-  console.log('[removePHYsChunk] PNG processado:', {
+  const resultArray = new Uint8Array(result);
+  const dimensions = getIHDRDimensions(resultArray);
+  
+  console.log('[setPHYsTo300DPI] PNG processado:', {
+    dimensoes: `${dimensions.width}x${dimensions.height}px`,
+    dpi: 300,
+    physEncontrado: physFound,
     tamanhoOriginal: pngData.length,
-    tamanhoNovo: result.length,
-    reducao: `${((1 - result.length / pngData.length) * 100).toFixed(2)}%`
+    tamanhoNovo: resultArray.length
   });
   
-  return new Uint8Array(result);
+  return resultArray;
 }
 
 interface PedidosTableProps {
@@ -351,18 +461,24 @@ export function PedidosTable({
             }, "image/png", 1.0);
           });
           
-          // Processar PNG para remover metadados pHYs (DPI problemáticos)
-          console.log('[generateMockups] Processando PNG para remover metadados DPI...');
+          // Processar PNG para definir pHYs com 300 DPI
+          console.log('[generateMockups] Processando PNG para definir 300 DPI...');
           const arrayBuffer = await blob.arrayBuffer();
           const uint8Array = new Uint8Array(arrayBuffer);
-          const cleanedPng = removePHYsChunk(uint8Array);
+          const fixedPng = setPHYsTo300DPI(uint8Array);
           // Criar novo ArrayBuffer para garantir compatibilidade de tipos
-          const cleanBuffer = cleanedPng.buffer.slice(cleanedPng.byteOffset, cleanedPng.byteOffset + cleanedPng.byteLength) as ArrayBuffer;
+          const cleanBuffer = fixedPng.buffer.slice(fixedPng.byteOffset, fixedPng.byteOffset + fixedPng.byteLength) as ArrayBuffer;
           const cleanBlob = new Blob([cleanBuffer], { type: 'image/png' });
           
-          console.log(`[generateMockups] PNG limpo criado:`, {
+          // Extrair e logar dimensões reais do PNG final
+          const finalDimensions = getIHDRDimensions(fixedPng);
+          console.log(`[generateMockups] PNG final criado:`, {
             size: `${(cleanBlob.size / 1024 / 1024).toFixed(2)} MB`,
-            pixels: `${canvas.width}x${canvas.height}px`
+            dimensoesPNG: `${finalDimensions.width}x${finalDimensions.height}px`,
+            dimensoesCanvas: `${canvas.width}x${canvas.height}px`,
+            dimensoesBase: `${baseImg.naturalWidth}x${baseImg.naturalHeight}px`,
+            dpi: 300,
+            match: finalDimensions.width === baseImg.naturalWidth && finalDimensions.height === baseImg.naturalHeight ? '✓' : '✗'
           });
 
           // Upload para storage usando o PNG limpo (sem metadados DPI)
