@@ -6,6 +6,7 @@ import { Plus, Search, Filter, Trash2, Upload, FileSpreadsheet, Download } from 
 import { toast } from "sonner";
 import { PedidosTable } from "@/components/pedidos/PedidosTable";
 import { NovoPedidoDialog } from "@/components/pedidos/NovoPedidoDialog";
+import { ImportarPedidosDialog } from "@/components/pedidos/ImportarPedidosDialog";
 import { Navigation } from "@/components/Navigation";
 import { Checkbox } from "@/components/ui/checkbox";
 import {
@@ -25,6 +26,7 @@ export default function Dashboard() {
   const [filterDataInicio, setFilterDataInicio] = useState("");
   const [filterDataFim, setFilterDataFim] = useState("");
   const [novoPedidoOpen, setNovoPedidoOpen] = useState(false);
+  const [importarPedidosOpen, setImportarPedidosOpen] = useState(false);
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [gerarFotoAuto, setGerarFotoAuto] = useState(false);
 
@@ -152,8 +154,7 @@ export default function Dashboard() {
   };
 
   const handleImportarPedidos = () => {
-    // TODO: Implementar importação de pedidos
-    toast.info("Funcionalidade em desenvolvimento");
+    setImportarPedidosOpen(true);
   };
 
   const pedidosFiltrados = pedidos.filter((pedido) => {
@@ -332,6 +333,12 @@ export default function Dashboard() {
         <NovoPedidoDialog
           open={novoPedidoOpen}
           onOpenChange={setNovoPedidoOpen}
+          onSuccess={carregarPedidos}
+        />
+        
+        <ImportarPedidosDialog
+          open={importarPedidosOpen}
+          onOpenChange={setImportarPedidosOpen}
           onSuccess={carregarPedidos}
         />
       </div>
