@@ -1,10 +1,10 @@
 import { Card, CardContent, CardFooter, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { Edit, Loader2, Trash2, Copy } from "lucide-react";
+import { Edit, Loader2, Trash2, Copy, Image as ImageIcon } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
-import { useState } from "react";
+import { useState, useEffect } from "react";
 
 interface MockupsListProps {
   mockups: any[];
@@ -16,6 +16,39 @@ interface MockupsListProps {
 export function MockupsList({ mockups, loading, onEdit, onRefresh }: MockupsListProps) {
   const [deleting, setDeleting] = useState<string | null>(null);
   const [duplicating, setDuplicating] = useState<string | null>(null);
+  const [canvasImages, setCanvasImages] = useState<Record<string, string>>({});
+
+  useEffect(() => {
+    const loadCanvasImages = async () => {
+      const images: Record<string, string> = {};
+      
+      for (const mockup of mockups) {
+        if (!mockup.imagem_base) {
+          const { data: canvases } = await supabase
+            .from("mockup_canvases")
+            .select("imagem_base")
+            .eq("mockup_id", mockup.id)
+            .order("ordem", { ascending: true })
+            .limit(1)
+            .single();
+          
+          if (canvases?.imagem_base) {
+            images[mockup.id] = canvases.imagem_base;
+          }
+        }
+      }
+      
+      setCanvasImages(images);
+    };
+
+    if (mockups.length > 0) {
+      loadCanvasImages();
+    }
+  }, [mockups]);
+
+  const getPreviewImage = (mockup: any) => {
+    return mockup.imagem_base || canvasImages[mockup.id] || null;
+  };
 
   const handleDelete = async (mockupId: string) => {
     if (!confirm("Tem certeza que deseja excluir este mockup?")) return;
@@ -164,12 +197,16 @@ export function MockupsList({ mockups, loading, onEdit, onRefresh }: MockupsList
             </div>
           </CardHeader>
           <CardContent>
-            <div className="relative w-full h-48 bg-muted rounded-lg overflow-hidden mb-4">
-              <img
-                src={mockup.imagem_base}
-                alt={mockup.codigo_mockup}
-                className="w-full h-full object-contain"
-              />
+            <div className="relative w-full h-48 bg-muted rounded-lg overflow-hidden mb-4 flex items-center justify-center">
+              {getPreviewImage(mockup) ? (
+                <img
+                  src={getPreviewImage(mockup)}
+                  alt={mockup.codigo_mockup}
+                  className="w-full h-full object-contain"
+                />
+              ) : (
+                <ImageIcon className="h-16 w-16 text-muted-foreground/30" />
+              )}
             </div>
             <p className="text-sm text-muted-foreground">
               {mockup.mockup_areas?.length || 0} área(s) definida(s)
