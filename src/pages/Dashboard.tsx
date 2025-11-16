@@ -72,7 +72,6 @@ export default function Dashboard() {
   };
 
   const handleDownloadMoldes = async () => {
-    // Filtrar apenas pedidos selecionados que têm molde_producao
     const pedidosComMolde = pedidos.filter(p => 
       selectedIds.has(p.id) && p.molde_producao
     );
@@ -82,34 +81,46 @@ export default function Dashboard() {
       return;
     }
     
-    const toastId = toast.loading(`Baixando ${pedidosComMolde.length} molde(s)...`);
+    const toastId = toast.loading("Baixando moldes...");
     
     try {
-      // Importar JSZip dinamicamente
       const JSZip = (await import('jszip')).default;
       const zip = new JSZip();
       
-      // Para cada pedido, fazer fetch da imagem e adicionar ao ZIP
+      let totalImagens = 0;
+      
       for (const pedido of pedidosComMolde) {
         try {
-          const response = await fetch(pedido.molde_producao);
-          const blob = await response.blob();
+          // Normalizar para array (compatibilidade com dados antigos)
+          const moldes = Array.isArray(pedido.molde_producao) 
+            ? pedido.molde_producao 
+            : [pedido.molde_producao];
           
-          // Nome do arquivo: NumPedido_CodigoProduto.png
-          const nomeArquivo = `${pedido.numero_pedido}_${pedido.codigo_produto}.png`;
-          zip.file(nomeArquivo, blob);
+          // Baixar cada imagem do molde
+          for (let i = 0; i < moldes.length; i++) {
+            const moldeUrl = moldes[i];
+            const response = await fetch(moldeUrl);
+            const blob = await response.blob();
+            
+            // Nome: NumPedido_CodigoProduto_1.png, NumPedido_CodigoProduto_2.png, etc
+            const sufixo = moldes.length > 1 ? `_${i + 1}` : '';
+            const nomeArquivo = `${pedido.numero_pedido}_${pedido.codigo_produto}${sufixo}.png`;
+            
+            zip.file(nomeArquivo, blob);
+            totalImagens++;
+          }
         } catch (error) {
           console.error(`Erro ao baixar molde ${pedido.numero_pedido}:`, error);
         }
       }
       
-      // Gerar o ZIP sem compressão para manter qualidade máxima
+      // Gerar o ZIP
       const zipBlob = await zip.generateAsync({ 
         type: 'blob',
         compression: "STORE"
       });
       
-      // Criar link de download
+      // Download
       const url = URL.createObjectURL(zipBlob);
       const link = document.createElement('a');
       link.href = url;
@@ -119,9 +130,9 @@ export default function Dashboard() {
       document.body.removeChild(link);
       URL.revokeObjectURL(url);
       
-      toast.success(`${pedidosComMolde.length} molde(s) baixado(s)`, { id: toastId });
+      toast.success(`${totalImagens} imagem(ns) baixada(s)`, { id: toastId });
     } catch (error) {
-      console.error("Erro ao gerar ZIP:", error);
+      console.error("Erro ao criar ZIP:", error);
       toast.error("Erro ao baixar moldes", { id: toastId });
     }
   };
