@@ -10,10 +10,21 @@ import {
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
-import { ExternalLink, Image as ImageIcon, Loader2 } from "lucide-react";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
+import { ExternalLink, Image as ImageIcon, Loader2, Edit, Trash2 } from "lucide-react";
 import { ImageUploadDialog } from "./ImageUploadDialog";
 import { ImageViewDialog } from "./ImageViewDialog";
 import { EditableCell } from "./EditableCell";
+import { EditarPedidoDialog } from "./EditarPedidoDialog";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
@@ -196,20 +207,27 @@ export function PedidosTable({
   const [viewDialogOpen, setViewDialogOpen] = useState(false);
   const [selectedPedido, setSelectedPedido] = useState<any>(null);
   const [selectedImageType, setSelectedImageType] = useState<string>("");
+  const [editDialogOpen, setEditDialogOpen] = useState(false);
+  const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
+  const [pedidoToDelete, setPedidoToDelete] = useState<string | null>(null);
   const [generating, setGenerating] = useState<string | null>(null);
 
   const handleImageClick = (pedido: any, type: "cliente" | "aprovacao" | "molde") => {
     setSelectedPedido(pedido);
     if (type === "cliente") {
-      setSelectedImageType("foto_cliente");
-      setUploadDialogOpen(true);
+      if (pedido.fotos_cliente && pedido.fotos_cliente.length > 0) {
+        setSelectedImageType("fotos_cliente");
+        setViewDialogOpen(true);
+      } else {
+        setUploadDialogOpen(true);
+      }
     } else if (type === "aprovacao") {
-      if (pedido.foto_aprovacao) {
+      if (pedido.foto_aprovacao && pedido.foto_aprovacao.length > 0) {
         setSelectedImageType("foto_aprovacao");
         setViewDialogOpen(true);
       }
     } else if (type === "molde") {
-      if (pedido.molde_producao) {
+      if (pedido.molde_producao && pedido.molde_producao.length > 0) {
         setSelectedImageType("molde_producao");
         setViewDialogOpen(true);
       }
@@ -530,13 +548,13 @@ export function PedidosTable({
         }
       }
 
-      // Atualizar pedido com as URLs geradas (usar a primeira de cada tipo)
+      // Atualizar pedido com as URLs geradas (salvar arrays)
       const updateData: any = {};
-      const aprovacaoResult = results.find(r => r.tipo === "aprovacao");
-      const moldeResult = results.find(r => r.tipo === "molde");
+      const aprovacaoResults = results.filter(r => r.tipo === "aprovacao").map(r => r.url);
+      const moldeResults = results.filter(r => r.tipo === "molde").map(r => r.url);
       
-      if (aprovacaoResult) updateData.foto_aprovacao = aprovacaoResult.url;
-      if (moldeResult) updateData.molde_producao = moldeResult.url;
+      if (aprovacaoResults.length > 0) updateData.foto_aprovacao = aprovacaoResults;
+      if (moldeResults.length > 0) updateData.molde_producao = moldeResults;
 
       if (Object.keys(updateData).length > 0) {
         updateData.mensagem_enviada = "enviada";
@@ -570,6 +588,46 @@ export function PedidosTable({
         console.error("Erro na geração automática:", error);
         toast.error("Erro ao gerar foto de aprovação automaticamente");
       }
+    }
+  };
+
+  const handleDeletePedido = async () => {
+    if (!pedidoToDelete) return;
+
+    try {
+      const pedido = pedidos.find(p => p.id === pedidoToDelete);
+      if (!pedido) return;
+
+      // Deletar fotos do storage
+      const fotosParaDeletar: string[] = [];
+      
+      if (pedido.fotos_cliente) {
+        pedido.fotos_cliente.forEach((url: string) => {
+          const fileName = url.split("/").pop();
+          if (fileName) fotosParaDeletar.push(`clientes/${fileName}`);
+        });
+      }
+
+      if (fotosParaDeletar.length > 0) {
+        await supabase.storage.from("mockup-images").remove(fotosParaDeletar);
+      }
+
+      // Deletar pedido
+      const { error } = await (supabase as any)
+        .from("pedidos")
+        .delete()
+        .eq("id", pedidoToDelete);
+
+      if (error) throw error;
+
+      toast.success("Pedido excluído com sucesso!");
+      onRefresh();
+    } catch (error) {
+      console.error("Erro ao deletar pedido:", error);
+      toast.error("Erro ao deletar pedido");
+    } finally {
+      setDeleteDialogOpen(false);
+      setPedidoToDelete(null);
     }
   };
 
@@ -613,6 +671,21 @@ export function PedidosTable({
 
   return (
     <>
+      <AlertDialog open={deleteDialogOpen} onOpenChange={setDeleteDialogOpen}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Confirmar exclusão</AlertDialogTitle>
+            <AlertDialogDescription>
+              Tem certeza que deseja excluir este pedido? Esta ação não pode ser desfeita e todas as fotos associadas serão removidas.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel onClick={() => setPedidoToDelete(null)}>Cancelar</AlertDialogCancel>
+            <AlertDialogAction onClick={handleDeletePedido}>Excluir</AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
       <div className="rounded-lg border bg-card shadow-sm overflow-hidden">
         <Table>
           <TableHeader>
@@ -661,20 +734,30 @@ export function PedidosTable({
                     variant="ghost"
                     size="sm"
                     onClick={() => handleImageClick(pedido, "cliente")}
-                    className="hover:bg-primary/10"
+                    className="hover:bg-primary/10 relative"
                   >
                     <ImageIcon className={pedido.fotos_cliente?.length > 0 ? "h-4 w-4 text-primary" : "h-4 w-4"} />
+                    {pedido.fotos_cliente?.length > 1 && (
+                      <span className="absolute -top-1 -right-1 bg-primary text-primary-foreground text-xs rounded-full h-4 w-4 flex items-center justify-center">
+                        {pedido.fotos_cliente.length}
+                      </span>
+                    )}
                   </Button>
                 </TableCell>
                 <TableCell>
-                  {pedido.foto_aprovacao ? (
+                  {pedido.foto_aprovacao && pedido.foto_aprovacao.length > 0 ? (
                     <Button
                       variant="ghost"
                       size="sm"
                       onClick={() => handleImageClick(pedido, "aprovacao")}
-                      className="hover:bg-primary/10"
+                      className="hover:bg-primary/10 relative"
                     >
                       <ImageIcon className="h-4 w-4 text-primary" />
+                      {pedido.foto_aprovacao.length > 1 && (
+                        <span className="absolute -top-1 -right-1 bg-primary text-primary-foreground text-xs rounded-full h-4 w-4 flex items-center justify-center">
+                          {pedido.foto_aprovacao.length}
+                        </span>
+                      )}
                     </Button>
                   ) : (
                     "-"
@@ -703,14 +786,19 @@ export function PedidosTable({
                   />
                 </TableCell>
                 <TableCell>
-                  {pedido.molde_producao ? (
+                  {pedido.molde_producao && pedido.molde_producao.length > 0 ? (
                     <Button
                       variant="ghost"
                       size="sm"
                       onClick={() => handleImageClick(pedido, "molde")}
-                      className="hover:bg-primary/10"
+                      className="hover:bg-primary/10 relative"
                     >
                       <ImageIcon className="h-4 w-4 text-primary" />
+                      {pedido.molde_producao.length > 1 && (
+                        <span className="absolute -top-1 -right-1 bg-primary text-primary-foreground text-xs rounded-full h-4 w-4 flex items-center justify-center">
+                          {pedido.molde_producao.length}
+                        </span>
+                      )}
                     </Button>
                   ) : (
                     "-"
@@ -745,18 +833,42 @@ export function PedidosTable({
                   )}
                 </TableCell>
                 <TableCell>
-                  <Button
-                    size="sm"
-                    onClick={() => handleGerarMockups(pedido)}
-                    disabled={generating === pedido.id || !pedido.fotos_cliente || pedido.fotos_cliente.length === 0}
-                    className="bg-gradient-to-r from-accent to-accent/80"
-                  >
-                    {generating === pedido.id ? (
-                      <Loader2 className="h-4 w-4 animate-spin" />
-                    ) : (
-                      "Gerar"
-                    )}
-                  </Button>
+                  <div className="flex items-center gap-1">
+                    <Button
+                      size="sm"
+                      onClick={() => handleGerarMockups(pedido)}
+                      disabled={generating === pedido.id || !pedido.fotos_cliente || pedido.fotos_cliente.length === 0}
+                      className="bg-gradient-to-r from-accent to-accent/80"
+                    >
+                      {generating === pedido.id ? (
+                        <Loader2 className="h-4 w-4 animate-spin" />
+                      ) : (
+                        "Gerar"
+                      )}
+                    </Button>
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      className="h-8 w-8"
+                      onClick={() => {
+                        setSelectedPedido(pedido);
+                        setEditDialogOpen(true);
+                      }}
+                    >
+                      <Edit className="h-4 w-4" />
+                    </Button>
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      className="h-8 w-8 hover:bg-destructive/10 hover:text-destructive"
+                      onClick={() => {
+                        setPedidoToDelete(pedido.id);
+                        setDeleteDialogOpen(true);
+                      }}
+                    >
+                      <Trash2 className="h-4 w-4" />
+                    </Button>
+                  </div>
                 </TableCell>
               </TableRow>
             ))}
@@ -777,8 +889,21 @@ export function PedidosTable({
           <ImageViewDialog
             open={viewDialogOpen}
             onOpenChange={setViewDialogOpen}
-            imageUrl={selectedPedido[selectedImageType]}
-            title={selectedImageType === "foto_aprovacao" ? "Foto de Aprovação" : "Molde de Produção"}
+            imageUrl={selectedPedido[selectedImageType] || ""}
+            title={
+              selectedImageType === "fotos_cliente" ? "Fotos do Cliente" :
+              selectedImageType === "foto_aprovacao" ? "Foto de Aprovação" :
+              "Molde de Produção"
+            }
+          />
+          <EditarPedidoDialog
+            open={editDialogOpen}
+            onOpenChange={setEditDialogOpen}
+            pedido={selectedPedido}
+            onSuccess={() => {
+              onRefresh();
+              setEditDialogOpen(false);
+            }}
           />
         </>
       )}

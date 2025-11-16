@@ -201,13 +201,13 @@ export type Database = {
           created_at: string | null
           data_impressao: string | null
           data_pedido: string
-          foto_aprovacao: string | null
+          foto_aprovacao: string[] | null
           foto_cliente: string | null
           fotos_cliente: string[] | null
           id: string
           layout_aprovado: string | null
           mensagem_enviada: string | null
-          molde_producao: string | null
+          molde_producao: string[] | null
           nome_cliente: string
           numero_pedido: string
           observacao: string | null
@@ -220,13 +220,13 @@ export type Database = {
           created_at?: string | null
           data_impressao?: string | null
           data_pedido?: string
-          foto_aprovacao?: string | null
+          foto_aprovacao?: string[] | null
           foto_cliente?: string | null
           fotos_cliente?: string[] | null
           id?: string
           layout_aprovado?: string | null
           mensagem_enviada?: string | null
-          molde_producao?: string | null
+          molde_producao?: string[] | null
           nome_cliente: string
           numero_pedido: string
           observacao?: string | null
@@ -239,13 +239,13 @@ export type Database = {
           created_at?: string | null
           data_impressao?: string | null
           data_pedido?: string
-          foto_aprovacao?: string | null
+          foto_aprovacao?: string[] | null
           foto_cliente?: string | null
           fotos_cliente?: string[] | null
           id?: string
           layout_aprovado?: string | null
           mensagem_enviada?: string | null
-          molde_producao?: string | null
+          molde_producao?: string[] | null
           nome_cliente?: string
           numero_pedido?: string
           observacao?: string | null
