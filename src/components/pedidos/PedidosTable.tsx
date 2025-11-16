@@ -181,6 +181,7 @@ interface PedidosTableProps {
   onRefresh: () => void;
   selectedIds: Set<string>;
   onSelectionChange: (ids: Set<string>) => void;
+  gerarFotoAuto?: boolean;
 }
 
 export function PedidosTable({ 
@@ -188,7 +189,8 @@ export function PedidosTable({
   loading, 
   onRefresh, 
   selectedIds, 
-  onSelectionChange 
+  onSelectionChange,
+  gerarFotoAuto = false
 }: PedidosTableProps) {
   const [uploadDialogOpen, setUploadDialogOpen] = useState(false);
   const [viewDialogOpen, setViewDialogOpen] = useState(false);
@@ -222,6 +224,19 @@ export function PedidosTable({
         .eq("id", pedidoId);
 
       if (error) throw error;
+      
+      // Se geração automática estiver ativada e o campo atualizado for layout_aprovado
+      if (gerarFotoAuto && field === "layout_aprovado" && value === "aprovado") {
+        // Buscar o pedido atualizado
+        const pedidoAtualizado = pedidos.find(p => p.id === pedidoId);
+        if (pedidoAtualizado && pedidoAtualizado.fotos_cliente?.length > 0) {
+          // Gerar molde automaticamente (sem aguardar para não bloquear a UI)
+          setTimeout(() => {
+            handleGerarMockups(pedidoAtualizado, 'molde');
+          }, 500);
+        }
+      }
+      
       toast.success("Campo atualizado");
       onRefresh();
     } catch (error) {
@@ -230,7 +245,7 @@ export function PedidosTable({
     }
   };
 
-  const handleGerarMockups = async (pedido: any) => {
+  const handleGerarMockups = async (pedido: any, tipoGerar?: 'aprovacao' | 'molde' | 'ambos') => {
     if (!pedido.fotos_cliente || pedido.fotos_cliente.length === 0) {
       toast.error("É necessário ter pelo menos uma foto do cliente para gerar mockups");
       return;
@@ -277,6 +292,21 @@ export function PedidosTable({
           // Adicionar mockup de aprovação no início do array (será gerado primeiro)
           mockups = [mockupAprovacao, ...mockupsPrincipais];
           console.log("Gerando mockup de aprovação vinculado:", mockupAprovacao.codigo_mockup);
+        }
+      }
+
+      // Filtrar mockups baseado no tipoGerar
+      if (tipoGerar === 'aprovacao') {
+        mockups = mockups.filter(m => m.tipo === 'aprovacao');
+        if (mockups.length === 0) {
+          toast.error("Nenhum mockup de aprovação encontrado");
+          return;
+        }
+      } else if (tipoGerar === 'molde') {
+        mockups = mockups.filter(m => m.tipo === 'molde');
+        if (mockups.length === 0) {
+          toast.error("Nenhum mockup de molde encontrado");
+          return;
         }
       }
 
@@ -519,13 +549,27 @@ export function PedidosTable({
         if (updateError) throw updateError;
       }
 
-      toast.success("Mockups gerados com sucesso!");
+      const tipoMsg = tipoGerar === 'aprovacao' ? 'Foto de aprovação' : 
+                      tipoGerar === 'molde' ? 'Molde de produção' : 'Mockups';
+      toast.success(`${tipoMsg} gerado com sucesso!`);
       onRefresh();
     } catch (error) {
       console.error("Erro ao gerar mockups:", error);
       toast.error("Erro ao gerar mockups");
     } finally {
       setGenerating(null);
+    }
+  };
+
+  const handleFotosClienteUpdated = async (pedido: any) => {
+    if (gerarFotoAuto && pedido.fotos_cliente?.length > 0) {
+      try {
+        toast.info("Gerando foto de aprovação automaticamente...");
+        await handleGerarMockups(pedido, 'aprovacao');
+      } catch (error) {
+        console.error("Erro na geração automática:", error);
+        toast.error("Erro ao gerar foto de aprovação automaticamente");
+      }
     }
   };
 
@@ -727,6 +771,8 @@ export function PedidosTable({
             onOpenChange={setUploadDialogOpen}
             pedido={selectedPedido}
             onSuccess={onRefresh}
+            gerarFotoAuto={gerarFotoAuto}
+            onFotosUpdated={handleFotosClienteUpdated}
           />
           <ImageViewDialog
             open={viewDialogOpen}
