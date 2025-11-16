@@ -215,12 +215,8 @@ export function PedidosTable({
   const handleImageClick = (pedido: any, type: "cliente" | "aprovacao" | "molde") => {
     setSelectedPedido(pedido);
     if (type === "cliente") {
-      if (pedido.fotos_cliente && pedido.fotos_cliente.length > 0) {
-        setSelectedImageType("fotos_cliente");
-        setViewDialogOpen(true);
-      } else {
-        setUploadDialogOpen(true);
-      }
+      // Sempre abre o dialog de upload para permitir visualizar E excluir fotos
+      setUploadDialogOpen(true);
     } else if (type === "aprovacao") {
       if (pedido.foto_aprovacao && pedido.foto_aprovacao.length > 0) {
         setSelectedImageType("foto_aprovacao");

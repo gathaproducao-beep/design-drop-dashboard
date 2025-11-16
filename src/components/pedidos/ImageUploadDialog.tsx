@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import {
   Dialog,
   DialogContent,
@@ -39,8 +39,17 @@ export function ImageUploadDialog({
   onFotosUpdated,
 }: ImageUploadDialogProps) {
   const [uploading, setUploading] = useState(false);
-  const [previews, setPreviews] = useState<string[]>(pedido?.fotos_cliente || []);
+  const [previews, setPreviews] = useState<string[]>([]);
   const [deleteIndex, setDeleteIndex] = useState<number | null>(null);
+
+  // Atualizar previews quando o pedido mudar
+  useEffect(() => {
+    if (pedido?.fotos_cliente) {
+      setPreviews(pedido.fotos_cliente);
+    } else {
+      setPreviews([]);
+    }
+  }, [pedido]);
 
   const handleFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -83,7 +92,7 @@ export function ImageUploadDialog({
       }
       
       onSuccess();
-      onOpenChange(false);
+      // Não fecha o dialog automaticamente para permitir adicionar mais fotos
     } catch (error) {
       console.error("Erro ao fazer upload:", error);
       toast.error("Erro ao fazer upload da imagem");

@@ -6,7 +6,7 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
-import { ChevronLeft, ChevronRight } from "lucide-react";
+import { ChevronLeft, ChevronRight, Download } from "lucide-react";
 
 interface ImageViewDialogProps {
   open: boolean;
@@ -32,17 +32,48 @@ export function ImageViewDialog({
     setCurrentIndex((prev) => (prev < images.length - 1 ? prev + 1 : 0));
   };
 
+  const handleDownload = async () => {
+    const currentImage = images[currentIndex];
+    const fileName = currentImage.split('/').pop() || 'imagem.png';
+    
+    try {
+      const response = await fetch(currentImage);
+      const blob = await response.blob();
+      const url = window.URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      link.href = url;
+      link.download = fileName;
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      window.URL.revokeObjectURL(url);
+    } catch (error) {
+      console.error('Erro ao baixar imagem:', error);
+    }
+  };
+
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="sm:max-w-3xl">
         <DialogHeader>
-          <DialogTitle>
-            {title}
-            {images.length > 1 && (
-              <span className="ml-2 text-sm text-muted-foreground">
-                ({currentIndex + 1}/{images.length})
-              </span>
-            )}
+          <DialogTitle className="flex items-center justify-between">
+            <div>
+              {title}
+              {images.length > 1 && (
+                <span className="ml-2 text-sm text-muted-foreground">
+                  ({currentIndex + 1}/{images.length})
+                </span>
+              )}
+            </div>
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={handleDownload}
+              className="ml-4"
+            >
+              <Download className="h-4 w-4 mr-2" />
+              Baixar
+            </Button>
           </DialogTitle>
         </DialogHeader>
         <div className="relative w-full bg-muted rounded-lg overflow-hidden">
