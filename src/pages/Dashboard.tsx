@@ -301,6 +301,7 @@ export default function Dashboard() {
           onRefresh={carregarPedidos}
           selectedIds={selectedIds}
           onSelectionChange={setSelectedIds}
+          gerarFotoAuto={gerarFotoAuto}
         />
 
         <div className="mt-6 flex gap-4 justify-between items-center">

@@ -16,6 +16,8 @@ interface ImageUploadDialogProps {
   onOpenChange: (open: boolean) => void;
   pedido: any;
   onSuccess: () => void;
+  gerarFotoAuto?: boolean;
+  onFotosUpdated?: (pedido: any) => void;
 }
 
 export function ImageUploadDialog({
@@ -23,6 +25,8 @@ export function ImageUploadDialog({
   onOpenChange,
   pedido,
   onSuccess,
+  gerarFotoAuto = false,
+  onFotosUpdated,
 }: ImageUploadDialogProps) {
   const [uploading, setUploading] = useState(false);
   const [previews, setPreviews] = useState<string[]>(pedido?.fotos_cliente || []);
@@ -60,6 +64,13 @@ export function ImageUploadDialog({
 
       toast.success("Foto enviada com sucesso!");
       setPreviews(novasFotos);
+      
+      // Chamar callback para geração automática se configurado
+      if (gerarFotoAuto && onFotosUpdated) {
+        const pedidoAtualizado = { ...pedido, fotos_cliente: novasFotos };
+        onFotosUpdated(pedidoAtualizado);
+      }
+      
       onSuccess();
       onOpenChange(false);
     } catch (error) {
