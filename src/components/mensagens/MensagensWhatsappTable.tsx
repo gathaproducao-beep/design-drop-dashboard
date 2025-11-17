@@ -11,9 +11,11 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
-import { Plus, Pencil, Trash2 } from "lucide-react";
+import { Plus, Pencil, Trash2, Send } from "lucide-react";
 import { toast } from "sonner";
 import { NovaMensagemDialog } from "./NovaMensagemDialog";
+import { TesteEnvioDialog } from "./TesteEnvioDialog";
+import { Badge } from "@/components/ui/badge";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -29,6 +31,8 @@ interface MensagemWhatsapp {
   id: string;
   nome: string;
   mensagem: string;
+  type: string;
+  is_active: boolean;
   created_at: string;
   updated_at: string;
 }
@@ -36,7 +40,9 @@ interface MensagemWhatsapp {
 export const MensagensWhatsappTable = () => {
   const [dialogOpen, setDialogOpen] = useState(false);
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
+  const [testeDialogOpen, setTesteDialogOpen] = useState(false);
   const [editingMensagem, setEditingMensagem] = useState<MensagemWhatsapp | null>(null);
+  const [testingMensagem, setTestingMensagem] = useState<MensagemWhatsapp | null>(null);
   const [deletingId, setDeletingId] = useState<string | null>(null);
   const queryClient = useQueryClient();
 
@@ -88,6 +94,18 @@ export const MensagensWhatsappTable = () => {
     setEditingMensagem(null);
   };
 
+  const handleTestar = (mensagem: MensagemWhatsapp) => {
+    setTestingMensagem(mensagem);
+    setTesteDialogOpen(true);
+  };
+
+  const getTypeBadge = (type: string) => {
+    if (type === "aprovacao") {
+      return <Badge variant="default">Aprovação</Badge>;
+    }
+    return <Badge variant="secondary">Conclusão</Badge>;
+  };
+
   return (
     <>
       <Card className="p-6">
@@ -104,20 +122,22 @@ export const MensagensWhatsappTable = () => {
             <TableHeader>
               <TableRow>
                 <TableHead>Nome</TableHead>
+                <TableHead>Tipo</TableHead>
                 <TableHead>Prévia da Mensagem</TableHead>
+                <TableHead>Status</TableHead>
                 <TableHead className="text-right">Ações</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
               {isLoading ? (
                 <TableRow>
-                  <TableCell colSpan={3} className="text-center py-8">
+                  <TableCell colSpan={5} className="text-center py-8">
                     Carregando...
                   </TableCell>
                 </TableRow>
               ) : mensagens?.length === 0 ? (
                 <TableRow>
-                  <TableCell colSpan={3} className="text-center py-8 text-muted-foreground">
+                  <TableCell colSpan={5} className="text-center py-8 text-muted-foreground">
                     Nenhuma mensagem cadastrada. Clique em "Nova Mensagem" para começar.
                   </TableCell>
                 </TableRow>
@@ -125,11 +145,31 @@ export const MensagensWhatsappTable = () => {
                 mensagens?.map((mensagem) => (
                   <TableRow key={mensagem.id}>
                     <TableCell className="font-medium">{mensagem.nome}</TableCell>
+                    <TableCell>{getTypeBadge(mensagem.type)}</TableCell>
                     <TableCell className="max-w-md truncate">
                       {mensagem.mensagem}
                     </TableCell>
+                    <TableCell>
+                      {mensagem.is_active ? (
+                        <Badge variant="outline" className="bg-green-500/10 text-green-700 border-green-500/20">
+                          Ativa
+                        </Badge>
+                      ) : (
+                        <Badge variant="outline" className="bg-gray-500/10 text-gray-700 border-gray-500/20">
+                          Inativa
+                        </Badge>
+                      )}
+                    </TableCell>
                     <TableCell className="text-right">
                       <div className="flex justify-end gap-2">
+                        <Button
+                          variant="outline"
+                          size="icon"
+                          onClick={() => handleTestar(mensagem)}
+                          title="Testar envio"
+                        >
+                          <Send className="h-4 w-4" />
+                        </Button>
                         <Button
                           variant="outline"
                           size="icon"
@@ -176,12 +216,23 @@ export const MensagensWhatsappTable = () => {
             <AlertDialogCancel>Cancelar</AlertDialogCancel>
             <AlertDialogAction
               onClick={() => deletingId && deleteMutation.mutate(deletingId)}
+              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
             >
               Excluir
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
+
+      {/* Dialog de Teste */}
+      {testingMensagem && (
+        <TesteEnvioDialog
+          open={testeDialogOpen}
+          onOpenChange={setTesteDialogOpen}
+          mensagemTexto={testingMensagem.mensagem}
+          nomeMensagem={testingMensagem.nome}
+        />
+      )}
     </>
   );
 };

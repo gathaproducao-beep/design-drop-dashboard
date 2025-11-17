@@ -1,5 +1,5 @@
 import { Link, useLocation } from "react-router-dom";
-import { LayoutDashboard, Image, MessageSquare } from "lucide-react";
+import { LayoutDashboard, Image, MessageSquare, Settings } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 export function Navigation() {
@@ -9,6 +9,7 @@ export function Navigation() {
     { to: "/", icon: LayoutDashboard, label: "Pedidos" },
     { to: "/mockups", icon: Image, label: "Mockups" },
     { to: "/mensagens", icon: MessageSquare, label: "Mensagens" },
+    { to: "/configuracoes-whatsapp", icon: Settings, label: "Configurações" },
   ];
 
   return (

@@ -18,22 +18,28 @@ export type Database = {
         Row: {
           created_at: string | null
           id: string
+          is_active: boolean | null
           mensagem: string
           nome: string
+          type: string | null
           updated_at: string | null
         }
         Insert: {
           created_at?: string | null
           id?: string
+          is_active?: boolean | null
           mensagem: string
           nome: string
+          type?: string | null
           updated_at?: string | null
         }
         Update: {
           created_at?: string | null
           id?: string
+          is_active?: boolean | null
           mensagem?: string
           nome?: string
+          type?: string | null
           updated_at?: string | null
         }
         Relationships: []
@@ -251,6 +257,33 @@ export type Database = {
           observacao?: string | null
           pasta_drive_url?: string | null
           telefone?: string | null
+          updated_at?: string | null
+        }
+        Relationships: []
+      }
+      whatsapp_settings: {
+        Row: {
+          auto_send_enabled: boolean
+          created_at: string | null
+          default_instance: string
+          id: string
+          test_phone: string | null
+          updated_at: string | null
+        }
+        Insert: {
+          auto_send_enabled?: boolean
+          created_at?: string | null
+          default_instance?: string
+          id?: string
+          test_phone?: string | null
+          updated_at?: string | null
+        }
+        Update: {
+          auto_send_enabled?: boolean
+          created_at?: string | null
+          default_instance?: string
+          id?: string
+          test_phone?: string | null
           updated_at?: string | null
         }
         Relationships: []

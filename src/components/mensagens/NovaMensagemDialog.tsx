@@ -15,6 +15,9 @@ import { Textarea } from "@/components/ui/textarea";
 import { Loader2 } from "lucide-react";
 import { toast } from "sonner";
 import { Badge } from "@/components/ui/badge";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Switch } from "@/components/ui/switch";
+import { TesteEnvioDialog } from "./TesteEnvioDialog";
 
 interface NovaMensagemDialogProps {
   open: boolean;
@@ -23,6 +26,8 @@ interface NovaMensagemDialogProps {
     id: string;
     nome: string;
     mensagem: string;
+    type?: string;
+    is_active?: boolean;
   } | null;
   onSuccess: () => void;
 }
@@ -43,9 +48,12 @@ export const NovaMensagemDialog = ({
   onSuccess,
 }: NovaMensagemDialogProps) => {
   const [loading, setLoading] = useState(false);
+  const [testeDialogOpen, setTesteDialogOpen] = useState(false);
   const [formData, setFormData] = useState({
     nome: "",
     mensagem: "",
+    type: "aprovacao" as "aprovacao" | "conclusao",
+    is_active: true,
   });
 
   useEffect(() => {
@@ -53,11 +61,15 @@ export const NovaMensagemDialog = ({
       setFormData({
         nome: editingMensagem.nome,
         mensagem: editingMensagem.mensagem,
+        type: (editingMensagem.type as "aprovacao" | "conclusao") || "aprovacao",
+        is_active: editingMensagem.is_active ?? true,
       });
     } else {
       setFormData({
         nome: "",
         mensagem: "",
+        type: "aprovacao",
+        is_active: true,
       });
     }
   }, [editingMensagem, open]);
@@ -246,17 +258,80 @@ export const NovaMensagemDialog = ({
             </div>
           </div>
 
-          <DialogFooter>
-            <Button type="button" variant="outline" onClick={() => onOpenChange(false)}>
-              Cancelar
+          {/* Tipo da Mensagem */}
+          <div className="space-y-2">
+            <Label htmlFor="type">Tipo da Mensagem</Label>
+            <Select
+              value={formData.type}
+              onValueChange={(value: "aprovacao" | "conclusao") =>
+                setFormData((prev) => ({ ...prev, type: value }))
+              }
+            >
+              <SelectTrigger id="type">
+                <SelectValue placeholder="Selecione o tipo" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="aprovacao">Aprovação</SelectItem>
+                <SelectItem value="conclusao">Conclusão</SelectItem>
+              </SelectContent>
+            </Select>
+            <p className="text-xs text-muted-foreground">
+              Aprovação: enviada ao gerar mockup. Conclusão: enviada ao aprovar layout.
+            </p>
+          </div>
+
+          {/* Ativo/Inativo */}
+          <div className="flex items-center justify-between p-4 border rounded-lg">
+            <div className="space-y-1">
+              <Label htmlFor="is_active">Mensagem Ativa</Label>
+              <p className="text-sm text-muted-foreground">
+                Apenas mensagens ativas serão enviadas automaticamente
+              </p>
+            </div>
+            <Switch
+              id="is_active"
+              checked={formData.is_active}
+              onCheckedChange={(checked) =>
+                setFormData((prev) => ({ ...prev, is_active: checked }))
+              }
+            />
+          </div>
+
+          <DialogFooter className="flex-col sm:flex-row gap-2">
+            <Button
+              type="button"
+              variant="outline"
+              onClick={() => setTesteDialogOpen(true)}
+              disabled={!formData.mensagem}
+              className="w-full sm:w-auto"
+            >
+              Testar Envio
             </Button>
-            <Button type="submit" disabled={loading}>
-              {loading && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-              {editingMensagem ? "Atualizar" : "Criar"}
-            </Button>
+            <div className="flex gap-2 w-full sm:w-auto sm:ml-auto">
+              <Button
+                type="button"
+                variant="outline"
+                onClick={() => onOpenChange(false)}
+                className="flex-1 sm:flex-none"
+              >
+                Cancelar
+              </Button>
+              <Button type="submit" disabled={loading} className="flex-1 sm:flex-none">
+                {loading && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+                {editingMensagem ? "Atualizar" : "Criar"}
+              </Button>
+            </div>
           </DialogFooter>
         </form>
       </DialogContent>
+
+      {/* Dialog de Teste */}
+      <TesteEnvioDialog
+        open={testeDialogOpen}
+        onOpenChange={setTesteDialogOpen}
+        mensagemTexto={formData.mensagem}
+        nomeMensagem={formData.nome || "Nova Mensagem"}
+      />
     </Dialog>
   );
 };
