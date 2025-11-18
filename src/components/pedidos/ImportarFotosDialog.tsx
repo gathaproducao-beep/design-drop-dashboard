@@ -5,9 +5,11 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Progress } from "@/components/ui/progress";
 import { toast } from "sonner";
-import { Upload, CheckCircle, AlertCircle, XCircle } from "lucide-react";
+import { Upload, CheckCircle, AlertCircle, XCircle, Loader2 } from "lucide-react";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Badge } from "@/components/ui/badge";
+import { Separator } from "@/components/ui/separator";
+import { generateMockupsForPedido } from "@/lib/mockup-generator";
 
 interface ImportarFotosDialogProps {
   open: boolean;
@@ -37,6 +39,9 @@ export function ImportarFotosDialog({
   const [processando, setProcessando] = useState(false);
   const [progresso, setProgresso] = useState(0);
   const [etapa, setEtapa] = useState<'selecao' | 'analise' | 'importacao' | 'concluido'>('selecao');
+  const [mockupsGerados, setMockupsGerados] = useState(0);
+  const [totalMockups, setTotalMockups] = useState(0);
+  const [gerandoMockups, setGerandoMockups] = useState(false);
 
   const extrairNumeroPedido = (nomeArquivo: string): string | null => {
     // Remove extensão
@@ -219,20 +224,26 @@ export function ImportarFotosDialog({
     
     // Processar mockups em fila (sequencial para não sobrecarregar)
     if (pedidosAtualizados.length > 0 && gerarFotoAuto) {
-      toast.loading(`Gerando ${pedidosAtualizados.length} mockup(s) em fila...`, { id: 'mockups-queue' });
+      setGerandoMockups(true);
+      setTotalMockups(pedidosAtualizados.length);
+      setMockupsGerados(0);
       
-      let mockupsGerados = 0;
-      for (const pedidoId of pedidosAtualizados) {
+      toast.loading(`Gerando ${pedidosAtualizados.length} mockup(s) de aprovação...`, { id: 'mockups-queue' });
+      
+      for (let i = 0; i < pedidosAtualizados.length; i++) {
+        const pedidoId = pedidosAtualizados[i];
         try {
           await gerarMockupParaPedido(pedidoId);
-          mockupsGerados++;
-          toast.loading(`Gerando mockups... ${mockupsGerados}/${pedidosAtualizados.length}`, { id: 'mockups-queue' });
+          setMockupsGerados(i + 1);
+          toast.loading(`Gerando mockups... ${i + 1}/${pedidosAtualizados.length}`, { id: 'mockups-queue' });
         } catch (error) {
           console.error(`Erro ao gerar mockup para pedido ${pedidoId}:`, error);
         }
       }
       
-      toast.success(`${mockupsGerados} mockup(s) gerado(s)!`, { id: 'mockups-queue' });
+      setGerandoMockups(false);
+      toast.success(`${pedidosAtualizados.length} mockup(s) de aprovação gerado(s)!`, { id: 'mockups-queue' });
+      onSuccess(); // Atualizar a tabela
     }
   };
   
@@ -251,44 +262,18 @@ export function ImportarFotosDialog({
       }
 
       // Verificar se há foto do cliente
-      const fotoCliente = pedido.fotos_cliente?.[0];
-      if (!fotoCliente) {
+      if (!pedido.fotos_cliente || pedido.fotos_cliente.length === 0) {
         console.warn(`Pedido ${pedido.numero_pedido} não tem foto de cliente`);
         return;
       }
 
-      // Buscar mockup correspondente ao código do produto
-      const { data: mockups, error: mockupError } = await supabase
-        .from('mockups')
-        .select('*, mockup_canvases!inner(*), mockup_areas(*)')
-        .eq('codigo_mockup', pedido.codigo_produto)
-        .eq('tipo', 'aprovacao');
-
-      if (mockupError) {
-        console.error('Erro ao buscar mockup:', mockupError);
-      }
-
-      if (!mockups || mockups.length === 0) {
-        console.warn(`Nenhum mockup de aprovação configurado para ${pedido.codigo_produto} - usando foto do cliente`);
-      }
-
-      // Atualizar o campo foto_aprovacao com a foto do cliente
-      // TODO: Implementar geração real de mockup com composição de imagens quando mockup estiver configurado
-      const { error: updateError } = await supabase
-        .from('pedidos')
-        .update({ 
-          foto_aprovacao: [fotoCliente],
-          layout_aprovado: 'pendente'
-        })
-        .eq('id', pedidoId);
-
-      if (updateError) {
-        console.error('Erro ao atualizar foto de aprovação:', updateError);
-        throw updateError;
-      }
-        
+      // Usar a mesma função que o botão "Gerar" usa
+      // Passando 'aprovacao' para gerar APENAS o mockup de aprovação
+      await generateMockupsForPedido(pedido, 'aprovacao', (msg) => {
+        console.log(`[Mockup ${pedido.numero_pedido}] ${msg}`);
+      });
     } catch (error) {
-      console.error('Erro ao gerar mockup:', error);
+      console.error(`Erro ao gerar mockup para pedido ${pedidoId}:`, error);
       throw error;
     }
   };
@@ -298,6 +283,9 @@ export function ImportarFotosDialog({
     setEtapa('selecao');
     setProgresso(0);
     setProcessando(false);
+    setMockupsGerados(0);
+    setTotalMockups(0);
+    setGerandoMockups(false);
     onOpenChange(false);
   };
 
@@ -433,11 +421,35 @@ export function ImportarFotosDialog({
               </div>
             </ScrollArea>
 
+            {gerandoMockups && (
+              <>
+                <Separator className="my-4" />
+                <div className="space-y-3">
+                  <div className="flex items-center gap-2 text-blue-600">
+                    <Loader2 className="h-5 w-5 animate-spin" />
+                    <span className="font-medium">Gerando mockups de aprovação...</span>
+                  </div>
+                  <div className="bg-blue-50 p-3 rounded-lg">
+                    <div className="flex justify-between text-sm mb-2">
+                      <span>Progresso</span>
+                      <span className="font-medium">{mockupsGerados}/{totalMockups}</span>
+                    </div>
+                    <div className="w-full bg-blue-200 rounded-full h-2">
+                      <div 
+                        className="bg-blue-600 h-2 rounded-full transition-all duration-300"
+                        style={{ width: `${totalMockups > 0 ? (mockupsGerados / totalMockups) * 100 : 0}%` }}
+                      />
+                    </div>
+                  </div>
+                </div>
+              </>
+            )}
+
             <div className="flex justify-end gap-2">
               <Button
                 variant="outline"
                 onClick={handleFechar}
-                disabled={processando}
+                disabled={processando || gerandoMockups}
               >
                 {etapa === 'concluido' ? 'Fechar' : 'Cancelar'}
               </Button>
