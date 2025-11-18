@@ -194,14 +194,14 @@ export default function Dashboard() {
   return (
     <div className="min-h-screen bg-background">
       <Navigation />
-      <div className="container mx-auto px-4 py-8">
-        <div className="mb-8 flex flex-col gap-6">
+      <div className="mx-auto px-6 py-6 max-w-[1800px]">
+        <div className="mb-6 flex flex-col gap-4">
           <div className="flex items-center justify-between">
             <div>
-              <h1 className="text-4xl font-bold text-foreground mb-2">
+              <h1 className="text-3xl font-bold text-foreground mb-1">
                 Gestão de Pedidos
               </h1>
-              <p className="text-muted-foreground">
+              <p className="text-muted-foreground text-sm">
                 Gerencie pedidos e mockups de produção
               </p>
             </div>
@@ -237,21 +237,41 @@ export default function Dashboard() {
             </div>
           </div>
 
-          <div className="flex items-center gap-2 p-4 bg-muted/30 rounded-lg border">
-            <Checkbox
-              id="gerar-auto"
-              checked={gerarFotoAuto}
-              onCheckedChange={(checked) => setGerarFotoAuto(checked as boolean)}
-            />
-            <label
-              htmlFor="gerar-auto"
-              className="text-sm font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70 cursor-pointer"
-            >
-              Gerar foto aprovação automaticamente
-            </label>
+          <div className="flex items-center justify-between gap-4 p-3 bg-muted/30 rounded-lg border">
+            <div className="flex items-center gap-2">
+              <Checkbox
+                id="gerar-auto"
+                checked={gerarFotoAuto}
+                onCheckedChange={(checked) => setGerarFotoAuto(checked as boolean)}
+              />
+              <label
+                htmlFor="gerar-auto"
+                className="text-sm font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70 cursor-pointer"
+              >
+                Gerar foto aprovação automaticamente
+              </label>
+            </div>
+            <div className="flex gap-2">
+              <Button
+                onClick={handleImportarFotos}
+                variant="outline"
+                size="sm"
+              >
+                <Upload className="mr-2 h-4 w-4" />
+                Importar Fotos
+              </Button>
+              <Button
+                onClick={handleImportarPedidos}
+                variant="outline"
+                size="sm"
+              >
+                <FileSpreadsheet className="mr-2 h-4 w-4" />
+                Importar Pedidos
+              </Button>
+            </div>
           </div>
 
-          <div className="flex flex-col sm:flex-row gap-4">
+          <div className="flex flex-col lg:flex-row gap-3">
             <div className="relative flex-1">
               <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-muted-foreground" />
               <Input
@@ -267,19 +287,19 @@ export default function Dashboard() {
                 type="date"
                 value={filterDataInicio}
                 onChange={(e) => setFilterDataInicio(e.target.value)}
-                className="w-[160px]"
+                className="w-[150px]"
                 placeholder="Data início"
               />
               <Input
                 type="date"
                 value={filterDataFim}
                 onChange={(e) => setFilterDataFim(e.target.value)}
-                className="w-[160px]"
+                className="w-[150px]"
                 placeholder="Data fim"
               />
               
               <Select value={filterMensagem} onValueChange={setFilterMensagem}>
-                <SelectTrigger className="w-[180px]">
+                <SelectTrigger className="w-[160px]">
                   <Filter className="mr-2 h-4 w-4" />
                   <SelectValue placeholder="Mensagem" />
                 </SelectTrigger>
@@ -292,7 +312,7 @@ export default function Dashboard() {
               </Select>
 
               <Select value={filterLayout} onValueChange={setFilterLayout}>
-                <SelectTrigger className="w-[180px]">
+                <SelectTrigger className="w-[160px]">
                   <Filter className="mr-2 h-4 w-4" />
                   <SelectValue placeholder="Layout" />
                 </SelectTrigger>
@@ -316,31 +336,15 @@ export default function Dashboard() {
           gerarFotoAuto={gerarFotoAuto}
         />
 
-        <div className="mt-6 flex gap-4 justify-between items-center">
+        <div className="mt-4">
           <Button
             onClick={handleAdicionarLinhas}
             variant="outline"
+            size="sm"
           >
             <Plus className="mr-2 h-4 w-4" />
             Adicionar linhas
           </Button>
-
-          <div className="flex gap-2">
-            <Button
-              onClick={handleImportarFotos}
-              variant="outline"
-            >
-              <Upload className="mr-2 h-4 w-4" />
-              Importar Fotos
-            </Button>
-            <Button
-              onClick={handleImportarPedidos}
-              variant="outline"
-            >
-              <FileSpreadsheet className="mr-2 h-4 w-4" />
-              Importar Pedidos
-            </Button>
-          </div>
         </div>
 
         <NovoPedidoDialog

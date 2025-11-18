@@ -139,6 +139,7 @@ export function ImportarFotosDialog({
 
     let sucessos = 0;
     let erros = 0;
+    const pedidosAtualizados: string[] = [];
 
     for (let i = 0; i < fotosParaImportar.length; i++) {
       const foto = fotosParaImportar[i];
@@ -181,6 +182,11 @@ export function ImportarFotosDialog({
 
         foto.status = 'sucesso';
         sucessos++;
+        
+        // Adicionar à fila de geração de mockups
+        if (gerarFotoAuto && !pedidosAtualizados.includes(pedido.id)) {
+          pedidosAtualizados.push(pedido.id);
+        }
 
       } catch (error: any) {
         console.error('Erro ao importar foto:', error);
@@ -209,6 +215,71 @@ export function ImportarFotosDialog({
     const naoVinculadas = fotos.filter(f => f.status === 'nao_encontrado').length;
     if (naoVinculadas > 0) {
       toast.warning(`${naoVinculadas} foto(s) não vinculada(s) (descartadas)`);
+    }
+    
+    // Processar mockups em fila (sequencial para não sobrecarregar)
+    if (pedidosAtualizados.length > 0 && gerarFotoAuto) {
+      toast.loading(`Gerando ${pedidosAtualizados.length} mockup(s) em fila...`, { id: 'mockups-queue' });
+      
+      let mockupsGerados = 0;
+      for (const pedidoId of pedidosAtualizados) {
+        try {
+          await gerarMockupParaPedido(pedidoId);
+          mockupsGerados++;
+          toast.loading(`Gerando mockups... ${mockupsGerados}/${pedidosAtualizados.length}`, { id: 'mockups-queue' });
+        } catch (error) {
+          console.error(`Erro ao gerar mockup para pedido ${pedidoId}:`, error);
+        }
+      }
+      
+      toast.success(`${mockupsGerados} mockup(s) gerado(s)!`, { id: 'mockups-queue' });
+    }
+  };
+  
+  const gerarMockupParaPedido = async (pedidoId: string) => {
+    try {
+      // Buscar dados atualizados do pedido
+      const { data: pedido, error: pedidoError } = await supabase
+        .from('pedidos')
+        .select('*')
+        .eq('id', pedidoId)
+        .single();
+
+      if (pedidoError || !pedido) {
+        console.error('Erro ao buscar pedido:', pedidoError);
+        return;
+      }
+
+      // Buscar mockup correspondente ao código do produto
+      const { data: mockups, error: mockupError } = await supabase
+        .from('mockups')
+        .select('*, mockup_canvases!inner(*), mockup_areas(*)')
+        .eq('codigo_mockup', pedido.codigo_produto)
+        .eq('tipo', 'aprovacao');
+
+      if (mockupError || !mockups || mockups.length === 0) {
+        console.warn(`Nenhum mockup de aprovação encontrado para ${pedido.codigo_produto}`);
+        return;
+      }
+
+      // Usar a primeira foto do cliente como base
+      const fotoCliente = pedido.fotos_cliente?.[0];
+      if (!fotoCliente) return;
+
+      // Atualizar o campo foto_aprovacao com a foto gerada
+      // Por enquanto, apenas copia a foto do cliente
+      // TODO: Implementar geração real de mockup com composição de imagens
+      await supabase
+        .from('pedidos')
+        .update({ 
+          foto_aprovacao: [fotoCliente],
+          layout_aprovado: 'pendente'
+        })
+        .eq('id', pedidoId);
+        
+    } catch (error) {
+      console.error('Erro ao gerar mockup:', error);
+      throw error;
     }
   };
 
