@@ -250,6 +250,13 @@ export function ImportarFotosDialog({
         return;
       }
 
+      // Verificar se há foto do cliente
+      const fotoCliente = pedido.fotos_cliente?.[0];
+      if (!fotoCliente) {
+        console.warn(`Pedido ${pedido.numero_pedido} não tem foto de cliente`);
+        return;
+      }
+
       // Buscar mockup correspondente ao código do produto
       const { data: mockups, error: mockupError } = await supabase
         .from('mockups')
@@ -257,25 +264,28 @@ export function ImportarFotosDialog({
         .eq('codigo_mockup', pedido.codigo_produto)
         .eq('tipo', 'aprovacao');
 
-      if (mockupError || !mockups || mockups.length === 0) {
-        console.warn(`Nenhum mockup de aprovação encontrado para ${pedido.codigo_produto}`);
-        return;
+      if (mockupError) {
+        console.error('Erro ao buscar mockup:', mockupError);
       }
 
-      // Usar a primeira foto do cliente como base
-      const fotoCliente = pedido.fotos_cliente?.[0];
-      if (!fotoCliente) return;
+      if (!mockups || mockups.length === 0) {
+        console.warn(`Nenhum mockup de aprovação configurado para ${pedido.codigo_produto} - usando foto do cliente`);
+      }
 
-      // Atualizar o campo foto_aprovacao com a foto gerada
-      // Por enquanto, apenas copia a foto do cliente
-      // TODO: Implementar geração real de mockup com composição de imagens
-      await supabase
+      // Atualizar o campo foto_aprovacao com a foto do cliente
+      // TODO: Implementar geração real de mockup com composição de imagens quando mockup estiver configurado
+      const { error: updateError } = await supabase
         .from('pedidos')
         .update({ 
           foto_aprovacao: [fotoCliente],
           layout_aprovado: 'pendente'
         })
         .eq('id', pedidoId);
+
+      if (updateError) {
+        console.error('Erro ao atualizar foto de aprovação:', updateError);
+        throw updateError;
+      }
         
     } catch (error) {
       console.error('Erro ao gerar mockup:', error);
