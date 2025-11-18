@@ -7,6 +7,7 @@ import { toast } from "sonner";
 import { PedidosTable } from "@/components/pedidos/PedidosTable";
 import { NovoPedidoDialog } from "@/components/pedidos/NovoPedidoDialog";
 import { ImportarPedidosDialog } from "@/components/pedidos/ImportarPedidosDialog";
+import { ImportarFotosDialog } from "@/components/pedidos/ImportarFotosDialog";
 import { Navigation } from "@/components/Navigation";
 import { Checkbox } from "@/components/ui/checkbox";
 import {
@@ -28,7 +29,8 @@ export default function Dashboard() {
   const [novoPedidoOpen, setNovoPedidoOpen] = useState(false);
   const [importarPedidosOpen, setImportarPedidosOpen] = useState(false);
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
-  const [gerarFotoAuto, setGerarFotoAuto] = useState(false);
+  const [gerarFotoAuto, setGerarFotoAuto] = useState(true);
+  const [importarFotosOpen, setImportarFotosOpen] = useState(false);
 
   useEffect(() => {
     carregarPedidos();
@@ -160,8 +162,7 @@ export default function Dashboard() {
   };
 
   const handleImportarFotos = () => {
-    // TODO: Implementar importação de fotos
-    toast.info("Funcionalidade em desenvolvimento");
+    setImportarFotosOpen(true);
   };
 
   const handleImportarPedidos = () => {
@@ -352,6 +353,13 @@ export default function Dashboard() {
           open={importarPedidosOpen}
           onOpenChange={setImportarPedidosOpen}
           onSuccess={carregarPedidos}
+        />
+        
+        <ImportarFotosDialog
+          open={importarFotosOpen}
+          onOpenChange={setImportarFotosOpen}
+          onSuccess={carregarPedidos}
+          gerarFotoAuto={gerarFotoAuto}
         />
       </div>
     </div>
