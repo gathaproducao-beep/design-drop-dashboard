@@ -28,6 +28,7 @@ import { EditarPedidoDialog } from "./EditarPedidoDialog";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
+import { generateMockupsForPedido } from "@/lib/mockup-generator";
 
 // CRC32 table para calcular checksum do PNG
 const crcTable = (() => {
@@ -259,317 +260,24 @@ export function PedidosTable({
     }
   };
 
-  const handleGerarMockups = async (pedido: any, tipoGerar?: 'aprovacao' | 'molde' | 'ambos') => {
+  const handleGerarMockups = async (pedido: any, tipoGerar: 'all' | 'aprovacao' | 'molde' = 'all') => {
     if (!pedido.fotos_cliente || pedido.fotos_cliente.length === 0) {
-      toast.error("É necessário ter pelo menos uma foto do cliente para gerar mockups");
+      toast.error("Adicione fotos do cliente antes de gerar os mockups");
       return;
     }
 
     setGenerating(pedido.id);
+    
     try {
-      // Buscar mockup principal pelo código do produto
-      const { data: mockupsPrincipais, error: mockupError } = await supabase
-        .from("mockups")
-        .select(`
-          *,
-          mockup_canvases (
-            *,
-            mockup_areas (*)
-          )
-        `)
-        .eq("codigo_mockup", pedido.codigo_produto);
-
-      if (mockupError || !mockupsPrincipais || mockupsPrincipais.length === 0) {
-        toast.error("Nenhum mockup encontrado para este código de produto");
-        return;
-      }
-
-      let mockups = mockupsPrincipais;
-
-      // Se o mockup principal for do tipo "molde" e tiver vinculação com mockup de aprovação
-      const mockupPrincipal = mockupsPrincipais[0];
-      if (mockupPrincipal.tipo === "molde" && mockupPrincipal.mockup_aprovacao_vinculado_id) {
-        // Buscar também o mockup de aprovação vinculado
-        const { data: mockupAprovacao, error: aprovacaoError } = await supabase
-          .from("mockups")
-          .select(`
-            *,
-            mockup_canvases (
-              *,
-              mockup_areas (*)
-            )
-          `)
-          .eq("id", mockupPrincipal.mockup_aprovacao_vinculado_id)
-          .single();
-
-        if (!aprovacaoError && mockupAprovacao) {
-          // Adicionar mockup de aprovação no início do array (será gerado primeiro)
-          mockups = [mockupAprovacao, ...mockupsPrincipais];
-          console.log("Gerando mockup de aprovação vinculado:", mockupAprovacao.codigo_mockup);
-        }
-      }
-
-      // Filtrar mockups baseado no tipoGerar
-      if (tipoGerar === 'aprovacao') {
-        mockups = mockups.filter(m => m.tipo === 'aprovacao');
-        if (mockups.length === 0) {
-          toast.error("Nenhum mockup de aprovação encontrado");
-          return;
-        }
-      } else if (tipoGerar === 'molde') {
-        mockups = mockups.filter(m => m.tipo === 'molde');
-        if (mockups.length === 0) {
-          toast.error("Nenhum mockup de molde encontrado");
-          return;
-        }
-      }
-
-      // Processar cada mockup
-      const results: { tipo: string; url: string }[] = [];
+      await generateMockupsForPedido(pedido, tipoGerar, (msg) => {
+        console.log(`[Mockup ${pedido.numero_pedido}] ${msg}`);
+      });
       
-      for (const mockup of mockups) {
-        const canvases = mockup.mockup_canvases || [];
-        
-        if (canvases.length === 0) {
-          console.warn("Mockup sem canvases:", mockup.id);
-          continue;
-        }
-
-        // Para cada canvas do mockup
-        for (const canvasData of canvases) {
-          const areas = canvasData.mockup_areas || [];
-          
-          // Criar canvas HTML
-          const canvas = document.createElement("canvas");
-          // Forçar contexto sem scaling automático
-          const ctx = canvas.getContext("2d", { 
-            alpha: true,
-            willReadFrequently: false 
-          });
-          if (!ctx) continue;
-
-          // Resetar qualquer transformação que possa existir
-          ctx.setTransform(1, 0, 0, 1, 0, 0);
-          ctx.imageSmoothingEnabled = true;
-          ctx.imageSmoothingQuality = 'high';
-
-          // Carregar imagem base do canvas
-          const baseImg = new Image();
-          baseImg.crossOrigin = "anonymous";
-          
-          await new Promise<void>((resolve, reject) => {
-            baseImg.onload = () => resolve();
-            baseImg.onerror = reject;
-            baseImg.src = canvasData.imagem_base;
-          });
-
-          console.log(`[generateMockups] Imagem base carregada:`, {
-            width: baseImg.width,
-            height: baseImg.height,
-            naturalWidth: baseImg.naturalWidth,
-            naturalHeight: baseImg.naturalHeight,
-            devicePixelRatio: window.devicePixelRatio
-          });
-
-          // Usar dimensões naturais da imagem (originais, sem escala do navegador)
-          canvas.width = Math.round(baseImg.naturalWidth);
-          canvas.height = Math.round(baseImg.naturalHeight);
-          
-          // Garantir que o backing store seja 1:1
-          canvas.style.width = `${canvas.width}px`;
-          canvas.style.height = `${canvas.height}px`;
-          
-          ctx.drawImage(baseImg, 0, 0, canvas.width, canvas.height);
-          console.log(`[generateMockups] Canvas criado: ${canvas.width}x${canvas.height}px (style: ${canvas.style.width}x${canvas.style.height})`);
-
-          // Processar cada área
-          for (const area of areas) {
-            if (area.kind === "image") {
-              // Extrair índice da foto (ex: fotocliente[1] -> 1)
-              const match = area.field_key.match(/fotocliente\[(\d+)\]/);
-              const photoIndex = match ? parseInt(match[1]) - 1 : 0;
-              
-              const photoUrl = pedido.fotos_cliente[photoIndex];
-              if (!photoUrl) continue;
-
-              // Carregar foto do cliente
-              const clientImg = new Image();
-              clientImg.crossOrigin = "anonymous";
-              
-              await new Promise<void>((resolve, reject) => {
-                clientImg.onload = () => resolve();
-                clientImg.onerror = reject;
-                clientImg.src = photoUrl;
-              });
-
-              console.log(`[generateMockups] Foto cliente carregada:`, {
-                width: clientImg.width,
-                height: clientImg.height,
-                naturalWidth: clientImg.naturalWidth,
-                naturalHeight: clientImg.naturalHeight
-              });
-
-              // Usar dimensões naturais da imagem do cliente
-              const aspectRatio = clientImg.naturalWidth / clientImg.naturalHeight;
-              const areaAspect = area.width / area.height;
-              
-              let sourceX = 0;
-              let sourceY = 0;
-              let sourceWidth = clientImg.naturalWidth;
-              let sourceHeight = clientImg.naturalHeight;
-
-              // Recortar a imagem para manter proporção e preencher toda a área (cover)
-              if (aspectRatio > areaAspect) {
-                // Imagem mais larga - recortar largura
-                sourceWidth = clientImg.naturalHeight * areaAspect;
-                sourceX = (clientImg.naturalWidth - sourceWidth) / 2;
-              } else {
-                // Imagem mais alta - recortar altura
-                sourceHeight = clientImg.naturalWidth / areaAspect;
-                sourceY = (clientImg.naturalHeight - sourceHeight) / 2;
-              }
-
-              console.log(`[generateMockups] Desenhando área:`, {
-                areaId: area.id?.substring(0, 8),
-                x: area.x,
-                y: area.y,
-                width: area.width,
-                height: area.height,
-                canvasSize: `${canvas.width}x${canvas.height}`
-              });
-
-              // Desenhar usando as dimensões exatas da área
-              ctx.drawImage(
-                clientImg,
-                sourceX,
-                sourceY,
-                sourceWidth,
-                sourceHeight,
-                area.x,
-                area.y,
-                area.width,
-                area.height
-              );
-            } else if (area.kind === "text") {
-              // Renderizar texto
-              let textValue = "";
-              switch (area.field_key) {
-                case "numero_pedido":
-                  textValue = pedido.numero_pedido || "";
-                  break;
-                case "codigo_produto":
-                  textValue = pedido.codigo_produto || "";
-                  break;
-                case "data_pedido":
-                  textValue = pedido.data_pedido ? new Date(pedido.data_pedido).toLocaleDateString() : "";
-                  break;
-                case "observacao":
-                  textValue = pedido.observacao || "";
-                  break;
-              }
-
-              if (textValue) {
-                ctx.save();
-                ctx.font = `${area.font_weight || "normal"} ${area.font_size || 16}px ${area.font_family || "Arial"}`;
-                ctx.fillStyle = area.color || "#000000";
-                ctx.textAlign = (area.text_align || "left") as CanvasTextAlign;
-                
-                // Posição do texto
-                let textX = area.x;
-                if (area.text_align === "center") textX = area.x + area.width / 2;
-                else if (area.text_align === "right") textX = area.x + area.width;
-
-                ctx.fillText(textValue, textX, area.y + (area.font_size || 16));
-                ctx.restore();
-              }
-            }
-          }
-
-          // Converter canvas para blob
-          console.log(`[generateMockups] Preparando exportação - Canvas: ${canvas.width}x${canvas.height}px`);
-          
-          const blob = await new Promise<Blob>((resolve) => {
-            canvas.toBlob((b) => {
-              if (!b) {
-                console.error('[generateMockups] Falha ao gerar blob');
-                resolve(new Blob());
-                return;
-              }
-              console.log(`[generateMockups] Blob inicial gerado:`, {
-                size: `${(b.size / 1024 / 1024).toFixed(2)} MB`,
-                width: canvas.width,
-                height: canvas.height,
-                type: b.type
-              });
-              resolve(b);
-            }, "image/png", 1.0);
-          });
-          
-          // Processar PNG para definir pHYs com 300 DPI
-          console.log('[generateMockups] Processando PNG para definir 300 DPI...');
-          const arrayBuffer = await blob.arrayBuffer();
-          const uint8Array = new Uint8Array(arrayBuffer);
-          const fixedPng = setPHYsTo300DPI(uint8Array);
-          // Criar novo ArrayBuffer para garantir compatibilidade de tipos
-          const cleanBuffer = fixedPng.buffer.slice(fixedPng.byteOffset, fixedPng.byteOffset + fixedPng.byteLength) as ArrayBuffer;
-          const cleanBlob = new Blob([cleanBuffer], { type: 'image/png' });
-          
-          // Extrair e logar dimensões reais do PNG final
-          const finalDimensions = getIHDRDimensions(fixedPng);
-          console.log(`[generateMockups] PNG final criado:`, {
-            size: `${(cleanBlob.size / 1024 / 1024).toFixed(2)} MB`,
-            dimensoesPNG: `${finalDimensions.width}x${finalDimensions.height}px`,
-            dimensoesCanvas: `${canvas.width}x${canvas.height}px`,
-            dimensoesBase: `${baseImg.naturalWidth}x${baseImg.naturalHeight}px`,
-            dpi: 300,
-            match: finalDimensions.width === baseImg.naturalWidth && finalDimensions.height === baseImg.naturalHeight ? '✓' : '✗'
-          });
-
-          // Upload para storage usando o PNG limpo (sem metadados DPI)
-          const fileName = `${mockup.tipo}/${pedido.numero_pedido}-${mockup.tipo}-${canvasData.nome}-${Date.now()}.png`;
-          const { error: uploadError } = await supabase.storage
-            .from("mockup-images")
-            .upload(fileName, cleanBlob);
-
-          if (uploadError) {
-            console.error("Erro ao fazer upload:", uploadError);
-            continue;
-          }
-
-          const { data: { publicUrl } } = supabase.storage
-            .from("mockup-images")
-            .getPublicUrl(fileName);
-
-          results.push({ tipo: mockup.tipo, url: publicUrl });
-        }
-      }
-
-      // Atualizar pedido com as URLs geradas (salvar arrays)
-      const updateData: any = {};
-      const aprovacaoResults = results.filter(r => r.tipo === "aprovacao").map(r => r.url);
-      const moldeResults = results.filter(r => r.tipo === "molde").map(r => r.url);
-      
-      if (aprovacaoResults.length > 0) updateData.foto_aprovacao = aprovacaoResults;
-      if (moldeResults.length > 0) updateData.molde_producao = moldeResults;
-
-      if (Object.keys(updateData).length > 0) {
-        updateData.mensagem_enviada = "enviada";
-        
-        const { error: updateError } = await supabase
-          .from("pedidos")
-          .update(updateData)
-          .eq("id", pedido.id);
-
-        if (updateError) throw updateError;
-      }
-
-      const tipoMsg = tipoGerar === 'aprovacao' ? 'Foto de aprovação' : 
-                      tipoGerar === 'molde' ? 'Molde de produção' : 'Mockups';
-      toast.success(`${tipoMsg} gerado com sucesso!`);
+      toast.success("Mockup gerado com sucesso!");
       onRefresh();
     } catch (error) {
-      console.error("Erro ao gerar mockups:", error);
-      toast.error("Erro ao gerar mockups");
+      console.error("Erro ao gerar mockup:", error);
+      toast.error("Erro ao gerar mockup");
     } finally {
       setGenerating(null);
     }
@@ -746,7 +454,18 @@ export function PedidosTable({
                       )}
                     </div>
                   ) : (
-                    <span className="text-muted-foreground text-sm">Sem foto</span>
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      className="text-muted-foreground hover:text-primary h-8"
+                      onClick={() => {
+                        setSelectedPedido(pedido);
+                        setUploadDialogOpen(true);
+                      }}
+                    >
+                      <ImageIcon className="h-4 w-4 mr-1" />
+                      <span className="text-xs">Adicionar</span>
+                    </Button>
                   )}
                 </TableCell>
                 <TableCell>
