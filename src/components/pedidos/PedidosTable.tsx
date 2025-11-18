@@ -725,20 +725,29 @@ export function PedidosTable({
                 <TableCell>{pedido.codigo_produto}</TableCell>
                 <TableCell>{new Date(pedido.data_pedido).toLocaleDateString()}</TableCell>
                 <TableCell>{pedido.telefone || "-"}</TableCell>
-                <TableCell>
-                  <Button
-                    variant="ghost"
-                    size="sm"
-                    onClick={() => handleImageClick(pedido, "cliente")}
-                    className="hover:bg-primary/10 relative"
-                  >
-                    <ImageIcon className={pedido.fotos_cliente?.length > 0 ? "h-4 w-4 text-primary" : "h-4 w-4"} />
-                    {pedido.fotos_cliente?.length > 1 && (
-                      <span className="absolute -top-1 -right-1 bg-primary text-primary-foreground text-xs rounded-full h-4 w-4 flex items-center justify-center">
-                        {pedido.fotos_cliente.length}
-                      </span>
-                    )}
-                  </Button>
+                <TableCell className="text-center">
+                  {pedido.fotos_cliente && pedido.fotos_cliente.length > 0 ? (
+                    <div 
+                      className="relative inline-block cursor-pointer hover:opacity-80 transition"
+                      onClick={() => handleImageClick(pedido, "cliente")}
+                    >
+                      <img 
+                        src={pedido.fotos_cliente[0]} 
+                        alt="Foto Cliente"
+                        className="h-10 w-10 rounded object-cover border"
+                      />
+                      {pedido.fotos_cliente.length > 1 && (
+                        <Badge 
+                          className="absolute -top-1 -right-1 h-5 w-5 flex items-center justify-center p-0 text-xs"
+                          variant="secondary"
+                        >
+                          +{pedido.fotos_cliente.length - 1}
+                        </Badge>
+                      )}
+                    </div>
+                  ) : (
+                    <span className="text-muted-foreground text-sm">Sem foto</span>
+                  )}
                 </TableCell>
                 <TableCell>
                   {pedido.foto_aprovacao && pedido.foto_aprovacao.length > 0 ? (
