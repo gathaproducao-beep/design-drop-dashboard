@@ -367,13 +367,23 @@ const ConfiguracoesWhatsapp = () => {
           {/* Configurações Antigas (mantidas para compatibilidade) */}
           <Card>
             <CardHeader>
-              <CardTitle className="flex items-center gap-2">
-                <Settings className="h-5 w-5" />
-                Configurações Evolution API (Legado)
-              </CardTitle>
-              <CardDescription>
-                Configurações antigas mantidas para compatibilidade
-              </CardDescription>
+              <div className="flex items-center justify-between">
+                <div>
+                  <CardTitle className="flex items-center gap-2">
+                    <Settings className="h-5 w-5" />
+                    Configurações Evolution API (Legado)
+                  </CardTitle>
+                  <CardDescription>
+                    Configurações antigas mantidas para compatibilidade
+                  </CardDescription>
+                </div>
+                {autoSendEnabled && (
+                  <Badge variant="default" className="gap-1">
+                    <MessageSquare className="h-3 w-3" />
+                    Auto-envio Ativo
+                  </Badge>
+                )}
+              </div>
             </CardHeader>
             <CardContent className="space-y-4">
               <div className="space-y-2">
@@ -396,17 +406,22 @@ const ConfiguracoesWhatsapp = () => {
                 />
               </div>
 
-              <div className="flex items-center justify-between">
-                <div>
-                  <Label>Envio Automático</Label>
+              <div className="flex items-center justify-between py-4">
+                <div className="space-y-0.5">
+                  <Label htmlFor="auto-send">Envio Automático</Label>
                   <p className="text-sm text-muted-foreground">
-                    Ativar envio automático de mensagens (desabilitado)
+                    Quando ativado, mensagens de aprovação são enviadas automaticamente 
+                    assim que a foto de aprovação for gerada.
+                    <br />
+                    <span className="text-xs text-orange-600 font-medium">
+                      ⚠️ Apenas envia se o status "Mensagem" não for "enviada"
+                    </span>
                   </p>
                 </div>
                 <Switch
+                  id="auto-send"
                   checked={autoSendEnabled}
                   onCheckedChange={setAutoSendEnabled}
-                  disabled
                 />
               </div>
             </CardContent>
