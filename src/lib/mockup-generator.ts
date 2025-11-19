@@ -360,6 +360,36 @@ export async function generateMockupsForPedido(
         .eq('id', pedido.id);
     }
 
+    // Verificar se deve enviar mensagem automaticamente
+    if (results.aprovacao && results.aprovacao.length > 0) {
+      // Buscar configuração de auto-envio
+      const { data: settings } = await supabase
+        .from('whatsapp_settings')
+        .select('auto_send_enabled')
+        .single();
+      
+      // Se auto-envio estiver ativo E mensagem ainda não foi enviada
+      if (settings?.auto_send_enabled && pedido.mensagem_enviada !== 'enviada') {
+        try {
+          onProgress?.('Adicionando mensagem à fila de envio...');
+          
+          // Importar função de envio
+          const { processarEnvioPedido } = await import('./whatsapp');
+          
+          // Adicionar à fila (não aguarda para não bloquear)
+          processarEnvioPedido(pedido.id).catch((error) => {
+            console.error('Erro ao adicionar mensagem à fila:', error);
+            // Não lança erro para não interromper o fluxo de geração
+          });
+          
+          onProgress?.('Mensagem adicionada à fila de envio!');
+        } catch (error) {
+          console.error('Erro ao processar envio automático:', error);
+          // Continua mesmo com erro no envio
+        }
+      }
+    }
+
     onProgress?.('Concluído!');
     return results;
 
