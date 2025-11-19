@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { Input } from "@/components/ui/input";
 import {
   Select,
@@ -27,6 +27,13 @@ export function EditableCell({
 }: EditableCellProps) {
   const [editing, setEditing] = useState(false);
   const [tempValue, setTempValue] = useState(value);
+  const [isOpen, setIsOpen] = useState(false);
+
+  useEffect(() => {
+    if (editing && type === 'select') {
+      setIsOpen(true);
+    }
+  }, [editing, type]);
 
   const handleSave = () => {
     onSave(tempValue);
@@ -41,6 +48,7 @@ export function EditableCell({
   const handleSelectChange = (newValue: string) => {
     setTempValue(newValue);
     onSave(newValue);
+    setIsOpen(false);
     setEditing(false);
   };
 
@@ -48,7 +56,12 @@ export function EditableCell({
     return (
       <div className="flex items-center gap-2">
         {type === "select" ? (
-          <Select value={tempValue} onValueChange={handleSelectChange} open>
+          <Select 
+            value={tempValue} 
+            onValueChange={handleSelectChange} 
+            open={isOpen}
+            onOpenChange={setIsOpen}
+          >
             <SelectTrigger className="h-8 w-32">
               <SelectValue />
             </SelectTrigger>
