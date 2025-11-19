@@ -300,6 +300,7 @@ export type Database = {
       whatsapp_queue: {
         Row: {
           attempts: number | null
+          cancelled_at: string | null
           created_at: string | null
           error_message: string | null
           id: string
@@ -315,6 +316,7 @@ export type Database = {
         }
         Insert: {
           attempts?: number | null
+          cancelled_at?: string | null
           created_at?: string | null
           error_message?: string | null
           id?: string
@@ -330,6 +332,7 @@ export type Database = {
         }
         Update: {
           attempts?: number | null
+          cancelled_at?: string | null
           created_at?: string | null
           error_message?: string | null
           id?: string

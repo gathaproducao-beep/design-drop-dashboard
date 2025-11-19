@@ -3,11 +3,13 @@ import { supabase } from "@/integrations/supabase/client";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { RefreshCw, AlertCircle } from "lucide-react";
+import { Checkbox } from "@/components/ui/checkbox";
+import { RefreshCw, AlertCircle, Play, X, RotateCw } from "lucide-react";
 import { format } from "date-fns";
 import { ptBR } from "date-fns/locale";
 import { ErrorDialog } from "./ErrorDialog";
 import { useState } from "react";
+import { toast } from "sonner";
 
 interface QueueItem {
   id: string;
@@ -28,6 +30,8 @@ interface QueueItem {
 
 export function FilaWhatsappTable() {
   const [selectedError, setSelectedError] = useState<{ pedido: string; error: string } | null>(null);
+  const [selectedIds, setSelectedIds] = useState<string[]>([]);
+  const [isProcessing, setIsProcessing] = useState(false);
 
   const { data: queueItems, isLoading, refetch } = useQuery({
     queryKey: ["whatsapp-queue"],
@@ -50,12 +54,85 @@ export function FilaWhatsappTable() {
     refetchInterval: 30000, // Auto-refresh a cada 30s
   });
 
+  const handleProcessQueue = async () => {
+    setIsProcessing(true);
+    try {
+      const { error } = await supabase.functions.invoke('process-whatsapp-queue');
+      if (error) throw error;
+      toast.success("Fila processada com sucesso!");
+      refetch();
+    } catch (error) {
+      console.error("Erro ao processar fila:", error);
+      toast.error("Erro ao processar fila");
+    } finally {
+      setIsProcessing(false);
+    }
+  };
+
+  const handleCancelSelected = async () => {
+    if (selectedIds.length === 0) return;
+    try {
+      const { error } = await supabase
+        .from('whatsapp_queue')
+        .update({ 
+          status: 'cancelled', 
+          cancelled_at: new Date().toISOString() 
+        })
+        .in('id', selectedIds);
+      
+      if (error) throw error;
+      toast.success(`${selectedIds.length} mensagens canceladas`);
+      setSelectedIds([]);
+      refetch();
+    } catch (error) {
+      console.error("Erro ao cancelar mensagens:", error);
+      toast.error("Erro ao cancelar mensagens");
+    }
+  };
+
+  const handleReprocessSelected = async () => {
+    if (selectedIds.length === 0) return;
+    try {
+      const { error } = await supabase
+        .from('whatsapp_queue')
+        .update({ 
+          status: 'pending', 
+          attempts: 0, 
+          error_message: null 
+        })
+        .in('id', selectedIds);
+      
+      if (error) throw error;
+      toast.success(`${selectedIds.length} mensagens marcadas para reprocessamento`);
+      setSelectedIds([]);
+      refetch();
+    } catch (error) {
+      console.error("Erro ao reprocessar mensagens:", error);
+      toast.error("Erro ao reprocessar mensagens");
+    }
+  };
+
+  const toggleSelectAll = () => {
+    if (selectedIds.length === queueItems?.length) {
+      setSelectedIds([]);
+    } else {
+      setSelectedIds(queueItems?.map(item => item.id) || []);
+    }
+  };
+
+  const toggleSelectItem = (id: string) => {
+    setSelectedIds(prev => 
+      prev.includes(id) ? prev.filter(i => i !== id) : [...prev, id]
+    );
+  };
+
   const getStatusBadge = (status: string) => {
     const variants: Record<string, { variant: "default" | "secondary" | "outline" | "destructive"; label: string }> = {
       pending: { variant: "secondary", label: "Pendente" },
       processing: { variant: "outline", label: "Processando" },
       sent: { variant: "default", label: "Enviada" },
       failed: { variant: "destructive", label: "Falhou" },
+      cancelled: { variant: "outline", label: "Cancelado" },
     };
     const config = variants[status] || { variant: "secondary", label: status };
     return <Badge variant={config.variant}>{config.label}</Badge>;
@@ -80,20 +157,62 @@ export function FilaWhatsappTable() {
 
   return (
     <div className="space-y-4">
-      <div className="flex justify-between items-center">
+      <div className="flex justify-between items-center flex-wrap gap-2">
         <div className="text-sm text-muted-foreground">
           {queueItems?.length || 0} mensagens na fila
+          {selectedIds.length > 0 && (
+            <span className="ml-2 font-semibold">
+              ({selectedIds.length} selecionadas)
+            </span>
+          )}
         </div>
-        <Button variant="outline" size="sm" onClick={() => refetch()}>
-          <RefreshCw className="h-4 w-4 mr-2" />
-          Atualizar
-        </Button>
+        <div className="flex gap-2 flex-wrap">
+          {selectedIds.length > 0 && (
+            <>
+              <Button 
+                variant="outline" 
+                size="sm" 
+                onClick={handleCancelSelected}
+              >
+                <X className="h-4 w-4 mr-2" />
+                Cancelar Selecionadas
+              </Button>
+              <Button 
+                variant="outline" 
+                size="sm" 
+                onClick={handleReprocessSelected}
+              >
+                <RotateCw className="h-4 w-4 mr-2" />
+                Reprocessar Selecionadas
+              </Button>
+            </>
+          )}
+          <Button 
+            variant="default" 
+            size="sm" 
+            onClick={handleProcessQueue}
+            disabled={isProcessing}
+          >
+            <Play className="h-4 w-4 mr-2" />
+            {isProcessing ? "Processando..." : "Processar Fila"}
+          </Button>
+          <Button variant="outline" size="sm" onClick={() => refetch()}>
+            <RefreshCw className="h-4 w-4 mr-2" />
+            Atualizar
+          </Button>
+        </div>
       </div>
 
       <div className="border rounded-lg">
         <Table>
           <TableHeader>
             <TableRow>
+              <TableHead className="w-12">
+                <Checkbox
+                  checked={selectedIds.length === queueItems?.length && queueItems?.length > 0}
+                  onCheckedChange={toggleSelectAll}
+                />
+              </TableHead>
               <TableHead>Pedido</TableHead>
               <TableHead>Cliente</TableHead>
               <TableHead>Telefone</TableHead>
@@ -109,6 +228,12 @@ export function FilaWhatsappTable() {
             {queueItems && queueItems.length > 0 ? (
               queueItems.map((item) => (
                 <TableRow key={item.id}>
+                  <TableCell>
+                    <Checkbox
+                      checked={selectedIds.includes(item.id)}
+                      onCheckedChange={() => toggleSelectItem(item.id)}
+                    />
+                  </TableCell>
                   <TableCell className="font-medium">
                     {item.pedidos?.numero_pedido || "-"}
                   </TableCell>
@@ -155,7 +280,7 @@ export function FilaWhatsappTable() {
               ))
             ) : (
               <TableRow>
-                <TableCell colSpan={9} className="text-center py-8 text-muted-foreground">
+                <TableCell colSpan={10} className="text-center py-8 text-muted-foreground">
                   Nenhuma mensagem na fila
                 </TableCell>
               </TableRow>
