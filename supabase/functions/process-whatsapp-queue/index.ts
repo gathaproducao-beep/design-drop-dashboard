@@ -41,7 +41,7 @@ Deno.serve(async (req) => {
     // 2. Buscar mensagens pendentes
     const { data: messages, error: messagesError } = await supabase
       .from('whatsapp_queue')
-      .select('*')
+      .select('id, phone, message, attempts, max_attempts, pedido_id, media_url, media_type, caption, status, scheduled_at')
       .eq('status', 'pending')
       .lte('scheduled_at', new Date().toISOString())
       .order('created_at', { ascending: true })
@@ -103,7 +103,10 @@ Deno.serve(async (req) => {
           body: { 
             phone: msg.phone, 
             message: msg.message,
-            instance_id: activeInstance.id
+            instance_id: activeInstance.id,
+            media_url: msg.media_url || undefined,
+            media_type: msg.media_type || undefined,
+            caption: msg.caption || undefined,
           }
         });
 

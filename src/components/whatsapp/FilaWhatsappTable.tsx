@@ -4,7 +4,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
-import { RefreshCw, AlertCircle, Play, X, RotateCw } from "lucide-react";
+import { RefreshCw, AlertCircle, Play, X, RotateCcw, ImageIcon } from "lucide-react";
 import { format } from "date-fns";
 import { ptBR } from "date-fns/locale";
 import { ErrorDialog } from "./ErrorDialog";
@@ -22,6 +22,9 @@ interface QueueItem {
   created_at: string;
   sent_at: string | null;
   pedido_id: string | null;
+  media_url: string | null;
+  media_type: string | null;
+  caption: string | null;
   pedidos: {
     numero_pedido: string;
     nome_cliente: string;
@@ -182,7 +185,7 @@ export function FilaWhatsappTable() {
                 size="sm" 
                 onClick={handleReprocessSelected}
               >
-                <RotateCw className="h-4 w-4 mr-2" />
+                <RotateCcw className="h-4 w-4 mr-2" />
                 Reprocessar Selecionadas
               </Button>
             </>
@@ -206,23 +209,24 @@ export function FilaWhatsappTable() {
       <div className="border rounded-lg">
         <Table>
           <TableHeader>
-            <TableRow>
-              <TableHead className="w-12">
-                <Checkbox
-                  checked={selectedIds.length === queueItems?.length && queueItems?.length > 0}
-                  onCheckedChange={toggleSelectAll}
-                />
-              </TableHead>
-              <TableHead>Pedido</TableHead>
-              <TableHead>Cliente</TableHead>
-              <TableHead>Telefone</TableHead>
-              <TableHead>Mensagem</TableHead>
-              <TableHead>Status</TableHead>
-              <TableHead>Tentativas</TableHead>
-              <TableHead>Criado em</TableHead>
-              <TableHead>Enviado em</TableHead>
-              <TableHead></TableHead>
-            </TableRow>
+              <TableRow>
+                <TableHead className="w-12">
+                  <Checkbox
+                    checked={selectedIds.length === queueItems?.length && queueItems?.length > 0}
+                    onCheckedChange={toggleSelectAll}
+                  />
+                </TableHead>
+                <TableHead>Pedido</TableHead>
+                <TableHead>Cliente</TableHead>
+                <TableHead>Telefone</TableHead>
+                <TableHead>Tipo</TableHead>
+                <TableHead>Mensagem</TableHead>
+                <TableHead>Status</TableHead>
+                <TableHead>Tentativas</TableHead>
+                <TableHead>Criado em</TableHead>
+                <TableHead>Enviado em</TableHead>
+                <TableHead></TableHead>
+              </TableRow>
           </TableHeader>
           <TableBody>
             {queueItems && queueItems.length > 0 ? (
@@ -241,10 +245,37 @@ export function FilaWhatsappTable() {
                   <TableCell className="font-mono text-sm">
                     {formatPhone(item.phone)}
                   </TableCell>
+                  <TableCell>
+                    {item.media_type ? (
+                      <Badge variant="outline" className="gap-1">
+                        <ImageIcon className="h-3 w-3" />
+                        {item.media_type}
+                      </Badge>
+                    ) : (
+                      <Badge variant="secondary">Texto</Badge>
+                    )}
+                  </TableCell>
                   <TableCell className="max-w-xs">
-                    <span className="text-sm text-muted-foreground">
-                      {truncateMessage(item.message)}
-                    </span>
+                    {item.media_url ? (
+                      <div className="space-y-1">
+                        <span className="text-sm text-muted-foreground block truncate">
+                          {truncateMessage(item.caption || item.message)}
+                        </span>
+                        <a 
+                          href={item.media_url} 
+                          target="_blank" 
+                          rel="noopener noreferrer"
+                          className="text-xs text-primary hover:underline flex items-center gap-1"
+                        >
+                          <ImageIcon className="h-3 w-3" />
+                          Ver imagem
+                        </a>
+                      </div>
+                    ) : (
+                      <span className="text-sm text-muted-foreground">
+                        {truncateMessage(item.message)}
+                      </span>
+                    )}
                   </TableCell>
                   <TableCell>{getStatusBadge(item.status)}</TableCell>
                   <TableCell>

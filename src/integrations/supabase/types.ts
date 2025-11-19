@@ -301,11 +301,14 @@ export type Database = {
         Row: {
           attempts: number | null
           cancelled_at: string | null
+          caption: string | null
           created_at: string | null
           error_message: string | null
           id: string
           instance_id: string | null
           max_attempts: number | null
+          media_type: string | null
+          media_url: string | null
           message: string
           pedido_id: string | null
           phone: string
@@ -317,11 +320,14 @@ export type Database = {
         Insert: {
           attempts?: number | null
           cancelled_at?: string | null
+          caption?: string | null
           created_at?: string | null
           error_message?: string | null
           id?: string
           instance_id?: string | null
           max_attempts?: number | null
+          media_type?: string | null
+          media_url?: string | null
           message: string
           pedido_id?: string | null
           phone: string
@@ -333,11 +339,14 @@ export type Database = {
         Update: {
           attempts?: number | null
           cancelled_at?: string | null
+          caption?: string | null
           created_at?: string | null
           error_message?: string | null
           id?: string
           instance_id?: string | null
           max_attempts?: number | null
+          media_type?: string | null
+          media_url?: string | null
           message?: string
           pedido_id?: string | null
           phone?: string
