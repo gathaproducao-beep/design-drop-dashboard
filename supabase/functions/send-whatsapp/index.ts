@@ -12,6 +12,23 @@ interface SendWhatsappRequest {
   instance_id?: string;
 }
 
+/**
+ * Normaliza número de telefone adicionando código do país (55) se necessário
+ */
+const normalizePhone = (phone: string): string => {
+  if (!phone) return '';
+  
+  const cleanPhone = phone.replace(/\D/g, '');
+  
+  // Se já começa com 55, retornar
+  if (cleanPhone.startsWith('55')) {
+    return cleanPhone;
+  }
+  
+  // Adicionar código do país 55
+  return `55${cleanPhone}`;
+};
+
 serve(async (req) => {
   // Handle CORS preflight requests
   if (req.method === 'OPTIONS') {
@@ -28,7 +45,14 @@ serve(async (req) => {
 
     const { phone, message, instance_id }: SendWhatsappRequest = await req.json();
 
-    console.log('Recebida requisição de envio WhatsApp:', { phone, instance_id });
+    // Normalizar telefone (adicionar 55 se necessário)
+    const normalizedPhone = normalizePhone(phone);
+
+    console.log('Recebida requisição de envio WhatsApp:', { 
+      phone: phone, 
+      normalized: normalizedPhone,
+      instance_id 
+    });
 
     if (!phone || !message) {
       return new Response(
@@ -80,7 +104,7 @@ serve(async (req) => {
             'apikey': instance.evolution_api_key,
           },
           body: JSON.stringify({
-            number: phone,
+            number: normalizedPhone,
             text: message,
           }),
         });
