@@ -233,6 +233,24 @@ export function PedidosTable({
 
   const handleUpdateField = async (pedidoId: string, field: string, value: any) => {
     try {
+      // Se está mudando status de mensagem para "reenviar", processar envio
+      if (field === "mensagem_enviada" && value === "reenviar") {
+        toast.loading("Processando envio...", { id: `envio-${pedidoId}` });
+        
+        const { processarEnvioPedido, formatPhone } = await import("@/lib/whatsapp");
+        const result = await processarEnvioPedido(pedidoId);
+        
+        toast.success(
+          `Mensagem adicionada à fila!\nTemplate: ${result.mensagemUsada}\nTelefone: ${formatPhone(result.telefone)}`,
+          { id: `envio-${pedidoId}`, duration: 5000 }
+        );
+        
+        // Recarregar dados
+        onRefresh();
+        return;
+      }
+      
+      // Atualização normal para outros campos
       const { error } = await supabase
         .from("pedidos")
         .update({ [field]: value })
@@ -254,9 +272,9 @@ export function PedidosTable({
       
       toast.success("Campo atualizado");
       onRefresh();
-    } catch (error) {
+    } catch (error: any) {
       console.error("Erro ao atualizar:", error);
-      toast.error("Erro ao atualizar");
+      toast.error(error.message || "Erro ao atualizar");
     }
   };
 
@@ -362,6 +380,7 @@ export function PedidosTable({
   const getBadgeVariant = (value: string) => {
     if (value === "enviada" || value === "aprovado") return "default";
     if (value === "erro" || value === "reprovado") return "destructive";
+    if (value === "enviando") return "outline";
     return "secondary";
   };
 
@@ -491,7 +510,7 @@ export function PedidosTable({
                   <EditableCell
                     value={pedido.mensagem_enviada}
                     type="select"
-                    options={["pendente", "enviada", "erro", "reenviar"]}
+                    options={["pendente", "enviando", "enviada", "erro", "reenviar"]}
                     onSave={(value) => handleUpdateField(pedido.id, "mensagem_enviada", value)}
                     renderValue={(value) => (
                       <Badge variant={getBadgeVariant(value)}>{value}</Badge>

@@ -69,7 +69,25 @@ Deno.serve(async (req) => {
     let successCount = 0;
     let failedCount = 0;
 
-    // 3. Processar cada mensagem
+    // 3. Buscar instâncias ativas dinamicamente (ordenadas por prioridade)
+    const { data: instances } = await supabase
+      .from('whatsapp_instances')
+      .select('*')
+      .eq('is_active', true)
+      .order('ordem', { ascending: true });
+
+    if (!instances || instances.length === 0) {
+      console.error('Nenhuma instância ativa encontrada');
+      return new Response(
+        JSON.stringify({ error: 'Nenhuma instância ativa encontrada' }),
+        { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      );
+    }
+
+    const activeInstance = instances[0]; // Usar a primeira instância ativa (maior prioridade)
+    console.log(`Usando instância: ${activeInstance.nome}`);
+
+    // 4. Processar cada mensagem
     for (const msg of messages) {
       try {
         // Marcar como processando
@@ -80,12 +98,12 @@ Deno.serve(async (req) => {
 
         console.log(`Processando mensagem ${msg.id} para ${msg.phone}`);
 
-        // Tentar enviar
+        // Tentar enviar usando instância ativa
         const { data, error } = await supabase.functions.invoke('send-whatsapp', {
           body: { 
             phone: msg.phone, 
             message: msg.message,
-            instance_id: msg.instance_id 
+            instance_id: activeInstance.id
           }
         });
 
@@ -94,7 +112,7 @@ Deno.serve(async (req) => {
           const newAttempts = msg.attempts + 1;
           
           if (newAttempts >= msg.max_attempts) {
-            // Máximo de tentativas atingido
+            // Máximo de tentativas atingido - marcar como falha
             await supabase
               .from('whatsapp_queue')
               .update({ 
@@ -103,6 +121,14 @@ Deno.serve(async (req) => {
                 error_message: error?.message || data?.error || 'Falha após múltiplas tentativas'
               })
               .eq('id', msg.id);
+            
+            // Atualizar status do pedido para "erro" se tiver pedido_id
+            if (msg.pedido_id) {
+              await supabase
+                .from('pedidos')
+                .update({ mensagem_enviada: 'erro' })
+                .eq('id', msg.pedido_id);
+            }
             
             console.log(`Mensagem ${msg.id} falhou após ${newAttempts} tentativas`);
             failedCount++;
@@ -130,6 +156,14 @@ Deno.serve(async (req) => {
               attempts: msg.attempts + 1
             })
             .eq('id', msg.id);
+          
+          // Atualizar status do pedido para "enviada" se tiver pedido_id
+          if (msg.pedido_id) {
+            await supabase
+              .from('pedidos')
+              .update({ mensagem_enviada: 'enviada' })
+              .eq('id', msg.pedido_id);
+          }
           
           console.log(`Mensagem ${msg.id} enviada com sucesso`);
           successCount++;
