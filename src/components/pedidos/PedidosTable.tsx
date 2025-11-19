@@ -491,7 +491,7 @@ export function PedidosTable({
                   <EditableCell
                     value={pedido.mensagem_enviada}
                     type="select"
-                    options={["enviada", "erro", "pendente"]}
+                    options={["pendente", "enviada", "erro", "reenviar"]}
                     onSave={(value) => handleUpdateField(pedido.id, "mensagem_enviada", value)}
                     renderValue={(value) => (
                       <Badge variant={getBadgeVariant(value)}>{value}</Badge>

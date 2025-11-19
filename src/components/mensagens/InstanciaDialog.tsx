@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -22,6 +22,26 @@ export const InstanciaDialog = ({ open, onOpenChange, instancia, onSuccess }: In
   const [isActive, setIsActive] = useState(instancia?.is_active ?? true);
   const [ordem, setOrdem] = useState(instancia?.ordem || 0);
   const [isLoading, setIsLoading] = useState(false);
+
+  useEffect(() => {
+    if (open) {
+      if (instancia) {
+        setNome(instancia.nome || "");
+        setEvolutionApiUrl(instancia.evolution_api_url || "");
+        setEvolutionApiKey(instancia.evolution_api_key || "");
+        setEvolutionInstance(instancia.evolution_instance || "");
+        setIsActive(instancia.is_active ?? true);
+        setOrdem(instancia.ordem || 0);
+      } else {
+        setNome("");
+        setEvolutionApiUrl("");
+        setEvolutionApiKey("");
+        setEvolutionInstance("");
+        setIsActive(true);
+        setOrdem(0);
+      }
+    }
+  }, [open, instancia]);
 
   const handleSave = async () => {
     if (!nome || !evolutionApiUrl || !evolutionApiKey || !evolutionInstance) {
