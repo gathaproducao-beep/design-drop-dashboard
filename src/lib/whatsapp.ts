@@ -59,11 +59,42 @@ export const formatPhone = (phone: string): string => {
 };
 
 /**
- * Envia mensagem via Edge Function
+ * Adiciona mensagem à fila para envio assíncrono
  */
-export const sendWhatsappMessage = async (phone: string, message: string) => {
+export const queueWhatsappMessage = async (
+  phone: string, 
+  message: string,
+  scheduledAt?: Date
+) => {
+  try {
+    const { error } = await supabase
+      .from('whatsapp_queue')
+      .insert([{
+        phone,
+        message,
+        status: 'pending',
+        scheduled_at: scheduledAt ? scheduledAt.toISOString() : new Date().toISOString()
+      }]);
+    
+    if (error) throw error;
+    
+    return { success: true };
+  } catch (error: any) {
+    console.error('Error queueing WhatsApp message:', error);
+    throw error;
+  }
+};
+
+/**
+ * Envia mensagem diretamente via Edge Function (usado para testes)
+ */
+export const sendWhatsappMessage = async (
+  phone: string, 
+  message: string,
+  instanceId?: string
+) => {
   const { data, error } = await supabase.functions.invoke('send-whatsapp', {
-    body: { phone, message }
+    body: { phone, message, instance_id: instanceId }
   });
   
   if (error) {
