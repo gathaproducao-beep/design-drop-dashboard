@@ -17,6 +17,16 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
+import { Label } from "@/components/ui/label";
+import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 
 export default function Dashboard() {
   const [pedidos, setPedidos] = useState<any[]>([]);
@@ -31,6 +41,8 @@ export default function Dashboard() {
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [gerarFotoAuto, setGerarFotoAuto] = useState(true);
   const [importarFotosOpen, setImportarFotosOpen] = useState(false);
+  const [downloadDialogOpen, setDownloadDialogOpen] = useState(false);
+  const [tipoDownload, setTipoDownload] = useState<'aprovacao' | 'molde'>('molde');
 
   useEffect(() => {
     carregarPedidos();
@@ -73,17 +85,30 @@ export default function Dashboard() {
     }
   };
 
-  const handleDownloadMoldes = async () => {
-    const pedidosComMolde = pedidos.filter(p => 
-      selectedIds.has(p.id) && p.molde_producao
+  const handleDownloadClick = () => {
+    if (selectedIds.size === 0) {
+      toast.error("Selecione pelo menos um pedido");
+      return;
+    }
+    setDownloadDialogOpen(true);
+  };
+
+  const handleConfirmarDownload = async () => {
+    setDownloadDialogOpen(false);
+    
+    const campo = tipoDownload === 'aprovacao' ? 'foto_aprovacao' : 'molde_producao';
+    const label = tipoDownload === 'aprovacao' ? 'foto(s) de aprovação' : 'molde(s)';
+    
+    const pedidosComArquivos = pedidos.filter(p => 
+      selectedIds.has(p.id) && p[campo]
     );
     
-    if (pedidosComMolde.length === 0) {
-      toast.error("Nenhum molde encontrado nos pedidos selecionados");
+    if (pedidosComArquivos.length === 0) {
+      toast.error(`Nenhum ${label} encontrado nos pedidos selecionados`);
       return;
     }
     
-    const toastId = toast.loading("Baixando moldes...");
+    const toastId = toast.loading(`Baixando ${label}...`);
     
     try {
       const JSZip = (await import('jszip')).default;
@@ -91,28 +116,28 @@ export default function Dashboard() {
       
       let totalImagens = 0;
       
-      for (const pedido of pedidosComMolde) {
+      for (const pedido of pedidosComArquivos) {
         try {
           // Normalizar para array (compatibilidade com dados antigos)
-          const moldes = Array.isArray(pedido.molde_producao) 
-            ? pedido.molde_producao 
-            : [pedido.molde_producao];
+          const arquivos = Array.isArray(pedido[campo]) 
+            ? pedido[campo] 
+            : [pedido[campo]];
           
-          // Baixar cada imagem do molde
-          for (let i = 0; i < moldes.length; i++) {
-            const moldeUrl = moldes[i];
-            const response = await fetch(moldeUrl);
+          // Baixar cada arquivo
+          for (let i = 0; i < arquivos.length; i++) {
+            const arquivoUrl = arquivos[i];
+            const response = await fetch(arquivoUrl);
             const blob = await response.blob();
             
             // Nome: NumPedido_CodigoProduto_1.png, NumPedido_CodigoProduto_2.png, etc
-            const sufixo = moldes.length > 1 ? `_${i + 1}` : '';
+            const sufixo = arquivos.length > 1 ? `_${i + 1}` : '';
             const nomeArquivo = `${pedido.numero_pedido}_${pedido.codigo_produto}${sufixo}.png`;
             
             zip.file(nomeArquivo, blob);
             totalImagens++;
           }
         } catch (error) {
-          console.error(`Erro ao baixar molde ${pedido.numero_pedido}:`, error);
+          console.error(`Erro ao baixar arquivo do pedido ${pedido.numero_pedido}:`, error);
         }
       }
       
@@ -126,16 +151,16 @@ export default function Dashboard() {
       const url = URL.createObjectURL(zipBlob);
       const link = document.createElement('a');
       link.href = url;
-      link.download = `moldes_${new Date().toISOString().split('T')[0]}.zip`;
+      link.download = `${tipoDownload === 'aprovacao' ? 'fotos_aprovacao' : 'moldes'}_${new Date().toISOString().split('T')[0]}.zip`;
       document.body.appendChild(link);
       link.click();
       document.body.removeChild(link);
       URL.revokeObjectURL(url);
       
-      toast.success(`${totalImagens} imagem(ns) baixada(s)`, { id: toastId });
+      toast.success(`${totalImagens} ${label} baixado(s)`, { id: toastId });
     } catch (error) {
-      console.error("Erro ao criar ZIP:", error);
-      toast.error("Erro ao baixar moldes", { id: toastId });
+      console.error("Erro ao baixar arquivos:", error);
+      toast.error(`Erro ao baixar ${label}`, { id: toastId });
     }
   };
 
@@ -210,13 +235,11 @@ export default function Dashboard() {
                 <>
                   <Button
                     variant="outline"
-                    onClick={handleDownloadMoldes}
+                    onClick={handleDownloadClick}
                     className="bg-blue-50 hover:bg-blue-100 border-blue-200"
                   >
                     <Download className="mr-2 h-4 w-4" />
-                    Download Moldes ({
-                      pedidos.filter(p => selectedIds.has(p.id) && p.molde_producao).length
-                    })
+                    Baixar Arquivos ({selectedIds.size})
                   </Button>
                   <Button
                     variant="destructive"
@@ -365,6 +388,42 @@ export default function Dashboard() {
           onSuccess={carregarPedidos}
           gerarFotoAuto={gerarFotoAuto}
         />
+
+        <Dialog open={downloadDialogOpen} onOpenChange={setDownloadDialogOpen}>
+          <DialogContent>
+            <DialogHeader>
+              <DialogTitle>Selecionar Tipo de Download</DialogTitle>
+              <DialogDescription>
+                Escolha qual tipo de arquivo deseja baixar dos {selectedIds.size} pedidos selecionados
+              </DialogDescription>
+            </DialogHeader>
+            
+            <RadioGroup value={tipoDownload} onValueChange={(value) => setTipoDownload(value as 'aprovacao' | 'molde')}>
+              <div className="flex items-center space-x-2">
+                <RadioGroupItem value="aprovacao" id="aprovacao" />
+                <Label htmlFor="aprovacao" className="cursor-pointer">
+                  Foto de Aprovação
+                </Label>
+              </div>
+              <div className="flex items-center space-x-2">
+                <RadioGroupItem value="molde" id="molde" />
+                <Label htmlFor="molde" className="cursor-pointer">
+                  Molde de Produção
+                </Label>
+              </div>
+            </RadioGroup>
+
+            <DialogFooter>
+              <Button variant="outline" onClick={() => setDownloadDialogOpen(false)}>
+                Cancelar
+              </Button>
+              <Button onClick={handleConfirmarDownload}>
+                <Download className="h-4 w-4 mr-2" />
+                Baixar
+              </Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
       </div>
     </div>
   );
