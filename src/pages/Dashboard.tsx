@@ -43,10 +43,16 @@ export default function Dashboard() {
   const [importarFotosOpen, setImportarFotosOpen] = useState(false);
   const [downloadDialogOpen, setDownloadDialogOpen] = useState(false);
   const [tipoDownload, setTipoDownload] = useState<'aprovacao' | 'molde'>('molde');
+  const [paginaAtual, setPaginaAtual] = useState(1);
+  const [itensPorPagina, setItensPorPagina] = useState(50);
 
   useEffect(() => {
     carregarPedidos();
   }, []);
+
+  useEffect(() => {
+    setPaginaAtual(1);
+  }, [searchTerm, filterMensagem, filterLayout, filterDataInicio, filterDataFim]);
 
   const carregarPedidos = async () => {
     try {
@@ -165,24 +171,23 @@ export default function Dashboard() {
   };
 
   const handleAdicionarLinhas = async () => {
-    const numLinhas = 5; // Criar 5 linhas por padrão
     try {
-      const novasLinhas = Array.from({ length: numLinhas }, (_, i) => ({
-        numero_pedido: `NOVO-${Date.now()}-${i}`,
+      const novaLinha = {
+        numero_pedido: `NOVO-${Date.now()}`,
         nome_cliente: "",
         codigo_produto: "",
         data_pedido: new Date().toISOString().split('T')[0],
-      }));
+      };
 
-      const { error } = await supabase.from("pedidos").insert(novasLinhas);
+      const { error } = await supabase.from("pedidos").insert([novaLinha]);
       
       if (error) throw error;
       
-      toast.success(`${numLinhas} linha(s) adicionada(s)`);
+      toast.success("Linha adicionada");
       carregarPedidos();
     } catch (error) {
-      console.error("Erro ao adicionar linhas:", error);
-      toast.error("Erro ao adicionar linhas");
+      console.error("Erro ao adicionar linha:", error);
+      toast.error("Erro ao adicionar linha");
     }
   };
 
@@ -215,6 +220,11 @@ export default function Dashboard() {
 
     return matchSearch && matchMensagem && matchLayout && matchDataInicio && matchDataFim;
   });
+
+  const indexInicio = (paginaAtual - 1) * itensPorPagina;
+  const indexFim = indexInicio + itensPorPagina;
+  const pedidosPaginados = pedidosFiltrados.slice(indexInicio, indexFim);
+  const totalPaginas = Math.ceil(pedidosFiltrados.length / itensPorPagina);
 
   return (
     <div className="min-h-screen bg-background">
@@ -350,8 +360,54 @@ export default function Dashboard() {
           </div>
         </div>
 
+        <div className="flex items-center justify-between mb-4 gap-4 bg-muted/30 p-4 rounded-lg border">
+          <div className="flex items-center gap-4">
+            <span className="text-sm text-muted-foreground">
+              Exibindo {pedidosFiltrados.length > 0 ? indexInicio + 1 : 0}-{Math.min(indexFim, pedidosFiltrados.length)} de {pedidosFiltrados.length} pedidos
+            </span>
+            <Select 
+              value={itensPorPagina.toString()} 
+              onValueChange={(v) => {
+                setItensPorPagina(Number(v));
+                setPaginaAtual(1);
+              }}
+            >
+              <SelectTrigger className="w-[140px]">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="30">30 por página</SelectItem>
+                <SelectItem value="50">50 por página</SelectItem>
+                <SelectItem value="100">100 por página</SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
+          
+          <div className="flex items-center gap-2">
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => setPaginaAtual(p => Math.max(1, p - 1))}
+              disabled={paginaAtual === 1}
+            >
+              Anterior
+            </Button>
+            <span className="text-sm font-medium">
+              Página {paginaAtual} de {totalPaginas || 1}
+            </span>
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => setPaginaAtual(p => Math.min(totalPaginas, p + 1))}
+              disabled={paginaAtual === totalPaginas || totalPaginas === 0}
+            >
+              Próxima
+            </Button>
+          </div>
+        </div>
+
         <PedidosTable
-          pedidos={pedidosFiltrados}
+          pedidos={pedidosPaginados}
           loading={loading}
           onRefresh={carregarPedidos}
           selectedIds={selectedIds}
@@ -366,7 +422,7 @@ export default function Dashboard() {
             size="sm"
           >
             <Plus className="mr-2 h-4 w-4" />
-            Adicionar linhas
+            Adicionar linha
           </Button>
         </div>
 
