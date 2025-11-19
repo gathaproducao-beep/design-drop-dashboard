@@ -306,6 +306,7 @@ export type Database = {
           instance_id: string | null
           max_attempts: number | null
           message: string
+          pedido_id: string | null
           phone: string
           scheduled_at: string | null
           sent_at: string | null
@@ -320,6 +321,7 @@ export type Database = {
           instance_id?: string | null
           max_attempts?: number | null
           message: string
+          pedido_id?: string | null
           phone: string
           scheduled_at?: string | null
           sent_at?: string | null
@@ -334,6 +336,7 @@ export type Database = {
           instance_id?: string | null
           max_attempts?: number | null
           message?: string
+          pedido_id?: string | null
           phone?: string
           scheduled_at?: string | null
           sent_at?: string | null
@@ -346,6 +349,13 @@ export type Database = {
             columns: ["instance_id"]
             isOneToOne: false
             referencedRelation: "whatsapp_instances"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "whatsapp_queue_pedido_id_fkey"
+            columns: ["pedido_id"]
+            isOneToOne: false
+            referencedRelation: "pedidos"
             referencedColumns: ["id"]
           },
         ]
