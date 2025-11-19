@@ -261,11 +261,102 @@ export type Database = {
         }
         Relationships: []
       }
+      whatsapp_instances: {
+        Row: {
+          created_at: string | null
+          evolution_api_key: string
+          evolution_api_url: string
+          evolution_instance: string
+          id: string
+          is_active: boolean | null
+          nome: string
+          ordem: number | null
+          updated_at: string | null
+        }
+        Insert: {
+          created_at?: string | null
+          evolution_api_key: string
+          evolution_api_url: string
+          evolution_instance: string
+          id?: string
+          is_active?: boolean | null
+          nome: string
+          ordem?: number | null
+          updated_at?: string | null
+        }
+        Update: {
+          created_at?: string | null
+          evolution_api_key?: string
+          evolution_api_url?: string
+          evolution_instance?: string
+          id?: string
+          is_active?: boolean | null
+          nome?: string
+          ordem?: number | null
+          updated_at?: string | null
+        }
+        Relationships: []
+      }
+      whatsapp_queue: {
+        Row: {
+          attempts: number | null
+          created_at: string | null
+          error_message: string | null
+          id: string
+          instance_id: string | null
+          max_attempts: number | null
+          message: string
+          phone: string
+          scheduled_at: string | null
+          sent_at: string | null
+          status: string | null
+          updated_at: string | null
+        }
+        Insert: {
+          attempts?: number | null
+          created_at?: string | null
+          error_message?: string | null
+          id?: string
+          instance_id?: string | null
+          max_attempts?: number | null
+          message: string
+          phone: string
+          scheduled_at?: string | null
+          sent_at?: string | null
+          status?: string | null
+          updated_at?: string | null
+        }
+        Update: {
+          attempts?: number | null
+          created_at?: string | null
+          error_message?: string | null
+          id?: string
+          instance_id?: string | null
+          max_attempts?: number | null
+          message?: string
+          phone?: string
+          scheduled_at?: string | null
+          sent_at?: string | null
+          status?: string | null
+          updated_at?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "whatsapp_queue_instance_id_fkey"
+            columns: ["instance_id"]
+            isOneToOne: false
+            referencedRelation: "whatsapp_instances"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       whatsapp_settings: {
         Row: {
           auto_send_enabled: boolean
           created_at: string | null
           default_instance: string
+          delay_maximo: number | null
+          delay_minimo: number | null
           id: string
           test_phone: string | null
           updated_at: string | null
@@ -274,6 +365,8 @@ export type Database = {
           auto_send_enabled?: boolean
           created_at?: string | null
           default_instance?: string
+          delay_maximo?: number | null
+          delay_minimo?: number | null
           id?: string
           test_phone?: string | null
           updated_at?: string | null
@@ -282,6 +375,8 @@ export type Database = {
           auto_send_enabled?: boolean
           created_at?: string | null
           default_instance?: string
+          delay_maximo?: number | null
+          delay_minimo?: number | null
           id?: string
           test_phone?: string | null
           updated_at?: string | null

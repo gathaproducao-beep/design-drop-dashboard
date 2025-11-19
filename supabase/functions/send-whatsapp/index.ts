@@ -1,4 +1,5 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
+import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -8,6 +9,7 @@ const corsHeaders = {
 interface SendWhatsappRequest {
   phone: string;
   message: string;
+  instance_id?: string;
 }
 
 serve(async (req) => {
@@ -17,128 +19,113 @@ serve(async (req) => {
   }
 
   try {
-    // Validar método
     if (req.method !== 'POST') {
       return new Response(
-        JSON.stringify({ 
-          success: false, 
-          error: 'Método não permitido. Use POST.' 
-        }),
-        { 
-          status: 405, 
-          headers: { ...corsHeaders, 'Content-Type': 'application/json' } 
-        }
+        JSON.stringify({ error: 'Método não permitido' }),
+        { status: 405, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
       );
     }
 
-    // Obter dados da requisição
-    const { phone, message }: SendWhatsappRequest = await req.json();
+    const { phone, message, instance_id }: SendWhatsappRequest = await req.json();
 
-    // Validar campos obrigatórios
+    console.log('Recebida requisição de envio WhatsApp:', { phone, instance_id });
+
     if (!phone || !message) {
-      console.error('Validação falhou:', { phone: !!phone, message: !!message });
       return new Response(
-        JSON.stringify({ 
-          success: false, 
-          error: 'Telefone e mensagem são obrigatórios' 
-        }),
-        { 
-          status: 400, 
-          headers: { ...corsHeaders, 'Content-Type': 'application/json' } 
-        }
+        JSON.stringify({ error: 'Telefone e mensagem são obrigatórios' }),
+        { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
       );
     }
 
-    // Obter configurações dos secrets
-    const EVOLUTION_API_URL = Deno.env.get('EVOLUTION_API_URL');
-    const EVOLUTION_API_KEY = Deno.env.get('EVOLUTION_API_KEY');
-    const EVOLUTION_INSTANCE = Deno.env.get('EVOLUTION_INSTANCE');
+    // Inicializar cliente Supabase
+    const supabaseUrl = Deno.env.get('SUPABASE_URL')!;
+    const supabaseServiceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
+    const supabase = createClient(supabaseUrl, supabaseServiceKey);
 
-    if (!EVOLUTION_API_URL || !EVOLUTION_API_KEY || !EVOLUTION_INSTANCE) {
-      console.error('Secrets não configurados');
+    // Buscar instâncias ativas do banco
+    let instanceQuery = supabase
+      .from('whatsapp_instances')
+      .select('*')
+      .eq('is_active', true)
+      .order('ordem', { ascending: true });
+
+    if (instance_id) {
+      instanceQuery = instanceQuery.eq('id', instance_id);
+    }
+
+    const { data: instances, error: instanceError } = await instanceQuery;
+
+    if (instanceError || !instances || instances.length === 0) {
+      console.error('Erro ao buscar instâncias:', instanceError);
       return new Response(
-        JSON.stringify({ 
-          success: false, 
-          error: 'Configuração da Evolution API incompleta' 
-        }),
-        { 
-          status: 500, 
-          headers: { ...corsHeaders, 'Content-Type': 'application/json' } 
-        }
+        JSON.stringify({ error: 'Nenhuma instância WhatsApp ativa encontrada' }),
+        { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
       );
     }
 
-    // Construir URL da Evolution API
-    const evolutionUrl = `${EVOLUTION_API_URL}/message/sendText/${EVOLUTION_INSTANCE}`;
-    
-    console.log('Enviando mensagem via Evolution API:', {
-      url: evolutionUrl,
-      phone: phone,
-      messageLength: message.length
-    });
+    console.log(`Encontradas ${instances.length} instâncias ativas`);
 
-    // Fazer requisição para a Evolution API
-    const evolutionResponse = await fetch(evolutionUrl, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'apikey': EVOLUTION_API_KEY,
-      },
-      body: JSON.stringify({
-        number: phone,
-        text: message,
-      }),
-    });
+    // Tentar enviar por cada instância até conseguir
+    let lastError = null;
+    for (const instance of instances) {
+      try {
+        console.log(`Tentando enviar pela instância: ${instance.nome} (${instance.evolution_instance})`);
 
-    const evolutionData = await evolutionResponse.json();
+        const evolutionUrl = `${instance.evolution_api_url}/message/sendText/${instance.evolution_instance}`;
+        
+        const response = await fetch(evolutionUrl, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'apikey': instance.evolution_api_key,
+          },
+          body: JSON.stringify({
+            number: phone,
+            text: message,
+          }),
+        });
 
-    // Verificar resposta da Evolution API
-    if (!evolutionResponse.ok) {
-      console.error('Erro na Evolution API:', {
-        status: evolutionResponse.status,
-        data: evolutionData
-      });
-      
-      return new Response(
-        JSON.stringify({ 
-          success: false, 
-          error: 'Erro ao enviar mensagem via Evolution API',
-          details: evolutionData
-        }),
-        { 
-          status: evolutionResponse.status, 
-          headers: { ...corsHeaders, 'Content-Type': 'application/json' } 
+        const data = await response.json();
+
+        if (!response.ok) {
+          console.error(`Erro na instância ${instance.nome}:`, data);
+          lastError = data;
+          continue; // Tenta próxima instância
         }
-      );
+
+        console.log(`Mensagem enviada com sucesso pela instância: ${instance.nome}`);
+        
+        return new Response(
+          JSON.stringify({ 
+            success: true, 
+            data,
+            instance_used: instance.nome 
+          }),
+          { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        );
+
+      } catch (error) {
+        console.error(`Erro ao enviar pela instância ${instance.nome}:`, error);
+        lastError = error;
+        continue; // Tenta próxima instância
+      }
     }
 
-    console.log('Mensagem enviada com sucesso:', evolutionData);
-
-    // Retornar sucesso
+    // Se chegou aqui, nenhuma instância conseguiu enviar
     return new Response(
       JSON.stringify({ 
-        success: true, 
-        data: evolutionData 
+        error: 'Falha ao enviar mensagem por todas as instâncias',
+        details: lastError 
       }),
-      { 
-        status: 200, 
-        headers: { ...corsHeaders, 'Content-Type': 'application/json' } 
-      }
+      { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
     );
 
   } catch (error) {
-    console.error('Erro interno na função send-whatsapp:', error);
-    
+    console.error('Erro interno:', error);
+    const errorMessage = error instanceof Error ? error.message : String(error);
     return new Response(
-      JSON.stringify({ 
-        success: false, 
-        error: 'Erro interno ao enviar mensagem via Evolution API',
-        details: error instanceof Error ? error.message : 'Erro desconhecido'
-      }),
-      { 
-        status: 500, 
-        headers: { ...corsHeaders, 'Content-Type': 'application/json' } 
-      }
+      JSON.stringify({ error: 'Erro interno do servidor', details: errorMessage }),
+      { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
     );
   }
 });
