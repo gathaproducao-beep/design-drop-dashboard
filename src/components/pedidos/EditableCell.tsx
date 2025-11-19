@@ -38,11 +38,17 @@ export function EditableCell({
     setEditing(false);
   };
 
+  const handleSelectChange = (newValue: string) => {
+    setTempValue(newValue);
+    onSave(newValue);
+    setEditing(false);
+  };
+
   if (editing) {
     return (
       <div className="flex items-center gap-2">
         {type === "select" ? (
-          <Select value={tempValue} onValueChange={setTempValue}>
+          <Select value={tempValue} onValueChange={handleSelectChange} open>
             <SelectTrigger className="h-8 w-32">
               <SelectValue />
             </SelectTrigger>
@@ -55,20 +61,22 @@ export function EditableCell({
             </SelectContent>
           </Select>
         ) : (
-          <Input
-            type={type}
-            value={tempValue}
-            onChange={(e) => setTempValue(e.target.value)}
-            className="h-8 w-32"
-            autoFocus
-          />
+          <>
+            <Input
+              type={type}
+              value={tempValue}
+              onChange={(e) => setTempValue(e.target.value)}
+              className="h-8 w-32"
+              autoFocus
+            />
+            <Button size="sm" variant="ghost" onClick={handleSave} className="h-8 w-8 p-0">
+              <Check className="h-4 w-4 text-green-600" />
+            </Button>
+            <Button size="sm" variant="ghost" onClick={handleCancel} className="h-8 w-8 p-0">
+              <X className="h-4 w-4 text-red-600" />
+            </Button>
+          </>
         )}
-        <Button size="sm" variant="ghost" onClick={handleSave} className="h-8 w-8 p-0">
-          <Check className="h-4 w-4 text-green-600" />
-        </Button>
-        <Button size="sm" variant="ghost" onClick={handleCancel} className="h-8 w-8 p-0">
-          <X className="h-4 w-4 text-red-600" />
-        </Button>
       </div>
     );
   }
