@@ -9,6 +9,7 @@ export function Navigation() {
     { to: "/", icon: LayoutDashboard, label: "Pedidos" },
     { to: "/mockups", icon: Image, label: "Mockups" },
     { to: "/mensagens", icon: MessageSquare, label: "Mensagens" },
+    { to: "/fila-whatsapp", icon: MessageSquare, label: "Fila de Envios" },
     { to: "/configuracoes-whatsapp", icon: Settings, label: "Configurações" },
   ];
 
