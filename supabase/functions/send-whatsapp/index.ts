@@ -10,6 +10,9 @@ interface SendWhatsappRequest {
   phone: string;
   message: string;
   instance_id?: string;
+  media_url?: string;
+  media_type?: 'image' | 'video' | 'document' | 'audio';
+  caption?: string;
 }
 
 /**
@@ -43,7 +46,7 @@ serve(async (req) => {
       );
     }
 
-    const { phone, message, instance_id }: SendWhatsappRequest = await req.json();
+    const { phone, message, instance_id, media_url, media_type, caption }: SendWhatsappRequest = await req.json();
 
     // Normalizar telefone (adicionar 55 se necessário)
     const normalizedPhone = normalizePhone(phone);
@@ -95,21 +98,48 @@ serve(async (req) => {
       try {
         console.log(`Tentando enviar pela instância: ${instance.nome} (${instance.evolution_instance})`);
 
-        const evolutionUrl = `${instance.evolution_api_url}/message/sendText/${instance.evolution_instance}`;
-        
-        const response = await fetch(evolutionUrl, {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            'apikey': instance.evolution_api_key,
-          },
-          body: JSON.stringify({
-            number: normalizedPhone,
-            text: message,
-          }),
-        });
+        let response;
+        let data;
 
-        const data = await response.json();
+        // Se tem mídia, enviar como mídia
+        if (media_url && media_type) {
+          console.log(`Enviando mídia: ${media_type} - ${media_url}`);
+          const mediaUrl = `${instance.evolution_api_url}/message/sendMedia/${instance.evolution_instance}`;
+          
+          response = await fetch(mediaUrl, {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+              'apikey': instance.evolution_api_key,
+            },
+            body: JSON.stringify({
+              number: normalizedPhone,
+              mediatype: media_type,
+              media: media_url,
+              caption: caption || message,
+            }),
+          });
+
+          data = await response.json();
+        } else {
+          // Enviar como texto
+          console.log(`Enviando texto: ${message}`);
+          const textUrl = `${instance.evolution_api_url}/message/sendText/${instance.evolution_instance}`;
+          
+          response = await fetch(textUrl, {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+              'apikey': instance.evolution_api_key,
+            },
+            body: JSON.stringify({
+              number: normalizedPhone,
+              text: message,
+            }),
+          });
+
+          data = await response.json();
+        }
 
         if (!response.ok) {
           console.error(`Erro na instância ${instance.nome}:`, data);

@@ -1,6 +1,24 @@
 import { supabase } from "@/integrations/supabase/client";
 
 /**
+ * Extrai URLs de imagem do Supabase Storage de uma mensagem
+ */
+const extractImageUrl = (message: string): { text: string, imageUrl: string | null } => {
+  // Regex para detectar URLs do Supabase Storage
+  const imageUrlRegex = /(https:\/\/[^\s]+\/storage\/v1\/object\/public\/[^\s]+\.(png|jpg|jpeg|webp|gif))/gi;
+  
+  const match = message.match(imageUrlRegex);
+  
+  if (match && match.length > 0) {
+    const imageUrl = match[0];
+    const textWithoutUrl = message.replace(imageUrl, '').trim();
+    return { text: textWithoutUrl, imageUrl };
+  }
+  
+  return { text: message, imageUrl: null };
+};
+
+/**
  * Substitui variáveis no template de mensagem
  */
 export const replaceVariables = (template: string, pedido: any) => {
@@ -85,15 +103,27 @@ export const queueWhatsappMessage = async (
   scheduledAt?: Date
 ) => {
   try {
+    // Extrair URL de imagem se houver
+    const { text, imageUrl } = extractImageUrl(message);
+    
+    const queueData: any = {
+      phone,
+      message: imageUrl ? text : message, // Se tem imagem, só texto vai pra message
+      pedido_id: pedidoId,
+      status: 'pending',
+      scheduled_at: scheduledAt ? scheduledAt.toISOString() : new Date().toISOString()
+    };
+    
+    // Se tem imagem, adicionar campos de mídia
+    if (imageUrl) {
+      queueData.media_url = imageUrl;
+      queueData.media_type = 'image';
+      queueData.caption = text; // O texto vira caption da imagem
+    }
+
     const { error } = await supabase
       .from('whatsapp_queue')
-      .insert([{
-        phone,
-        message,
-        pedido_id: pedidoId,
-        status: 'pending',
-        scheduled_at: scheduledAt ? scheduledAt.toISOString() : new Date().toISOString()
-      }]);
+      .insert([queueData]);
     
     if (error) throw error;
     
