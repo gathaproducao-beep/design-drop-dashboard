@@ -61,6 +61,7 @@ export function MockupEditor({ mockup, onClose, onSave }: MockupEditorProps) {
   const imageRef = useRef<HTMLImageElement>(null);
   const [scale, setScale] = useState<number>(1);
   const [scaleReady, setScaleReady] = useState(false);
+  const [canvasScales, setCanvasScales] = useState<Record<string, number>>({});
   
   const [editingArea, setEditingArea] = useState<Area | null>(null);
   const [showNewAreaForm, setShowNewAreaForm] = useState(false);
@@ -110,11 +111,23 @@ export function MockupEditor({ mockup, onClose, onSave }: MockupEditorProps) {
     const updateScale = () => {
       if (imageRef.current && imageRef.current.complete && imageRef.current.naturalWidth > 0) {
         const naturalWidth = imageRef.current.naturalWidth;
+        const naturalHeight = imageRef.current.naturalHeight;
         const renderedWidth = imageRef.current.width;
+        const renderedHeight = imageRef.current.height;
         const newScale = naturalWidth / renderedWidth;
         
         const canvas = canvases.find(c => c.id === activeCanvas);
-        console.log(`[Scale] Canvas: ${canvas?.nome}, Natural: ${naturalWidth}px, Rendered: ${renderedWidth}px, Scale: ${newScale}`);
+        console.log(`[Scale] Canvas: ${canvas?.nome}`);
+        console.log(`  - Natural: ${naturalWidth} x ${naturalHeight}px`);
+        console.log(`  - Rendered: ${renderedWidth} x ${renderedHeight}px`);
+        console.log(`  - Scale: ${newScale}`);
+        
+        // Armazenar escala específica deste canvas
+        setCanvasScales(prev => {
+          const updated = { ...prev, [activeCanvas]: newScale };
+          console.log(`  - Escalas armazenadas:`, updated);
+          return updated;
+        });
         
         setScale(newScale);
         setScaleReady(true); // Marcar escala como pronta
@@ -138,12 +151,18 @@ export function MockupEditor({ mockup, onClose, onSave }: MockupEditorProps) {
   }, [activeCanvas, canvases]);
 
   // Funções de conversão de coordenadas
-  const toRealCoordinates = (editorValue: number) => {
-    return Math.round(editorValue * scale);
+  const toRealCoordinates = (editorValue: number, canvasId?: string) => {
+    const scaleToUse = canvasId ? (canvasScales[canvasId] || scale) : scale;
+    const result = Math.round(editorValue * scaleToUse);
+    console.log(`[toReal] Editor:${editorValue} * Scale:${scaleToUse.toFixed(3)} = Real:${result}`);
+    return result;
   };
 
-  const toEditorCoordinates = (realValue: number) => {
-    return Math.round(realValue / scale);
+  const toEditorCoordinates = (realValue: number, canvasId?: string) => {
+    const scaleToUse = canvasId ? (canvasScales[canvasId] || scale) : scale;
+    const result = Math.round(realValue / scaleToUse);
+    console.log(`[toEditor] Real:${realValue} / Scale:${scaleToUse.toFixed(3)} = Editor:${result}`);
+    return result;
   };
 
   const carregarMockupsAprovacao = async () => {
@@ -198,7 +217,8 @@ export function MockupEditor({ mockup, onClose, onSave }: MockupEditorProps) {
 
   const carregarAreas = async (canvasId: string) => {
     const canvas = canvases.find(c => c.id === canvasId);
-    console.log(`[carregarAreas] Iniciando para canvas: ${canvas?.nome}, Scale: ${scale}`);
+    const canvasScale = canvasScales[canvasId] || scale;
+    console.log(`[carregarAreas] Iniciando para canvas: ${canvas?.nome}, Scale: ${canvasScale}`);
     
     try {
       const { data, error } = await (supabase as any)
@@ -217,16 +237,16 @@ export function MockupEditor({ mockup, onClose, onSave }: MockupEditorProps) {
         h: a.height 
       })));
       
-      // Converter coordenadas do banco (real) para editor (escalado)
+      // Converter coordenadas do banco (real) para editor (escalado) usando a escala ESPECÍFICA deste canvas
       const areasConvertidas = (data || []).map((area: Area) => ({
         ...area,
-        x: toEditorCoordinates(area.x),
-        y: toEditorCoordinates(area.y),
-        width: toEditorCoordinates(area.width),
-        height: toEditorCoordinates(area.height),
+        x: toEditorCoordinates(area.x, canvasId),
+        y: toEditorCoordinates(area.y, canvasId),
+        width: toEditorCoordinates(area.width, canvasId),
+        height: toEditorCoordinates(area.height, canvasId),
       }));
       
-      console.log(`[carregarAreas] Áreas convertidas para editor (escala ${scale}):`, areasConvertidas.map(a => ({ 
+      console.log(`[carregarAreas] Áreas convertidas para editor (escala ${canvasScale}):`, areasConvertidas.map(a => ({ 
         id: a.id?.substring(0, 8), 
         x: a.x, 
         y: a.y, 
@@ -253,6 +273,49 @@ export function MockupEditor({ mockup, onClose, onSave }: MockupEditorProps) {
       carregarCanvases();
     } catch (error) {
       toast.error("Erro ao adicionar canvas");
+    }
+  };
+
+  const handleDeleteCanvas = async (canvasId: string) => {
+    if (canvases.length <= 1) {
+      toast.error("Não é possível excluir o último canvas");
+      return;
+    }
+
+    const canvas = canvases.find(c => c.id === canvasId);
+    if (!confirm(`Tem certeza que deseja excluir o canvas "${canvas?.nome}"? Todas as áreas vinculadas serão excluídas também.`)) {
+      return;
+    }
+
+    try {
+      // Primeiro, excluir todas as áreas do canvas
+      await supabase
+        .from("mockup_areas")
+        .delete()
+        .eq("canvas_id", canvasId);
+      
+      // Depois, excluir o canvas
+      await supabase
+        .from("mockup_canvases")
+        .delete()
+        .eq("id", canvasId);
+      
+      toast.success("Canvas excluído com sucesso");
+      
+      // Se o canvas excluído era o ativo, mudar para o primeiro disponível
+      if (activeCanvas === canvasId) {
+        const remainingCanvases = canvases.filter(c => c.id !== canvasId);
+        if (remainingCanvases.length > 0) {
+          setActiveCanvas(remainingCanvases[0].id);
+        }
+      }
+      
+      // Recarregar mockup
+      carregarCanvases();
+      onSave();
+    } catch (error) {
+      console.error("Erro ao excluir canvas:", error);
+      toast.error("Erro ao excluir canvas");
     }
   };
 
@@ -288,16 +351,20 @@ export function MockupEditor({ mockup, onClose, onSave }: MockupEditorProps) {
     if (!activeCanvas) return;
 
     try {
-      // Converter coordenadas do editor (escalado) para real antes de salvar
+      // Converter coordenadas do editor (escalado) para real antes de salvar usando escala específica do canvas
       const areaReal = {
         ...newArea,
         canvas_id: activeCanvas,
         mockup_id: mockup.id,
-        x: toRealCoordinates(newArea.x || 0),
-        y: toRealCoordinates(newArea.y || 0),
-        width: toRealCoordinates(newArea.width || 0),
-        height: toRealCoordinates(newArea.height || 0),
+        x: toRealCoordinates(newArea.x || 0, activeCanvas),
+        y: toRealCoordinates(newArea.y || 0, activeCanvas),
+        width: toRealCoordinates(newArea.width || 0, activeCanvas),
+        height: toRealCoordinates(newArea.height || 0, activeCanvas),
       };
+      
+      console.log(`[handleAddArea] Canvas: ${activeCanvas}, Scale: ${canvasScales[activeCanvas]}`);
+      console.log(`[handleAddArea] Editor:`, { x: newArea.x, y: newArea.y, w: newArea.width, h: newArea.height });
+      console.log(`[handleAddArea] Real:`, { x: areaReal.x, y: areaReal.y, w: areaReal.width, h: areaReal.height });
       
       await (supabase as any).from("mockup_areas").insert([areaReal]);
       toast.success("Área adicionada");
@@ -310,14 +377,14 @@ export function MockupEditor({ mockup, onClose, onSave }: MockupEditorProps) {
 
   const handleUpdateArea = async (areaId: string, updates: Partial<Area>) => {
     try {
-      // Converter coordenadas do editor (escalado) para real antes de salvar
+      // Converter coordenadas do editor (escalado) para real antes de salvar usando escala específica do canvas
       const updatesReal: Partial<Area> = { ...updates };
-      if (updates.x !== undefined) updatesReal.x = toRealCoordinates(updates.x);
-      if (updates.y !== undefined) updatesReal.y = toRealCoordinates(updates.y);
-      if (updates.width !== undefined) updatesReal.width = toRealCoordinates(updates.width);
-      if (updates.height !== undefined) updatesReal.height = toRealCoordinates(updates.height);
+      if (updates.x !== undefined) updatesReal.x = toRealCoordinates(updates.x, activeCanvas);
+      if (updates.y !== undefined) updatesReal.y = toRealCoordinates(updates.y, activeCanvas);
+      if (updates.width !== undefined) updatesReal.width = toRealCoordinates(updates.width, activeCanvas);
+      if (updates.height !== undefined) updatesReal.height = toRealCoordinates(updates.height, activeCanvas);
       
-      console.log(`[handleUpdateArea] Scale: ${scale}, Editor:`, updates, `Real:`, updatesReal);
+      console.log(`[handleUpdateArea] Canvas: ${activeCanvas}, Scale: ${canvasScales[activeCanvas]}, Editor:`, updates, `Real:`, updatesReal);
       
       await (supabase as any)
         .from("mockup_areas")
@@ -445,14 +512,14 @@ export function MockupEditor({ mockup, onClose, onSave }: MockupEditorProps) {
         h: newArea.height,
       });
       
-      // Converter coordenadas do editor para real APENAS UMA VEZ
+      // Converter coordenadas do editor para real APENAS UMA VEZ usando escala específica do canvas
       const updates = {
         kind: newArea.kind,
         field_key: newArea.field_key,
-        x: toRealCoordinates(newArea.x!),
-        y: toRealCoordinates(newArea.y!),
-        width: toRealCoordinates(newArea.width!),
-        height: toRealCoordinates(newArea.height!),
+        x: toRealCoordinates(newArea.x!, activeCanvas),
+        y: toRealCoordinates(newArea.y!, activeCanvas),
+        width: toRealCoordinates(newArea.width!, activeCanvas),
+        height: toRealCoordinates(newArea.height!, activeCanvas),
         z_index: newArea.z_index,
         rotation: newArea.rotation,
         font_family: newArea.font_family,
@@ -464,13 +531,13 @@ export function MockupEditor({ mockup, onClose, onSave }: MockupEditorProps) {
         line_height: newArea.line_height,
       };
       
+      console.log(`[handleSaveEditArea] Canvas: ${activeCanvas}, Scale: ${canvasScales[activeCanvas]}`);
       console.log(`[handleSaveEditArea] Valores a salvar (real):`, {
         x: updates.x,
         y: updates.y,
         w: updates.width,
         h: updates.height,
       });
-      console.log(`[handleSaveEditArea] Scale usado: ${scale}`);
       
       // Salvar DIRETAMENTE no banco (não usar handleUpdateArea para evitar dupla conversão)
       const { error } = await supabase
@@ -505,10 +572,10 @@ export function MockupEditor({ mockup, onClose, onSave }: MockupEditorProps) {
         mockup_id: mockup.id,
         kind: area.kind,
         field_key: area.field_key,
-        x: toRealCoordinates(area.x + 20),
-        y: toRealCoordinates(area.y + 20),
-        width: toRealCoordinates(area.width),
-        height: toRealCoordinates(area.height),
+        x: toRealCoordinates(area.x + 20, activeCanvas),
+        y: toRealCoordinates(area.y + 20, activeCanvas),
+        width: toRealCoordinates(area.width, activeCanvas),
+        height: toRealCoordinates(area.height, activeCanvas),
         z_index: area.z_index,
         rotation: area.rotation || 0,
         font_family: area.font_family,
@@ -520,13 +587,13 @@ export function MockupEditor({ mockup, onClose, onSave }: MockupEditorProps) {
         line_height: area.line_height,
       };
       
+      console.log(`[handleDuplicateArea] Canvas: ${activeCanvas}, Scale: ${canvasScales[activeCanvas]}`);
       console.log(`[handleDuplicateArea] Área duplicada (real):`, {
         x: areaDuplicada.x,
         y: areaDuplicada.y,
         w: areaDuplicada.width,
         h: areaDuplicada.height,
       });
-      console.log(`[handleDuplicateArea] Scale usado: ${scale}`);
       
       await (supabase as any).from("mockup_areas").insert([areaDuplicada]);
       toast.success("Área duplicada");
@@ -619,7 +686,25 @@ export function MockupEditor({ mockup, onClose, onSave }: MockupEditorProps) {
       <Tabs value={activeCanvas} onValueChange={setActiveCanvas}>
         <TabsList>
           {canvases.map((c) => (
-            <TabsTrigger key={c.id} value={c.id}>{c.nome}</TabsTrigger>
+            <TabsTrigger key={c.id} value={c.id} className="relative group">
+              {c.nome}
+              <span className="ml-2 text-xs opacity-60">
+                (escala: {canvasScales[c.id]?.toFixed(2) || '?'})
+              </span>
+              {canvases.length > 1 && (
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  className="h-4 w-4 ml-2 opacity-0 group-hover:opacity-100 transition-opacity"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    handleDeleteCanvas(c.id);
+                  }}
+                >
+                  <Trash2 className="h-3 w-3 text-destructive" />
+                </Button>
+              )}
+            </TabsTrigger>
           ))}
         </TabsList>
 
