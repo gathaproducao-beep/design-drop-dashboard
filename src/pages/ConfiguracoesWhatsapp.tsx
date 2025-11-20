@@ -30,6 +30,7 @@ interface WhatsappSettings {
   auto_send_enabled: boolean;
   delay_minimo: number;
   delay_maximo: number;
+  envio_pausado: boolean;
 }
 
 interface MensagemWhatsapp {
@@ -55,6 +56,7 @@ const ConfiguracoesWhatsapp = () => {
   const [defaultInstance, setDefaultInstance] = useState("personalizado");
   const [testPhone, setTestPhone] = useState("");
   const [autoSendEnabled, setAutoSendEnabled] = useState(false);
+  const [envioPausado, setEnvioPausado] = useState(false);
   const [delayMinimo, setDelayMinimo] = useState(5);
   const [delayMaximo, setDelayMaximo] = useState(15);
   const [testeDialogOpen, setTesteDialogOpen] = useState(false);
@@ -112,6 +114,7 @@ const ConfiguracoesWhatsapp = () => {
       setDefaultInstance(settings.default_instance);
       setTestPhone(settings.test_phone || "");
       setAutoSendEnabled(settings.auto_send_enabled);
+      setEnvioPausado(settings.envio_pausado || false);
       setDelayMinimo(settings.delay_minimo || 5);
       setDelayMaximo(settings.delay_maximo || 15);
     }
@@ -193,6 +196,7 @@ const ConfiguracoesWhatsapp = () => {
       default_instance: defaultInstance,
       test_phone: testPhone || null,
       auto_send_enabled: autoSendEnabled,
+      envio_pausado: envioPausado,
       delay_minimo: delayMinimo,
       delay_maximo: delayMaximo,
     });
@@ -286,6 +290,47 @@ const ConfiguracoesWhatsapp = () => {
               <p className="text-sm text-muted-foreground">
                 O sistema escolherá um tempo aleatório entre {delayMinimo}s e {delayMaximo}s para evitar padrões detectáveis
               </p>
+            </CardContent>
+          </Card>
+
+          {/* Controle de Pausa */}
+          <Card className={envioPausado ? "border-destructive" : ""}>
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2">
+                <AlertCircle className={`h-5 w-5 ${envioPausado ? "text-destructive" : ""}`} />
+                Controle de Envio
+              </CardTitle>
+              <CardDescription>
+                {envioPausado 
+                  ? "⏸️ Envio pausado - Nenhuma mensagem será enviada até reativar"
+                  : "▶️ Envio ativo - Mensagens na fila serão processadas normalmente"
+                }
+              </CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              <div className="flex items-center justify-between">
+                <div className="space-y-1">
+                  <Label htmlFor="pausar-envio" className="text-base">
+                    Pausar Envio de Mensagens
+                  </Label>
+                  <p className="text-sm text-muted-foreground">
+                    Pausa imediatamente o processamento da fila. Use em caso de emergência ou problemas.
+                  </p>
+                </div>
+                <Switch
+                  id="pausar-envio"
+                  checked={envioPausado}
+                  onCheckedChange={setEnvioPausado}
+                />
+              </div>
+              {envioPausado && (
+                <div className="bg-destructive/10 border border-destructive/20 rounded-lg p-4">
+                  <p className="text-sm text-destructive font-medium">
+                    ⚠️ Atenção: Todas as mensagens na fila estão pausadas. 
+                    Nenhuma mensagem será enviada até você desativar esta opção.
+                  </p>
+                </div>
+              )}
             </CardContent>
           </Card>
 
