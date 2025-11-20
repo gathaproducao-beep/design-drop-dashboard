@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import {
   Dialog,
   DialogContent,
@@ -37,6 +37,22 @@ export function EditarPedidoDialog({
     pasta_drive_url: pedido?.pasta_drive_url || "",
   });
   const [saving, setSaving] = useState(false);
+
+  // Sincronizar formData quando o pedido mudar
+  useEffect(() => {
+    if (pedido) {
+      setFormData({
+        numero_pedido: pedido.numero_pedido || "",
+        nome_cliente: pedido.nome_cliente || "",
+        codigo_produto: pedido.codigo_produto || "",
+        telefone: pedido.telefone || "",
+        data_pedido: pedido.data_pedido || "",
+        data_impressao: pedido.data_impressao || "",
+        observacao: pedido.observacao || "",
+        pasta_drive_url: pedido.pasta_drive_url || "",
+      });
+    }
+  }, [pedido]);
 
   const handleSave = async () => {
     if (!formData.numero_pedido || !formData.nome_cliente || !formData.codigo_produto) {
