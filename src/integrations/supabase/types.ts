@@ -559,6 +559,34 @@ export type Database = {
       [_ in never]: never
     }
     Functions: {
+      get_and_lock_pending_messages: {
+        Args: { batch_size: number; check_time: string }
+        Returns: {
+          attempts: number | null
+          cancelled_at: string | null
+          caption: string | null
+          created_at: string | null
+          error_message: string | null
+          id: string
+          instance_id: string | null
+          max_attempts: number | null
+          media_type: string | null
+          media_url: string | null
+          message: string
+          pedido_id: string | null
+          phone: string
+          scheduled_at: string | null
+          sent_at: string | null
+          status: string | null
+          updated_at: string | null
+        }[]
+        SetofOptions: {
+          from: "*"
+          to: "whatsapp_queue"
+          isOneToOne: false
+          isSetofReturn: true
+        }
+      }
       is_admin: { Args: { check_user_id: string }; Returns: boolean }
       user_has_permission: {
         Args: { check_user_id: string; permission_code: string }
