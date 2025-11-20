@@ -17,6 +17,7 @@ export function MockupsList({ mockups, loading, onEdit, onRefresh }: MockupsList
   const [deleting, setDeleting] = useState<string | null>(null);
   const [duplicating, setDuplicating] = useState<string | null>(null);
   const [canvasImages, setCanvasImages] = useState<Record<string, string>>({});
+  const [mockupsVinculados, setMockupsVinculados] = useState<Record<string, any>>({});
 
   useEffect(() => {
     const loadCanvasImages = async () => {
@@ -41,8 +42,29 @@ export function MockupsList({ mockups, loading, onEdit, onRefresh }: MockupsList
       setCanvasImages(images);
     };
 
+    const loadMockupsVinculados = async () => {
+      const vinculados: Record<string, any> = {};
+      
+      for (const mockup of mockups) {
+        if (mockup.mockup_aprovacao_vinculado_id) {
+          const { data: mockupVinculado } = await supabase
+            .from("mockups")
+            .select("codigo_mockup")
+            .eq("id", mockup.mockup_aprovacao_vinculado_id)
+            .single();
+          
+          if (mockupVinculado) {
+            vinculados[mockup.id] = mockupVinculado;
+          }
+        }
+      }
+      
+      setMockupsVinculados(vinculados);
+    };
+
     if (mockups.length > 0) {
       loadCanvasImages();
+      loadMockupsVinculados();
     }
   }, [mockups]);
 
@@ -195,6 +217,11 @@ export function MockupsList({ mockups, loading, onEdit, onRefresh }: MockupsList
                 {mockup.tipo}
               </Badge>
             </div>
+            {mockupsVinculados[mockup.id] && (
+              <p className="text-xs text-muted-foreground mt-2">
+                Vinculado: {mockupsVinculados[mockup.id].codigo_mockup}
+              </p>
+            )}
           </CardHeader>
           <CardContent>
             <div className="relative w-full h-48 bg-muted rounded-lg overflow-hidden mb-4 flex items-center justify-center">
