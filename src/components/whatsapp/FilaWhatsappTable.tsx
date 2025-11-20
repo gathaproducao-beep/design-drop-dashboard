@@ -58,11 +58,18 @@ export function FilaWhatsappTable() {
   });
 
   const handleProcessQueue = async () => {
+    if (isProcessing) return; // Prevenção extra contra cliques múltiplos
+    
     setIsProcessing(true);
     try {
       const { error } = await supabase.functions.invoke('process-whatsapp-queue');
       if (error) throw error;
+      
       toast.success("Fila processada com sucesso!");
+      
+      // Aguardar 2 segundos antes de permitir novo processamento
+      await new Promise(resolve => setTimeout(resolve, 2000));
+      
       refetch();
     } catch (error) {
       console.error("Erro ao processar fila:", error);
