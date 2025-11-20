@@ -38,14 +38,12 @@ Deno.serve(async (req) => {
 
     console.log(`Delay configurado: ${delayMinimo}s - ${delayMaximo}s`);
 
-    // 2. Buscar mensagens pendentes
+    // 2. Buscar mensagens pendentes com lock atômico (previne race conditions)
     const { data: messages, error: messagesError } = await supabase
-      .from('whatsapp_queue')
-      .select('id, phone, message, attempts, max_attempts, pedido_id, media_url, media_type, caption, status, scheduled_at')
-      .eq('status', 'pending')
-      .lte('scheduled_at', new Date().toISOString())
-      .order('created_at', { ascending: true })
-      .limit(10); // Processar no máximo 10 por execução
+      .rpc('get_and_lock_pending_messages', {
+        batch_size: 10,
+        check_time: new Date().toISOString()
+      });
 
     if (messagesError) {
       console.error('Erro ao buscar mensagens:', messagesError);
@@ -90,6 +88,19 @@ Deno.serve(async (req) => {
     // 4. Processar cada mensagem
     for (const msg of messages) {
       try {
+        // Verificação dupla: confirmar que a mensagem ainda está pendente
+        const { data: currentMsg } = await supabase
+          .from('whatsapp_queue')
+          .select('status')
+          .eq('id', msg.id)
+          .single();
+
+        // Se já foi processada, pular
+        if (currentMsg?.status !== 'pending') {
+          console.log(`Mensagem ${msg.id} já processada, pulando...`);
+          continue;
+        }
+
         // Marcar como processando
         await supabase
           .from('whatsapp_queue')
