@@ -244,17 +244,46 @@ export async function generateMockupsForPedido(
               sourceY = (clientImg.naturalHeight - sourceHeight) / 2;
             }
 
-            ctx.drawImage(
-              clientImg,
-              sourceX,
-              sourceY,
-              sourceWidth,
-              sourceHeight,
-              area.x,
-              area.y,
-              area.width,
-              area.height
-            );
+            // Aplicar rotação se houver
+            if (area.rotation && area.rotation !== 0) {
+              ctx.save();
+              
+              // Transladar para o centro da área
+              const centerX = area.x + area.width / 2;
+              const centerY = area.y + area.height / 2;
+              ctx.translate(centerX, centerY);
+              
+              // Rotacionar (converter de graus para radianos)
+              ctx.rotate((area.rotation * Math.PI) / 180);
+              
+              // Desenhar com coordenadas ajustadas (relativas ao centro)
+              ctx.drawImage(
+                clientImg,
+                sourceX,
+                sourceY,
+                sourceWidth,
+                sourceHeight,
+                -area.width / 2,
+                -area.height / 2,
+                area.width,
+                area.height
+              );
+              
+              ctx.restore();
+            } else {
+              // Desenhar normalmente sem rotação
+              ctx.drawImage(
+                clientImg,
+                sourceX,
+                sourceY,
+                sourceWidth,
+                sourceHeight,
+                area.x,
+                area.y,
+                area.width,
+                area.height
+              );
+            }
           } else if (area.kind === "text") {
             let textValue = "";
             switch (area.field_key) {
@@ -274,15 +303,38 @@ export async function generateMockupsForPedido(
 
             if (textValue) {
               ctx.save();
-              ctx.font = `${area.font_weight || "normal"} ${area.font_size || 16}px ${area.font_family || "Arial"}`;
-              ctx.fillStyle = area.color || "#000000";
-              ctx.textAlign = (area.text_align || "left") as CanvasTextAlign;
               
-              let textX = area.x;
-              if (area.text_align === "center") textX = area.x + area.width / 2;
-              else if (area.text_align === "right") textX = area.x + area.width;
+              // Aplicar rotação se houver
+              if (area.rotation && area.rotation !== 0) {
+                const centerX = area.x + area.width / 2;
+                const centerY = area.y + area.height / 2;
+                ctx.translate(centerX, centerY);
+                ctx.rotate((area.rotation * Math.PI) / 180);
+                
+                // Configurar texto
+                ctx.font = `${area.font_weight || "normal"} ${area.font_size || 16}px ${area.font_family || "Arial"}`;
+                ctx.fillStyle = area.color || "#000000";
+                ctx.textAlign = (area.text_align || "left") as CanvasTextAlign;
+                
+                // Ajustar coordenadas do texto relativas ao centro
+                let textX = -area.width / 2;
+                if (area.text_align === "center") textX = 0;
+                else if (area.text_align === "right") textX = area.width / 2;
+                
+                ctx.fillText(textValue, textX, (area.font_size || 16) / 3);
+              } else {
+                // Desenhar texto normalmente sem rotação
+                ctx.font = `${area.font_weight || "normal"} ${area.font_size || 16}px ${area.font_family || "Arial"}`;
+                ctx.fillStyle = area.color || "#000000";
+                ctx.textAlign = (area.text_align || "left") as CanvasTextAlign;
+                
+                let textX = area.x;
+                if (area.text_align === "center") textX = area.x + area.width / 2;
+                else if (area.text_align === "right") textX = area.x + area.width;
 
-              ctx.fillText(textValue, textX, area.y + (area.font_size || 16));
+                ctx.fillText(textValue, textX, area.y + (area.font_size || 16));
+              }
+              
               ctx.restore();
             }
           }
