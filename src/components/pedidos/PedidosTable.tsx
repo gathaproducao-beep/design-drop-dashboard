@@ -334,7 +334,13 @@ export function PedidosTable({
         await supabase.storage.from("mockup-images").remove(fotosParaDeletar);
       }
 
-      // Deletar pedido
+      // Primeiro excluir mensagens da fila do WhatsApp relacionadas ao pedido
+      await supabase
+        .from("whatsapp_queue")
+        .delete()
+        .eq("pedido_id", pedidoToDelete);
+
+      // Depois deletar o pedido
       const { error } = await (supabase as any)
         .from("pedidos")
         .delete()

@@ -75,10 +75,19 @@ export default function Dashboard() {
     if (selectedIds.size === 0) return;
     
     try {
+      const pedidoIds = Array.from(selectedIds);
+      
+      // Primeiro excluir mensagens da fila do WhatsApp relacionadas aos pedidos
+      await supabase
+        .from("whatsapp_queue")
+        .delete()
+        .in("pedido_id", pedidoIds);
+      
+      // Depois excluir os pedidos
       const { error } = await supabase
         .from("pedidos")
         .delete()
-        .in("id", Array.from(selectedIds));
+        .in("id", pedidoIds);
 
       if (error) throw error;
       
