@@ -27,11 +27,24 @@ Deno.serve(async (req) => {
     const supabaseServiceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
     const supabase = createClient(supabaseUrl, supabaseServiceKey);
 
-    // 1. Buscar configurações de delay
+    // 1. Buscar configurações de delay e verificar se o envio está pausado
     const { data: settings } = await supabase
       .from('whatsapp_settings')
-      .select('delay_minimo, delay_maximo')
+      .select('delay_minimo, delay_maximo, envio_pausado')
       .single();
+
+    // Verificar se o envio está pausado
+    if (settings?.envio_pausado) {
+      console.log('⏸️ Envio pausado - processamento cancelado');
+      return new Response(
+        JSON.stringify({ 
+          success: true, 
+          message: 'Envio pausado',
+          processed: 0 
+        }),
+        { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      );
+    }
 
     const delayMinimo = settings?.delay_minimo || 5;
     const delayMaximo = settings?.delay_maximo || 15;

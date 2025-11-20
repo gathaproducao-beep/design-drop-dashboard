@@ -528,6 +528,7 @@ export type Database = {
           default_instance: string
           delay_maximo: number | null
           delay_minimo: number | null
+          envio_pausado: boolean
           id: string
           test_phone: string | null
           updated_at: string | null
@@ -538,6 +539,7 @@ export type Database = {
           default_instance?: string
           delay_maximo?: number | null
           delay_minimo?: number | null
+          envio_pausado?: boolean
           id?: string
           test_phone?: string | null
           updated_at?: string | null
@@ -548,6 +550,7 @@ export type Database = {
           default_instance?: string
           delay_maximo?: number | null
           delay_minimo?: number | null
+          envio_pausado?: boolean
           id?: string
           test_phone?: string | null
           updated_at?: string | null
