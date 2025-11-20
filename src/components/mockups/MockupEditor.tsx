@@ -60,6 +60,7 @@ export function MockupEditor({ mockup, onClose, onSave }: MockupEditorProps) {
   const canvasRef = useRef<HTMLDivElement>(null);
   const imageRef = useRef<HTMLImageElement>(null);
   const [scale, setScale] = useState<number>(1);
+  const [scaleReady, setScaleReady] = useState(false);
   
   const [editingArea, setEditingArea] = useState<Area | null>(null);
   const [showNewAreaForm, setShowNewAreaForm] = useState(false);
@@ -95,33 +96,43 @@ export function MockupEditor({ mockup, onClose, onSave }: MockupEditorProps) {
   }, []);
 
   useEffect(() => {
-    // Carregar áreas quando activeCanvas estiver pronto e scale calculado (>= 1)
-    if (activeCanvas && scale >= 1) {
-      console.log(`[useEffect] Carregando áreas com escala: ${scale}`);
+    // Carregar áreas SOMENTE quando activeCanvas estiver pronto E escala tiver sido calculada
+    if (activeCanvas && scaleReady && scale > 0) {
+      console.log(`[useEffect] Carregando áreas para canvas ${activeCanvas} com escala: ${scale}`);
       carregarAreas(activeCanvas);
     }
-  }, [activeCanvas, scale]); // Adicionar scale como dependência
+  }, [activeCanvas, scale, scaleReady]);
 
   // Calcular escala quando a imagem carregar
   useEffect(() => {
+    setScaleReady(false); // Marcar escala como não pronta ao trocar canvas
+    
     const updateScale = () => {
-      if (imageRef.current) {
+      if (imageRef.current && imageRef.current.complete && imageRef.current.naturalWidth > 0) {
         const naturalWidth = imageRef.current.naturalWidth;
         const renderedWidth = imageRef.current.width;
         const newScale = naturalWidth / renderedWidth;
+        
+        const canvas = canvases.find(c => c.id === activeCanvas);
+        console.log(`[Scale] Canvas: ${canvas?.nome}, Natural: ${naturalWidth}px, Rendered: ${renderedWidth}px, Scale: ${newScale}`);
+        
         setScale(newScale);
-        console.log(`[Scale] Scale anterior: ${scale}, novo scale: ${newScale}`);
-        console.log(`[Scale] Escala calculada: ${newScale} (Natural: ${naturalWidth}px, Renderizado: ${renderedWidth}px)`);
+        setScaleReady(true); // Marcar escala como pronta
       }
     };
 
     const img = imageRef.current;
     if (img) {
-      if (img.complete) {
+      if (img.complete && img.naturalWidth > 0) {
         updateScale();
       } else {
         img.addEventListener('load', updateScale);
-        return () => img.removeEventListener('load', updateScale);
+        // Adicionar timeout de segurança
+        const timeout = setTimeout(updateScale, 1000);
+        return () => {
+          img.removeEventListener('load', updateScale);
+          clearTimeout(timeout);
+        };
       }
     }
   }, [activeCanvas, canvases]);
@@ -186,7 +197,9 @@ export function MockupEditor({ mockup, onClose, onSave }: MockupEditorProps) {
   };
 
   const carregarAreas = async (canvasId: string) => {
-    console.log(`[carregarAreas] Iniciando com scale: ${scale}`);
+    const canvas = canvases.find(c => c.id === canvasId);
+    console.log(`[carregarAreas] Iniciando para canvas: ${canvas?.nome}, Scale: ${scale}`);
+    
     try {
       const { data, error } = await (supabase as any)
         .from("mockup_areas")
@@ -196,7 +209,7 @@ export function MockupEditor({ mockup, onClose, onSave }: MockupEditorProps) {
 
       if (error) throw error;
       
-      console.log(`[carregarAreas] Áreas do banco (real):`, data?.map(a => ({ 
+      console.log(`[carregarAreas] Áreas do banco (coordenadas reais):`, data?.map(a => ({ 
         id: a.id.substring(0, 8), 
         x: a.x, 
         y: a.y, 
@@ -213,7 +226,7 @@ export function MockupEditor({ mockup, onClose, onSave }: MockupEditorProps) {
         height: toEditorCoordinates(area.height),
       }));
       
-      console.log(`[carregarAreas] Áreas convertidas (editor):`, areasConvertidas.map(a => ({ 
+      console.log(`[carregarAreas] Áreas convertidas para editor (escala ${scale}):`, areasConvertidas.map(a => ({ 
         id: a.id?.substring(0, 8), 
         x: a.x, 
         y: a.y, 
@@ -223,6 +236,7 @@ export function MockupEditor({ mockup, onClose, onSave }: MockupEditorProps) {
       
       setAreas(areasConvertidas);
     } catch (error) {
+      console.error('[carregarAreas] Erro:', error);
       toast.error("Erro ao carregar áreas");
     }
   };
@@ -302,6 +316,8 @@ export function MockupEditor({ mockup, onClose, onSave }: MockupEditorProps) {
       if (updates.y !== undefined) updatesReal.y = toRealCoordinates(updates.y);
       if (updates.width !== undefined) updatesReal.width = toRealCoordinates(updates.width);
       if (updates.height !== undefined) updatesReal.height = toRealCoordinates(updates.height);
+      
+      console.log(`[handleUpdateArea] Scale: ${scale}, Editor:`, updates, `Real:`, updatesReal);
       
       await (supabase as any)
         .from("mockup_areas")
