@@ -17,6 +17,18 @@ serve(async (req) => {
       Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? ''
     );
 
+    // Verificar se já existe algum admin no sistema
+    const { data: existingAdmins, error: checkError } = await supabaseAdmin
+      .from('user_roles')
+      .select('id')
+      .limit(1);
+
+    if (checkError) throw checkError;
+    
+    if (existingAdmins && existingAdmins.length > 0) {
+      throw new Error('Sistema já possui usuário administrador. Use as funções de criação de usuário normais.');
+    }
+
     const { email, password, full_name } = await req.json();
 
     console.log('Creating admin user:', email);
