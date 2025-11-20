@@ -8,7 +8,10 @@ import Mockups from "./pages/Mockups";
 import MensagensWhatsapp from "./pages/MensagensWhatsapp";
 import ConfiguracoesWhatsapp from "./pages/ConfiguracoesWhatsapp";
 import FilaWhatsapp from "./pages/FilaWhatsapp";
+import Auth from "./pages/Auth";
+import GestaoUsuarios from "./pages/GestaoUsuarios";
 import NotFound from "./pages/NotFound";
+import ProtectedRoute from "./components/ProtectedRoute";
 
 const queryClient = new QueryClient();
 
@@ -19,11 +22,13 @@ const App = () => (
       <Sonner />
       <BrowserRouter>
         <Routes>
-          <Route path="/" element={<Dashboard />} />
-          <Route path="/mockups" element={<Mockups />} />
-          <Route path="/mensagens" element={<MensagensWhatsapp />} />
-          <Route path="/fila-whatsapp" element={<FilaWhatsapp />} />
-          <Route path="/configuracoes-whatsapp" element={<ConfiguracoesWhatsapp />} />
+          <Route path="/auth" element={<Auth />} />
+          <Route path="/" element={<ProtectedRoute><Dashboard /></ProtectedRoute>} />
+          <Route path="/mockups" element={<ProtectedRoute><Mockups /></ProtectedRoute>} />
+          <Route path="/mensagens" element={<ProtectedRoute><MensagensWhatsapp /></ProtectedRoute>} />
+          <Route path="/fila-whatsapp" element={<ProtectedRoute><FilaWhatsapp /></ProtectedRoute>} />
+          <Route path="/configuracoes-whatsapp" element={<ProtectedRoute><ConfiguracoesWhatsapp /></ProtectedRoute>} />
+          <Route path="/gestao-usuarios" element={<ProtectedRoute><GestaoUsuarios /></ProtectedRoute>} />
           {/* ADD ALL CUSTOM ROUTES ABOVE THE CATCH-ALL "*" ROUTE */}
           <Route path="*" element={<NotFound />} />
         </Routes>

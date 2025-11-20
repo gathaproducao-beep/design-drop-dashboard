@@ -14,6 +14,36 @@ export type Database = {
   }
   public: {
     Tables: {
+      access_profiles: {
+        Row: {
+          code: string
+          created_at: string | null
+          description: string | null
+          id: string
+          is_system: boolean
+          name: string
+          updated_at: string | null
+        }
+        Insert: {
+          code: string
+          created_at?: string | null
+          description?: string | null
+          id?: string
+          is_system?: boolean
+          name: string
+          updated_at?: string | null
+        }
+        Update: {
+          code?: string
+          created_at?: string | null
+          description?: string | null
+          id?: string
+          is_system?: boolean
+          name?: string
+          updated_at?: string | null
+        }
+        Relationships: []
+      }
       mensagens_whatsapp: {
         Row: {
           created_at: string | null
@@ -261,6 +291,125 @@ export type Database = {
         }
         Relationships: []
       }
+      permissions: {
+        Row: {
+          category: string
+          code: string
+          created_at: string | null
+          description: string | null
+          id: string
+          name: string
+        }
+        Insert: {
+          category: string
+          code: string
+          created_at?: string | null
+          description?: string | null
+          id?: string
+          name: string
+        }
+        Update: {
+          category?: string
+          code?: string
+          created_at?: string | null
+          description?: string | null
+          id?: string
+          name?: string
+        }
+        Relationships: []
+      }
+      profile_permissions: {
+        Row: {
+          access_profile_id: string
+          id: string
+          permission_id: string
+        }
+        Insert: {
+          access_profile_id: string
+          id?: string
+          permission_id: string
+        }
+        Update: {
+          access_profile_id?: string
+          id?: string
+          permission_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "profile_permissions_access_profile_id_fkey"
+            columns: ["access_profile_id"]
+            isOneToOne: false
+            referencedRelation: "access_profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "profile_permissions_permission_id_fkey"
+            columns: ["permission_id"]
+            isOneToOne: false
+            referencedRelation: "permissions"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      profiles: {
+        Row: {
+          created_at: string | null
+          email: string
+          full_name: string
+          id: string
+          is_active: boolean
+          updated_at: string | null
+          whatsapp: string | null
+        }
+        Insert: {
+          created_at?: string | null
+          email: string
+          full_name: string
+          id: string
+          is_active?: boolean
+          updated_at?: string | null
+          whatsapp?: string | null
+        }
+        Update: {
+          created_at?: string | null
+          email?: string
+          full_name?: string
+          id?: string
+          is_active?: boolean
+          updated_at?: string | null
+          whatsapp?: string | null
+        }
+        Relationships: []
+      }
+      user_roles: {
+        Row: {
+          access_profile_id: string
+          created_at: string | null
+          id: string
+          user_id: string
+        }
+        Insert: {
+          access_profile_id: string
+          created_at?: string | null
+          id?: string
+          user_id: string
+        }
+        Update: {
+          access_profile_id?: string
+          created_at?: string | null
+          id?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "user_roles_access_profile_id_fkey"
+            columns: ["access_profile_id"]
+            isOneToOne: false
+            referencedRelation: "access_profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       whatsapp_instances: {
         Row: {
           created_at: string | null
@@ -410,7 +559,11 @@ export type Database = {
       [_ in never]: never
     }
     Functions: {
-      [_ in never]: never
+      is_admin: { Args: { check_user_id: string }; Returns: boolean }
+      user_has_permission: {
+        Args: { check_user_id: string; permission_code: string }
+        Returns: boolean
+      }
     }
     Enums: {
       [_ in never]: never

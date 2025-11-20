@@ -1,9 +1,15 @@
-import { Link, useLocation } from "react-router-dom";
-import { LayoutDashboard, Image, MessageSquare, Settings } from "lucide-react";
+import { Link, useLocation, useNavigate } from "react-router-dom";
+import { LayoutDashboard, Image, MessageSquare, Settings, Users, LogOut } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { Button } from "@/components/ui/button";
+import { logout } from "@/lib/auth";
+import { toast } from "sonner";
+import { useState } from "react";
 
 export function Navigation() {
   const location = useLocation();
+  const navigate = useNavigate();
+  const [isLoggingOut, setIsLoggingOut] = useState(false);
 
   const links = [
     { to: "/", icon: LayoutDashboard, label: "Pedidos" },
@@ -11,12 +17,26 @@ export function Navigation() {
     { to: "/mensagens", icon: MessageSquare, label: "Mensagens" },
     { to: "/fila-whatsapp", icon: MessageSquare, label: "Fila de Envios" },
     { to: "/configuracoes-whatsapp", icon: Settings, label: "Configurações" },
+    { to: "/gestao-usuarios", icon: Users, label: "Usuários" },
   ];
+
+  const handleLogout = async () => {
+    setIsLoggingOut(true);
+    try {
+      await logout();
+      toast.success("Logout realizado com sucesso");
+      navigate("/auth");
+    } catch (error: any) {
+      toast.error("Erro ao fazer logout");
+    } finally {
+      setIsLoggingOut(false);
+    }
+  };
 
   return (
     <nav className="border-b bg-card shadow-sm">
       <div className="container mx-auto px-4">
-        <div className="flex items-center h-16">
+        <div className="flex items-center justify-between h-16">
           <div className="flex items-center gap-8">
             <Link to="/" className="flex items-center gap-2">
               <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-primary to-accent flex items-center justify-center">
@@ -46,6 +66,17 @@ export function Navigation() {
               })}
             </div>
           </div>
+          
+          <Button
+            variant="ghost"
+            size="sm"
+            onClick={handleLogout}
+            disabled={isLoggingOut}
+            className="gap-2"
+          >
+            <LogOut className="h-4 w-4" />
+            Sair
+          </Button>
         </div>
       </div>
     </nav>
