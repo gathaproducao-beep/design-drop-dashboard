@@ -775,21 +775,33 @@ export function MockupEditor({ mockup, onClose, onSave }: MockupEditorProps) {
                 </CardHeader>
                 <CardContent>
                   {canvas.imagem_base ? (
-                    <div 
-                      ref={canvasRef}
-                      className="relative border border-border rounded-lg overflow-hidden bg-muted"
-                      style={{ cursor: dragging || resizing ? 'grabbing' : 'default' }}
-                      onMouseMove={handleMouseMove}
-                      onMouseUp={handleMouseUp}
-                      onMouseLeave={handleMouseUp}
-                    >
-                      <img 
-                        ref={imageRef}
-                        src={canvas.imagem_base} 
-                        alt={canvas.nome} 
-                        className="w-full h-auto block"
-                        draggable={false}
-                      />
+                    <>
+                      {imageRef.current && imageRef.current.naturalWidth > 0 && (
+                        <div className="text-xs text-muted-foreground mb-2">
+                          Resolução: {imageRef.current.naturalWidth} × {imageRef.current.naturalHeight}px
+                          (exibindo em {imageRef.current.width}px)
+                        </div>
+                      )}
+                      <div 
+                        ref={canvasRef}
+                        className="relative border border-border rounded-lg overflow-hidden bg-muted"
+                        style={{ 
+                          cursor: dragging || resizing ? 'grabbing' : 'default',
+                          maxWidth: '800px',
+                          margin: '0 auto'
+                        }}
+                        onMouseMove={handleMouseMove}
+                        onMouseUp={handleMouseUp}
+                        onMouseLeave={handleMouseUp}
+                      >
+                        <img 
+                          ref={imageRef}
+                          src={canvas.imagem_base} 
+                          alt={canvas.nome} 
+                          className="w-full h-auto block"
+                          style={{ maxWidth: '800px' }}
+                          draggable={false}
+                        />
                       
                       {/* Áreas sobrepostas */}
                       {areas.map((area) => (
@@ -865,6 +877,7 @@ export function MockupEditor({ mockup, onClose, onSave }: MockupEditorProps) {
                         </div>
                       ))}
                     </div>
+                  </>
                   ) : (
                     <div className="text-center text-muted-foreground py-12">
                       Nenhum arquivo selecionado.
