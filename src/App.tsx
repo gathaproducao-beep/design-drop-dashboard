@@ -10,6 +10,7 @@ import ConfiguracoesWhatsapp from "./pages/ConfiguracoesWhatsapp";
 import FilaWhatsapp from "./pages/FilaWhatsapp";
 import Auth from "./pages/Auth";
 import GestaoUsuarios from "./pages/GestaoUsuarios";
+import Templates from "./pages/Templates";
 import NotFound from "./pages/NotFound";
 import ProtectedRoute from "./components/ProtectedRoute";
 
@@ -25,6 +26,7 @@ const App = () => (
           <Route path="/auth" element={<Auth />} />
           <Route path="/" element={<ProtectedRoute><Dashboard /></ProtectedRoute>} />
           <Route path="/mockups" element={<ProtectedRoute><Mockups /></ProtectedRoute>} />
+          <Route path="/templates" element={<ProtectedRoute><Templates /></ProtectedRoute>} />
           <Route path="/mensagens" element={<ProtectedRoute><MensagensWhatsapp /></ProtectedRoute>} />
           <Route path="/fila-whatsapp" element={<ProtectedRoute><FilaWhatsapp /></ProtectedRoute>} />
           <Route path="/configuracoes-whatsapp" element={<ProtectedRoute><ConfiguracoesWhatsapp /></ProtectedRoute>} />
