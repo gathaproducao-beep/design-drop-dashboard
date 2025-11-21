@@ -20,7 +20,7 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
-import { ExternalLink, Image as ImageIcon, Loader2, Edit, Trash2 } from "lucide-react";
+import { ExternalLink, Image as ImageIcon, Loader2, Edit, Trash2, Cloud } from "lucide-react";
 import { ImageUploadDialog } from "./ImageUploadDialog";
 import { ImageViewDialog } from "./ImageViewDialog";
 import { EditableCell } from "./EditableCell";
@@ -212,6 +212,7 @@ export function PedidosTable({
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
   const [pedidoToDelete, setPedidoToDelete] = useState<string | null>(null);
   const [generating, setGenerating] = useState<string | null>(null);
+  const [uploadingToDrive, setUploadingToDrive] = useState<string | null>(null);
 
   const handleImageClick = (pedido: any, type: "cliente" | "aprovacao" | "molde") => {
     setSelectedPedido(pedido);
@@ -310,6 +311,92 @@ export function PedidosTable({
         console.error("Erro na geração automática:", error);
         toast.error("Erro ao gerar foto de aprovação automaticamente");
       }
+    }
+  };
+
+  const handleUploadToDrive = async (pedido: any) => {
+    if (!pedido.foto_aprovacao || pedido.foto_aprovacao.length === 0) {
+      toast.error("Adicione fotos de aprovação antes de enviar ao Drive");
+      return;
+    }
+
+    setUploadingToDrive(pedido.id);
+
+    try {
+      // Criar ou buscar pasta do pedido
+      const folderName = `Pedido ${pedido.numero_pedido}`;
+      
+      const { data: folderData, error: folderError } = await supabase.functions.invoke(
+        "google-drive-operations",
+        {
+          body: {
+            action: "create_folder",
+            name: folderName,
+            parent_folder_id: "root",
+          },
+        }
+      );
+
+      if (folderError) throw folderError;
+
+      // Upload de cada foto de aprovação
+      for (let i = 0; i < pedido.foto_aprovacao.length; i++) {
+        const imageUrl = pedido.foto_aprovacao[i];
+        
+        // Buscar a imagem e converter para base64
+        const response = await fetch(imageUrl);
+        const blob = await response.blob();
+        const base64 = await new Promise<string>((resolve) => {
+          const reader = new FileReader();
+          reader.onloadend = () => {
+            const base64String = reader.result as string;
+            resolve(base64String.split(",")[1]);
+          };
+          reader.readAsDataURL(blob);
+        });
+
+        // Upload para o Drive
+        await supabase.functions.invoke("google-drive-operations", {
+          body: {
+            action: "upload_file",
+            file_name: `foto-aprovacao-${i + 1}.png`,
+            file_data_base64: base64,
+            mime_type: "image/png",
+            folder_id: folderData.id,
+          },
+        });
+      }
+
+      // Atualizar o pedido com a URL da pasta
+      await supabase
+        .from("pedidos")
+        .update({
+          drive_folder_id: folderData.id,
+          drive_folder_url: folderData.webViewLink,
+        })
+        .eq("id", pedido.id);
+
+      toast.success(
+        <>
+          Fotos enviadas para o Google Drive!
+          <br />
+          <a
+            href={folderData.webViewLink}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="underline"
+          >
+            Abrir pasta
+          </a>
+        </>
+      );
+
+      onRefresh();
+    } catch (error: any) {
+      console.error("Erro ao enviar para Drive:", error);
+      toast.error(error.message || "Erro ao enviar para Google Drive");
+    } finally {
+      setUploadingToDrive(null);
     }
   };
 
@@ -593,6 +680,19 @@ export function PedidosTable({
                         <Loader2 className="h-4 w-4 animate-spin" />
                       ) : (
                         "Gerar"
+                      )}
+                    </Button>
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      onClick={() => handleUploadToDrive(pedido)}
+                      disabled={uploadingToDrive === pedido.id || !pedido.foto_aprovacao || pedido.foto_aprovacao.length === 0}
+                      title="Enviar para Google Drive"
+                    >
+                      {uploadingToDrive === pedido.id ? (
+                        <Loader2 className="h-4 w-4 animate-spin" />
+                      ) : (
+                        <Cloud className="h-4 w-4" />
                       )}
                     </Button>
                     <Button
