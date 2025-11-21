@@ -44,6 +44,101 @@ export type Database = {
         }
         Relationships: []
       }
+      area_template_items: {
+        Row: {
+          color: string | null
+          created_at: string
+          field_key: string
+          font_family: string | null
+          font_size: number | null
+          font_weight: string | null
+          height: number
+          id: string
+          kind: string
+          letter_spacing: number | null
+          line_height: number | null
+          rotation: number | null
+          template_id: string
+          text_align: string | null
+          width: number
+          x: number
+          y: number
+          z_index: number | null
+        }
+        Insert: {
+          color?: string | null
+          created_at?: string
+          field_key: string
+          font_family?: string | null
+          font_size?: number | null
+          font_weight?: string | null
+          height: number
+          id?: string
+          kind?: string
+          letter_spacing?: number | null
+          line_height?: number | null
+          rotation?: number | null
+          template_id: string
+          text_align?: string | null
+          width: number
+          x: number
+          y: number
+          z_index?: number | null
+        }
+        Update: {
+          color?: string | null
+          created_at?: string
+          field_key?: string
+          font_family?: string | null
+          font_size?: number | null
+          font_weight?: string | null
+          height?: number
+          id?: string
+          kind?: string
+          letter_spacing?: number | null
+          line_height?: number | null
+          rotation?: number | null
+          template_id?: string
+          text_align?: string | null
+          width?: number
+          x?: number
+          y?: number
+          z_index?: number | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "area_template_items_template_id_fkey"
+            columns: ["template_id"]
+            isOneToOne: false
+            referencedRelation: "area_templates"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      area_templates: {
+        Row: {
+          created_at: string
+          description: string | null
+          id: string
+          name: string
+          updated_at: string
+        }
+        Insert: {
+          created_at?: string
+          description?: string | null
+          id?: string
+          name: string
+          updated_at?: string
+        }
+        Update: {
+          created_at?: string
+          description?: string | null
+          id?: string
+          name?: string
+          updated_at?: string
+        }
+        Relationships: []
+      }
       mensagens_whatsapp: {
         Row: {
           created_at: string | null

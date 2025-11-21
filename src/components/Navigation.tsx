@@ -1,5 +1,5 @@
 import { Link, useLocation, useNavigate } from "react-router-dom";
-import { LayoutDashboard, Image, MessageSquare, Settings, Users, LogOut } from "lucide-react";
+import { LayoutDashboard, Image, MessageSquare, Settings, Users, LogOut, Layers } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import { logout } from "@/lib/auth";
@@ -14,6 +14,7 @@ export function Navigation() {
   const links = [
     { to: "/", icon: LayoutDashboard, label: "Pedidos" },
     { to: "/mockups", icon: Image, label: "Mockups" },
+    { to: "/templates", icon: Layers, label: "Templates" },
     { to: "/mensagens", icon: MessageSquare, label: "Mensagens" },
     { to: "/fila-whatsapp", icon: MessageSquare, label: "Fila de Envios" },
     { to: "/configuracoes-whatsapp", icon: Settings, label: "Configurações" },

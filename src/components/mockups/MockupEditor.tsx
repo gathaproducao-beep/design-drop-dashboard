@@ -7,7 +7,9 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
-import { ArrowLeft, Plus, Trash2, GripVertical, Edit, Copy } from "lucide-react";
+import { ArrowLeft, Plus, Trash2, GripVertical, Edit, Copy, Save, Download } from "lucide-react";
+import { SalvarTemplateDialog } from "@/components/templates/SalvarTemplateDialog";
+import { AplicarTemplateDialog } from "@/components/templates/AplicarTemplateDialog";
 
 interface MockupEditorProps {
   mockup: any;
@@ -88,6 +90,9 @@ export function MockupEditor({ mockup, onClose, onSave }: MockupEditorProps) {
     mockup_aprovacao_vinculado_id: mockup.mockup_aprovacao_vinculado_id
   });
   const [mockupsAprovacao, setMockupsAprovacao] = useState<any[]>([]);
+  
+  const [salvarTemplateOpen, setSalvarTemplateOpen] = useState(false);
+  const [aplicarTemplateOpen, setAplicarTemplateOpen] = useState(false);
 
   useEffect(() => {
     carregarCanvases();
@@ -664,6 +669,62 @@ export function MockupEditor({ mockup, onClose, onSave }: MockupEditorProps) {
     });
   };
 
+  const handleAplicarTemplate = async (templateId: string) => {
+    if (!activeCanvas) {
+      toast.error("Selecione um canvas primeiro");
+      return;
+    }
+
+    try {
+      // Carregar os itens do template
+      const { data: templateItems, error } = await supabase
+        .from('area_template_items')
+        .select('*')
+        .eq('template_id', templateId);
+
+      if (error) throw error;
+
+      if (!templateItems || templateItems.length === 0) {
+        toast.error("Este template não possui áreas configuradas");
+        return;
+      }
+
+      // Converter as áreas do template para áreas do mockup
+      const novasAreas = templateItems.map(item => ({
+        canvas_id: activeCanvas,
+        mockup_id: mockup.id,
+        kind: item.kind,
+        field_key: item.field_key,
+        x: item.x,
+        y: item.y,
+        width: item.width,
+        height: item.height,
+        z_index: item.z_index,
+        rotation: item.rotation,
+        font_family: item.font_family,
+        font_size: item.font_size,
+        font_weight: item.font_weight,
+        color: item.color,
+        text_align: item.text_align,
+        letter_spacing: item.letter_spacing,
+        line_height: item.line_height,
+      }));
+
+      // Inserir todas as áreas
+      const { error: insertError } = await supabase
+        .from('mockup_areas')
+        .insert(novasAreas);
+
+      if (insertError) throw insertError;
+
+      toast.success(`Template aplicado! ${novasAreas.length} área(s) adicionada(s)`);
+      carregarAreas(activeCanvas);
+    } catch (error) {
+      console.error('Erro ao aplicar template:', error);
+      toast.error("Erro ao aplicar template");
+    }
+  };
+
   return (
     <div className="space-y-6">
       <div className="flex items-center justify-between">
@@ -761,6 +822,24 @@ export function MockupEditor({ mockup, onClose, onSave }: MockupEditorProps) {
                 <CardHeader className="flex flex-row items-center justify-between">
                   <CardTitle>{canvas.nome}</CardTitle>
                   <div className="flex gap-2">
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => setAplicarTemplateOpen(true)}
+                      disabled={!scaleReady}
+                    >
+                      <Download className="w-4 h-4 mr-2" />
+                      Aplicar Template
+                    </Button>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => setSalvarTemplateOpen(true)}
+                      disabled={areas.length === 0 || !scaleReady}
+                    >
+                      <Save className="w-4 h-4 mr-2" />
+                      Salvar como Template
+                    </Button>
                     <Input
                       type="file"
                       accept="image/*"
@@ -1229,6 +1308,18 @@ export function MockupEditor({ mockup, onClose, onSave }: MockupEditorProps) {
           </TabsContent>
         ))}
       </Tabs>
+
+      {/* Dialogs de Template */}
+      <SalvarTemplateDialog
+        open={salvarTemplateOpen}
+        onOpenChange={setSalvarTemplateOpen}
+        areas={areas}
+      />
+      <AplicarTemplateDialog
+        open={aplicarTemplateOpen}
+        onOpenChange={setAplicarTemplateOpen}
+        onApply={handleAplicarTemplate}
+      />
     </div>
   );
 }
