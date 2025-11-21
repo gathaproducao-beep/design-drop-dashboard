@@ -35,10 +35,19 @@ function getIHDRDimensions(pngData: Uint8Array): { width: number; height: number
 }
 
 function setPHYsTo300DPI(pngData: Uint8Array): Uint8Array {
-  const ppm = 11811; // 300 DPI em pixels por metro
+  console.log('🔧 Iniciando processamento DPI...');
+  
+  // 300 DPI = 11811 pixels por metro (ppm)
+  // Cálculo: 300 DPI × 39.3701 inches/meter = 11811.023622 ≈ 11811
+  const ppm = 11811;
+  
+  console.log(`📊 DPI Target: 300 DPI = ${ppm} pixels/metro`);
+  
   const result: number[] = [];
-  let pos = 8;
+  let pos = 8; // Pular o PNG signature (8 bytes)
+  let physInserted = false;
 
+  // Copiar PNG signature
   result.push(...Array.from(pngData.slice(0, 8)));
 
   while (pos < pngData.length) {
@@ -46,26 +55,51 @@ function setPHYsTo300DPI(pngData: Uint8Array): Uint8Array {
     const length = new DataView(lengthBytes.buffer).getUint32(0, false);
     const type = String.fromCharCode(...pngData.slice(pos + 4, pos + 8));
 
-    if (type === "IEND") {
+    console.log(`📦 Chunk encontrado: ${type} (length: ${length} bytes, pos: ${pos})`);
+
+    // Remover pHYs existente se encontrado
+    if (type === "pHYs") {
+      console.log('🗑️  Removendo pHYs existente...');
+      pos += 12 + length;
+      continue;
+    }
+
+    // Copiar o chunk atual
+    result.push(...Array.from(pngData.slice(pos, pos + 12 + length)));
+    pos += 12 + length;
+
+    // Inserir pHYs logo após IHDR (posição correta segundo PNG spec)
+    if (type === "IHDR" && !physInserted) {
+      console.log('✅ Inserindo pHYs após IHDR...');
+      
+      // Criar chunk pHYs
+      // Estrutura: [length(4)] [type(4)] [data(9)] [crc(4)]
+      // Data: [pixels_per_unit_x(4)] [pixels_per_unit_y(4)] [unit_specifier(1)]
+      // unit_specifier: 1 = metros
       const physChunk = [
+        // Length: 9 bytes
         0, 0, 0, 9,
-        ...[0x70, 0x48, 0x59, 0x73],
-        ...[
-          (ppm >> 24) & 0xff,
-          (ppm >> 16) & 0xff,
-          (ppm >> 8) & 0xff,
-          ppm & 0xff,
-        ],
-        ...[
-          (ppm >> 24) & 0xff,
-          (ppm >> 16) & 0xff,
-          (ppm >> 8) & 0xff,
-          ppm & 0xff,
-        ],
+        // Type: "pHYs" (0x70485973)
+        0x70, 0x48, 0x59, 0x73,
+        // Pixels per unit X (4 bytes) - 11811 em big-endian
+        (ppm >> 24) & 0xff,
+        (ppm >> 16) & 0xff,
+        (ppm >> 8) & 0xff,
+        ppm & 0xff,
+        // Pixels per unit Y (4 bytes) - 11811 em big-endian
+        (ppm >> 24) & 0xff,
+        (ppm >> 16) & 0xff,
+        (ppm >> 8) & 0xff,
+        ppm & 0xff,
+        // Unit specifier: 1 = metro
         1,
       ];
+      
+      // Calcular CRC (sem os 4 bytes de length, apenas type + data)
       const physData = new Uint8Array(physChunk.slice(4));
       const physCrc = crc32(physData);
+      
+      // Adicionar CRC ao final
       physChunk.push(
         (physCrc >> 24) & 0xff,
         (physCrc >> 16) & 0xff,
@@ -73,19 +107,24 @@ function setPHYsTo300DPI(pngData: Uint8Array): Uint8Array {
         physCrc & 0xff
       );
 
+      console.log(`✨ pHYs criado: ${physChunk.length} bytes (CRC: 0x${physCrc.toString(16).padStart(8, '0')})`);
+      
       result.push(...physChunk);
-      result.push(...Array.from(pngData.slice(pos)));
+      physInserted = true;
+    }
+
+    // Parar ao encontrar IEND
+    if (type === "IEND") {
+      console.log('🏁 IEND encontrado, finalizando...');
       break;
-    } else if (type === "pHYs") {
-      pos += 12 + length;
-      continue;
-    } else {
-      result.push(...Array.from(pngData.slice(pos, pos + 12 + length)));
-      pos += 12 + length;
     }
   }
 
-  return new Uint8Array(result);
+  const finalData = new Uint8Array(result);
+  console.log(`✅ PNG processado: ${pngData.length} bytes → ${finalData.length} bytes`);
+  console.log(`📝 pHYs inserido: ${physInserted ? 'SIM' : 'NÃO'}`);
+  
+  return finalData;
 }
 
 export async function generateMockupsForPedido(
@@ -353,12 +392,20 @@ export async function generateMockupsForPedido(
         const arrayBuffer = await blob.arrayBuffer();
         let pngData = new Uint8Array(arrayBuffer);
         const dimensions = getIHDRDimensions(pngData);
+        
+        console.log(`🖼️  Mockup ${mockup.tipo} - Canvas: ${canvasData.nome}`);
+        console.log(`📐 Dimensões: ${dimensions.width}x${dimensions.height} pixels`);
+        console.log(`📏 Tamanho esperado em 300 DPI: ${(dimensions.width / 11811 * 1000).toFixed(2)}mm x ${(dimensions.height / 11811 * 1000).toFixed(2)}mm`);
+        
         const processedPngData = setPHYsTo300DPI(pngData);
+        
         // Criar novo ArrayBuffer a partir do processedPngData
         const newBuffer = new ArrayBuffer(processedPngData.length);
         const newArray = new Uint8Array(newBuffer);
         newArray.set(processedPngData);
         const processedBlob = new Blob([newArray], { type: "image/png" });
+        
+        console.log(`💾 Blob final criado: ${processedBlob.size} bytes`);
 
         // Upload para storage
         const timestamp = Date.now();
