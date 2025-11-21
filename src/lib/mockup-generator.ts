@@ -457,83 +457,35 @@ export async function generateMockupsForPedido(
         .eq('id', pedido.id);
     }
 
-    // Upload automático para Google Drive
-    try {
-      const { uploadImagesToDrive } = await import('./google-drive');
-      
-      // Preparar lista de imagens para upload
-      const imagesToUpload: { url: string; name: string }[] = [];
-      
-      if (results.aprovacao) {
-        results.aprovacao.forEach((url, index) => {
-          imagesToUpload.push({
-            url,
-            name: `foto-aprovacao-${index + 1}.png`,
-          });
-        });
-      }
-      
-      if (results.molde) {
-        results.molde.forEach((url, index) => {
-          imagesToUpload.push({
-            url,
-            name: `molde-producao-${index + 1}.png`,
-          });
-        });
-      }
-      
-      if (imagesToUpload.length > 0) {
-        const driveResult = await uploadImagesToDrive(
-          pedido,
-          imagesToUpload,
-          onProgress
-        );
-        
-        // Atualizar pedido com informações do Drive
-        if (driveResult) {
-          await supabase
-            .from('pedidos')
-            .update({
-              drive_folder_id: driveResult.folderId,
-              drive_folder_url: driveResult.folderUrl,
-            })
-            .eq('id', pedido.id);
-          
-          onProgress?.('Mockups salvos no Google Drive!');
-        }
-      }
-    } catch (error) {
-      console.error('Erro ao enviar mockups para Drive:', error);
-      // Não lança erro para não interromper o fluxo de geração
-    }
-
-    // Verificar se deve enviar mensagem automaticamente
+    // PRIORIDADE: Auto-envio WhatsApp logo após salvar mockups
     if (results.aprovacao && results.aprovacao.length > 0) {
-      // Buscar configuração de auto-envio
       const { data: settings } = await supabase
         .from('whatsapp_settings')
         .select('auto_send_enabled')
         .single();
       
-      // Se auto-envio estiver ativo E mensagem ainda não foi enviada
       if (settings?.auto_send_enabled && pedido.mensagem_enviada !== 'enviada') {
         try {
+          console.log('📱 Iniciando auto-envio WhatsApp para pedido:', pedido.numero_pedido);
           onProgress?.('Adicionando mensagem à fila de envio...');
           
-          // Importar função de envio
           const { processarEnvioPedido } = await import('./whatsapp');
           
-          // Adicionar à fila (não aguarda para não bloquear)
-          processarEnvioPedido(pedido.id).catch((error) => {
-            console.error('Erro ao adicionar mensagem à fila:', error);
-            // Não lança erro para não interromper o fluxo de geração
-          });
+          // AWAIT para capturar erros corretamente
+          await processarEnvioPedido(pedido.id);
           
+          console.log('✅ Mensagem adicionada à fila com sucesso');
           onProgress?.('Mensagem adicionada à fila de envio!');
-        } catch (error) {
-          console.error('Erro ao processar envio automático:', error);
+        } catch (error: any) {
+          console.error('❌ Erro no auto-envio:', error);
+          onProgress?.(`⚠️ Erro ao adicionar à fila: ${error.message}`);
           // Continua mesmo com erro no envio
         }
+      } else {
+        console.log('⏭️ Auto-envio pulado:', {
+          autoSendEnabled: settings?.auto_send_enabled,
+          mensagemStatus: pedido.mensagem_enviada
+        });
       }
     }
 
