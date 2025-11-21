@@ -5,6 +5,16 @@ import { Edit, Loader2, Trash2, Copy, Image as ImageIcon } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
 import { useState, useEffect } from "react";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
 
 interface MockupsListProps {
   mockups: any[];
@@ -18,6 +28,8 @@ export function MockupsList({ mockups, loading, onEdit, onRefresh }: MockupsList
   const [duplicating, setDuplicating] = useState<string | null>(null);
   const [canvasImages, setCanvasImages] = useState<Record<string, string>>({});
   const [mockupsVinculados, setMockupsVinculados] = useState<Record<string, any>>({});
+  const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
+  const [mockupToDelete, setMockupToDelete] = useState<any>(null);
 
   useEffect(() => {
     const loadCanvasImages = async () => {
@@ -72,15 +84,20 @@ export function MockupsList({ mockups, loading, onEdit, onRefresh }: MockupsList
     return mockup.imagem_base || canvasImages[mockup.id] || null;
   };
 
-  const handleDelete = async (mockupId: string) => {
-    if (!confirm("Tem certeza que deseja excluir este mockup?")) return;
+  const handleDeleteClick = (mockup: any) => {
+    setMockupToDelete(mockup);
+    setDeleteDialogOpen(true);
+  };
 
-    setDeleting(mockupId);
+  const confirmDelete = async () => {
+    if (!mockupToDelete) return;
+
+    setDeleting(mockupToDelete.id);
     try {
       const { error } = await supabase
         .from("mockups")
         .delete()
-        .eq("id", mockupId);
+        .eq("id", mockupToDelete.id);
 
       if (error) throw error;
       toast.success("Mockup excluído");
@@ -90,6 +107,8 @@ export function MockupsList({ mockups, loading, onEdit, onRefresh }: MockupsList
       toast.error("Erro ao excluir mockup");
     } finally {
       setDeleting(null);
+      setDeleteDialogOpen(false);
+      setMockupToDelete(null);
     }
   };
 
@@ -207,72 +226,89 @@ export function MockupsList({ mockups, loading, onEdit, onRefresh }: MockupsList
   }
 
   return (
-    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-      {mockups.map((mockup) => (
-        <Card key={mockup.id} className="hover:shadow-lg transition-all">
-          <CardHeader>
-            <div className="flex items-start justify-between">
-              <CardTitle className="text-lg">{mockup.codigo_mockup}</CardTitle>
-              <Badge variant={mockup.tipo === "aprovacao" ? "default" : "secondary"}>
-                {mockup.tipo}
-              </Badge>
-            </div>
-            {mockupsVinculados[mockup.id] && (
-              <p className="text-xs text-muted-foreground mt-2">
-                Vinculado: {mockupsVinculados[mockup.id].codigo_mockup}
+    <>
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+        {mockups.map((mockup) => (
+          <Card key={mockup.id} className="hover:shadow-lg transition-all">
+            <CardHeader>
+              <div className="flex items-start justify-between">
+                <CardTitle className="text-lg">{mockup.codigo_mockup}</CardTitle>
+                <Badge variant={mockup.tipo === "aprovacao" ? "default" : "secondary"}>
+                  {mockup.tipo}
+                </Badge>
+              </div>
+              {mockupsVinculados[mockup.id] && (
+                <p className="text-xs text-muted-foreground mt-2">
+                  Vinculado: {mockupsVinculados[mockup.id].codigo_mockup}
+                </p>
+              )}
+            </CardHeader>
+            <CardContent>
+              <div className="relative w-full h-48 bg-muted rounded-lg overflow-hidden mb-4 flex items-center justify-center">
+                {getPreviewImage(mockup) ? (
+                  <img
+                    src={getPreviewImage(mockup)}
+                    alt={mockup.codigo_mockup}
+                    className="w-full h-full object-contain"
+                  />
+                ) : (
+                  <ImageIcon className="h-16 w-16 text-muted-foreground/30" />
+                )}
+              </div>
+              <p className="text-sm text-muted-foreground">
+                {mockup.mockup_areas?.length || 0} área(s) definida(s)
               </p>
-            )}
-          </CardHeader>
-          <CardContent>
-            <div className="relative w-full h-48 bg-muted rounded-lg overflow-hidden mb-4 flex items-center justify-center">
-              {getPreviewImage(mockup) ? (
-                <img
-                  src={getPreviewImage(mockup)}
-                  alt={mockup.codigo_mockup}
-                  className="w-full h-full object-contain"
-                />
-              ) : (
-                <ImageIcon className="h-16 w-16 text-muted-foreground/30" />
-              )}
-            </div>
-            <p className="text-sm text-muted-foreground">
-              {mockup.mockup_areas?.length || 0} área(s) definida(s)
-            </p>
-          </CardContent>
-          <CardFooter className="flex gap-2">
-            <Button
-              variant="outline"
-              className="flex-1"
-              onClick={() => onEdit(mockup)}
-            >
-              <Edit className="mr-2 h-4 w-4" />
-              Editar
-            </Button>
-            <Button
-              variant="outline"
-              onClick={() => handleDuplicate(mockup)}
-              disabled={duplicating === mockup.id}
-            >
-              {duplicating === mockup.id ? (
-                <Loader2 className="h-4 w-4 animate-spin" />
-              ) : (
-                <Copy className="h-4 w-4" />
-              )}
-            </Button>
-            <Button
-              variant="destructive"
-              onClick={() => handleDelete(mockup.id)}
-              disabled={deleting === mockup.id}
-            >
-              {deleting === mockup.id ? (
-                <Loader2 className="h-4 w-4 animate-spin" />
-              ) : (
-                <Trash2 className="h-4 w-4" />
-              )}
-            </Button>
-          </CardFooter>
-        </Card>
-      ))}
-    </div>
+            </CardContent>
+            <CardFooter className="flex gap-2">
+              <Button
+                variant="outline"
+                className="flex-1"
+                onClick={() => onEdit(mockup)}
+              >
+                <Edit className="mr-2 h-4 w-4" />
+                Editar
+              </Button>
+              <Button
+                variant="outline"
+                onClick={() => handleDuplicate(mockup)}
+                disabled={duplicating === mockup.id}
+              >
+                {duplicating === mockup.id ? (
+                  <Loader2 className="h-4 w-4 animate-spin" />
+                ) : (
+                  <Copy className="h-4 w-4" />
+                )}
+              </Button>
+              <Button
+                variant="destructive"
+                onClick={() => handleDeleteClick(mockup)}
+                disabled={deleting === mockup.id}
+              >
+                {deleting === mockup.id ? (
+                  <Loader2 className="h-4 w-4 animate-spin" />
+                ) : (
+                  <Trash2 className="h-4 w-4" />
+                )}
+              </Button>
+            </CardFooter>
+          </Card>
+        ))}
+      </div>
+
+      <AlertDialog open={deleteDialogOpen} onOpenChange={setDeleteDialogOpen}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Confirmar exclusão</AlertDialogTitle>
+            <AlertDialogDescription>
+              Tem certeza que deseja excluir o mockup "{mockupToDelete?.codigo_mockup}"? Esta ação não pode ser desfeita e todas as áreas e canvases associados serão removidos.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel onClick={() => setMockupToDelete(null)}>Cancelar</AlertDialogCancel>
+            <AlertDialogAction onClick={confirmDelete}>Excluir</AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+    </>
   );
 }

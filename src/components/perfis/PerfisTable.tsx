@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -8,11 +8,24 @@ import { Plus, Pencil, Trash2, Loader2, Shield } from "lucide-react";
 import { toast } from "sonner";
 import NovoPerfilDialog from "./NovoPerfilDialog";
 import EditarPerfilDialog from "./EditarPerfilDialog";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
 
 const PerfisTable = () => {
+  const queryClient = useQueryClient();
   const [novoDialogOpen, setNovoDialogOpen] = useState(false);
   const [editarDialogOpen, setEditarDialogOpen] = useState(false);
   const [selectedPerfil, setSelectedPerfil] = useState<any>(null);
+  const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
+  const [perfilToDelete, setPerfilToDelete] = useState<any>(null);
 
   // Buscar perfis com contagem de permissões
   const { data: perfis, isLoading } = useQuery({
@@ -40,6 +53,26 @@ const PerfisTable = () => {
     }
   });
 
+  const deleteMutation = useMutation({
+    mutationFn: async (perfilId: string) => {
+      const { error } = await supabase
+        .from('access_profiles')
+        .delete()
+        .eq('id', perfilId);
+      if (error) throw error;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['perfis-acesso'] });
+      toast.success("Perfil excluído com sucesso!");
+      setDeleteDialogOpen(false);
+      setPerfilToDelete(null);
+    },
+    onError: (error) => {
+      console.error("Erro ao excluir perfil:", error);
+      toast.error("Erro ao excluir perfil");
+    },
+  });
+
   const handleEdit = (perfil: any) => {
     if (perfil.is_system) {
       toast.error("Perfis do sistema não podem ser editados");
@@ -54,7 +87,14 @@ const PerfisTable = () => {
       toast.error("Perfis do sistema não podem ser deletados");
       return;
     }
-    toast.info("Funcionalidade em desenvolvimento");
+    setPerfilToDelete(perfil);
+    setDeleteDialogOpen(true);
+  };
+
+  const confirmDelete = () => {
+    if (perfilToDelete) {
+      deleteMutation.mutate(perfilToDelete.id);
+    }
   };
 
   if (isLoading) {
@@ -148,6 +188,21 @@ const PerfisTable = () => {
           perfil={selectedPerfil}
         />
       )}
+
+      <AlertDialog open={deleteDialogOpen} onOpenChange={setDeleteDialogOpen}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Confirmar exclusão</AlertDialogTitle>
+            <AlertDialogDescription>
+              Tem certeza que deseja excluir o perfil "{perfilToDelete?.name}"? Esta ação não pode ser desfeita.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel onClick={() => setPerfilToDelete(null)}>Cancelar</AlertDialogCancel>
+            <AlertDialogAction onClick={confirmDelete}>Excluir</AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 };
