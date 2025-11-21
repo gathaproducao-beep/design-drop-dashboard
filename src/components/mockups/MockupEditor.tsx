@@ -102,11 +102,12 @@ export function MockupEditor({ mockup, onClose, onSave }: MockupEditorProps) {
       console.log(`[useEffect] Carregando áreas para canvas ${activeCanvas} com escala: ${scale}`);
       carregarAreas(activeCanvas);
     }
-  }, [activeCanvas, scale, scaleReady]);
+  }, [activeCanvas, scaleReady]);
 
   // Calcular escala quando a imagem carregar
   useEffect(() => {
     setScaleReady(false); // Marcar escala como não pronta ao trocar canvas
+    setAreas([]); // Limpar áreas ao trocar canvas
     
     const updateScale = () => {
       if (imageRef.current && imageRef.current.complete && imageRef.current.naturalWidth > 0) {
@@ -156,9 +157,11 @@ export function MockupEditor({ mockup, onClose, onSave }: MockupEditorProps) {
       console.error("[toRealCoordinates] ❌ Tentando converter sem escala pronta!");
       return editorValue;
     }
+    // Usar escala específica do canvas ativo
+    const scaleToUse = canvasScales[activeCanvas] || scale;
     const canvas = canvases.find(c => c.id === activeCanvas);
-    const result = Math.round(editorValue * scale);
-    console.log(`[toReal] Canvas:${canvas?.nome} Editor:${editorValue} * Scale:${scale.toFixed(3)} = Real:${result}`);
+    const result = Math.round(editorValue * scaleToUse);
+    console.log(`[toReal] Canvas:${canvas?.nome} Editor:${editorValue} * Scale:${scaleToUse.toFixed(3)} = Real:${result}`);
     return result;
   };
 
@@ -167,9 +170,11 @@ export function MockupEditor({ mockup, onClose, onSave }: MockupEditorProps) {
       console.error("[toEditorCoordinates] ❌ Tentando converter sem escala pronta!");
       return realValue;
     }
+    // Usar escala específica do canvas ativo
+    const scaleToUse = canvasScales[activeCanvas] || scale;
     const canvas = canvases.find(c => c.id === activeCanvas);
-    const result = Math.round(realValue / scale);
-    console.log(`[toEditor] Canvas:${canvas?.nome} Real:${realValue} / Scale:${scale.toFixed(3)} = Editor:${result}`);
+    const result = Math.round(realValue / scaleToUse);
+    console.log(`[toEditor] Canvas:${canvas?.nome} Real:${realValue} / Scale:${scaleToUse.toFixed(3)} = Editor:${result}`);
     return result;
   };
 
@@ -217,7 +222,9 @@ export function MockupEditor({ mockup, onClose, onSave }: MockupEditorProps) {
 
       if (error) throw error;
       setCanvases(data || []);
-      if (data?.length > 0) setActiveCanvas(data[0].id);
+      if (data?.length > 0 && !activeCanvas) {
+        setActiveCanvas(data[0].id);
+      }
     } catch (error) {
       toast.error("Erro ao carregar canvases");
     }
@@ -231,7 +238,11 @@ export function MockupEditor({ mockup, onClose, onSave }: MockupEditorProps) {
     }
 
     const canvas = canvases.find(c => c.id === canvasId);
-    console.log(`[carregarAreas] ✅ Canvas: ${canvas?.nome}, Scale: ${scale.toFixed(3)}, ScaleReady: ${scaleReady}`);
+    const scaleToUse = canvasScales[canvasId] || scale;
+    console.log(`[carregarAreas] ✅ Canvas: ${canvas?.nome}`);
+    console.log(`  - Scale atual: ${scale.toFixed(3)}`);
+    console.log(`  - Scale armazenada para este canvas: ${canvasScales[canvasId]?.toFixed(3) || 'N/A'}`);
+    console.log(`  - Scale que será usada: ${scaleToUse.toFixed(3)}`);
     
     try {
       const { data, error } = await (supabase as any)
