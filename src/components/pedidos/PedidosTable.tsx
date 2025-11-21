@@ -271,6 +271,42 @@ export function PedidosTable({
         }
       }
       
+      // Upload para Google Drive quando layout for aprovado
+      if (field === "layout_aprovado" && value === "aprovado") {
+        const pedidoAtualizado = pedidos.find(p => p.id === pedidoId);
+        
+        // Se já tem foto de aprovação e ainda não foi enviado ao Drive
+        if (pedidoAtualizado?.foto_aprovacao?.length > 0 && !pedidoAtualizado.drive_folder_id) {
+          toast.info('Enviando mockups para Google Drive...');
+          
+          try {
+            const { uploadImagesToDrive } = await import('@/lib/google-drive');
+            
+            const images = pedidoAtualizado.foto_aprovacao.map((url: string, i: number) => ({
+              url,
+              name: `foto-aprovacao-${i + 1}.png`
+            }));
+            
+            const result = await uploadImagesToDrive(pedidoAtualizado, images);
+            
+            if (result) {
+              await supabase
+                .from('pedidos')
+                .update({
+                  drive_folder_id: result.folderId,
+                  drive_folder_url: result.folderUrl
+                })
+                .eq('id', pedidoId);
+              
+              toast.success('Mockups salvos no Google Drive!');
+            }
+          } catch (error) {
+            console.error('Erro ao enviar para Drive:', error);
+            toast.error('Erro ao enviar para Drive');
+          }
+        }
+      }
+      
       toast.success("Campo atualizado");
       onRefresh();
     } catch (error: any) {
