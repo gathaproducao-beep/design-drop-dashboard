@@ -18,11 +18,12 @@ serve(async (req) => {
 
     console.log('Buscando configurações do Google Drive...');
 
-    // Buscar configurações do Drive
+    // Buscar configurações do Drive (pegar apenas o primeiro registro)
     const { data: settings, error: settingsError } = await supabase
       .from('google_drive_settings')
       .select('*')
-      .single();
+      .limit(1)
+      .maybeSingle();
 
     if (settingsError || !settings) {
       console.error('Erro ao buscar configurações:', settingsError);

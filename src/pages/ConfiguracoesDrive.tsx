@@ -34,10 +34,12 @@ export default function ConfiguracoesDrive() {
       const { data, error } = await supabase
         .from("google_drive_settings")
         .select("*")
-        .single();
+        .limit(1)
+        .maybeSingle();
 
-      if (error && error.code !== "PGRST116") {
-        throw error;
+      if (error) {
+        console.error("Erro ao carregar configurações:", error);
+        return;
       }
 
       if (data) {
@@ -67,20 +69,44 @@ export default function ConfiguracoesDrive() {
     setLoading(true);
 
     try {
-      // Primeiro, salvar as credenciais
-      const { error: saveError } = await supabase
+      // Verificar se já existe uma configuração
+      const { data: existing } = await supabase
         .from("google_drive_settings")
-        .upsert({
-          id: crypto.randomUUID(),
-          client_id: clientId,
-          client_secret: clientSecret,
-          refresh_token: refreshToken,
-          root_folder_id: rootFolderId || null,
-          auto_upload_enabled: autoUploadEnabled,
-          folder_structure: folderStructure,
-        });
+        .select("id")
+        .limit(1)
+        .maybeSingle();
 
-      if (saveError) throw saveError;
+      // Salvar ou atualizar as credenciais
+      if (existing) {
+        // Atualizar o registro existente
+        const { error: updateError } = await supabase
+          .from("google_drive_settings")
+          .update({
+            client_id: clientId,
+            client_secret: clientSecret,
+            refresh_token: refreshToken,
+            root_folder_id: rootFolderId || null,
+            auto_upload_enabled: autoUploadEnabled,
+            folder_structure: folderStructure,
+          })
+          .eq("id", existing.id);
+
+        if (updateError) throw updateError;
+      } else {
+        // Criar novo registro
+        const { error: insertError } = await supabase
+          .from("google_drive_settings")
+          .insert({
+            client_id: clientId,
+            client_secret: clientSecret,
+            refresh_token: refreshToken,
+            root_folder_id: rootFolderId || null,
+            auto_upload_enabled: autoUploadEnabled,
+            folder_structure: folderStructure,
+          });
+
+        if (insertError) throw insertError;
+      }
 
       // Testar a conexão
       const { data, error } = await supabase.functions.invoke("google-drive-auth");
@@ -120,19 +146,43 @@ export default function ConfiguracoesDrive() {
     setLoading(true);
 
     try {
-      const { error } = await supabase
+      // Verificar se já existe uma configuração
+      const { data: existing } = await supabase
         .from("google_drive_settings")
-        .upsert({
-          id: crypto.randomUUID(),
-          client_id: clientId,
-          client_secret: clientSecret,
-          refresh_token: refreshToken,
-          root_folder_id: rootFolderId || null,
-          auto_upload_enabled: autoUploadEnabled,
-          folder_structure: folderStructure,
-        });
+        .select("id")
+        .limit(1)
+        .maybeSingle();
 
-      if (error) throw error;
+      if (existing) {
+        // Atualizar o registro existente
+        const { error } = await supabase
+          .from("google_drive_settings")
+          .update({
+            client_id: clientId,
+            client_secret: clientSecret,
+            refresh_token: refreshToken,
+            root_folder_id: rootFolderId || null,
+            auto_upload_enabled: autoUploadEnabled,
+            folder_structure: folderStructure,
+          })
+          .eq("id", existing.id);
+
+        if (error) throw error;
+      } else {
+        // Criar novo registro
+        const { error } = await supabase
+          .from("google_drive_settings")
+          .insert({
+            client_id: clientId,
+            client_secret: clientSecret,
+            refresh_token: refreshToken,
+            root_folder_id: rootFolderId || null,
+            auto_upload_enabled: autoUploadEnabled,
+            folder_structure: folderStructure,
+          });
+
+        if (error) throw error;
+      }
 
       toast({
         title: "Configurações salvas",
