@@ -457,6 +457,56 @@ export async function generateMockupsForPedido(
         .eq('id', pedido.id);
     }
 
+    // Upload automático para Google Drive
+    try {
+      const { uploadImagesToDrive } = await import('./google-drive');
+      
+      // Preparar lista de imagens para upload
+      const imagesToUpload: { url: string; name: string }[] = [];
+      
+      if (results.aprovacao) {
+        results.aprovacao.forEach((url, index) => {
+          imagesToUpload.push({
+            url,
+            name: `foto-aprovacao-${index + 1}.png`,
+          });
+        });
+      }
+      
+      if (results.molde) {
+        results.molde.forEach((url, index) => {
+          imagesToUpload.push({
+            url,
+            name: `molde-producao-${index + 1}.png`,
+          });
+        });
+      }
+      
+      if (imagesToUpload.length > 0) {
+        const driveResult = await uploadImagesToDrive(
+          pedido,
+          imagesToUpload,
+          onProgress
+        );
+        
+        // Atualizar pedido com informações do Drive
+        if (driveResult) {
+          await supabase
+            .from('pedidos')
+            .update({
+              drive_folder_id: driveResult.folderId,
+              drive_folder_url: driveResult.folderUrl,
+            })
+            .eq('id', pedido.id);
+          
+          onProgress?.('Mockups salvos no Google Drive!');
+        }
+      }
+    } catch (error) {
+      console.error('Erro ao enviar mockups para Drive:', error);
+      // Não lança erro para não interromper o fluxo de geração
+    }
+
     // Verificar se deve enviar mensagem automaticamente
     if (results.aprovacao && results.aprovacao.length > 0) {
       // Buscar configuração de auto-envio
