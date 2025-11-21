@@ -205,8 +205,6 @@ export async function generateMockupsForPedido(
 
         canvas.width = Math.round(baseImg.naturalWidth);
         canvas.height = Math.round(baseImg.naturalHeight);
-        canvas.style.width = `${canvas.width}px`;
-        canvas.style.height = `${canvas.height}px`;
         
         ctx.drawImage(baseImg, 0, 0, canvas.width, canvas.height);
 
