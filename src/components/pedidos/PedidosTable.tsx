@@ -378,8 +378,8 @@ export function PedidosTable({
   };
 
   const getRowClassName = (layoutAprovado: string) => {
-    if (layoutAprovado === "aprovado") return "bg-green-50 hover:bg-green-100";
-    if (layoutAprovado === "reprovado") return "bg-red-50 hover:bg-red-100";
+    if (layoutAprovado === "aprovado") return "bg-green-100 hover:bg-green-200";
+    if (layoutAprovado === "reprovado") return "bg-red-100 hover:bg-red-200";
     return "hover:bg-muted/30";
   };
 
