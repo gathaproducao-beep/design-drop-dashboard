@@ -7,6 +7,7 @@ import Dashboard from "./pages/Dashboard";
 import Mockups from "./pages/Mockups";
 import MensagensWhatsapp from "./pages/MensagensWhatsapp";
 import ConfiguracoesWhatsapp from "./pages/ConfiguracoesWhatsapp";
+import ConfiguracoesDrive from "./pages/ConfiguracoesDrive";
 import FilaWhatsapp from "./pages/FilaWhatsapp";
 import Auth from "./pages/Auth";
 import GestaoUsuarios from "./pages/GestaoUsuarios";
@@ -30,6 +31,7 @@ const App = () => (
           <Route path="/mensagens" element={<ProtectedRoute><MensagensWhatsapp /></ProtectedRoute>} />
           <Route path="/fila-whatsapp" element={<ProtectedRoute><FilaWhatsapp /></ProtectedRoute>} />
           <Route path="/configuracoes-whatsapp" element={<ProtectedRoute><ConfiguracoesWhatsapp /></ProtectedRoute>} />
+          <Route path="/configuracoes-drive" element={<ProtectedRoute><ConfiguracoesDrive /></ProtectedRoute>} />
           <Route path="/gestao-usuarios" element={<ProtectedRoute><GestaoUsuarios /></ProtectedRoute>} />
           {/* ADD ALL CUSTOM ROUTES ABOVE THE CATCH-ALL "*" ROUTE */}
           <Route path="*" element={<NotFound />} />

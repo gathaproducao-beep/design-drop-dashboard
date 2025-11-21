@@ -139,6 +139,42 @@ export type Database = {
         }
         Relationships: []
       }
+      google_drive_settings: {
+        Row: {
+          auto_upload_enabled: boolean
+          client_id: string
+          client_secret: string
+          created_at: string | null
+          folder_structure: string
+          id: string
+          refresh_token: string
+          root_folder_id: string | null
+          updated_at: string | null
+        }
+        Insert: {
+          auto_upload_enabled?: boolean
+          client_id: string
+          client_secret: string
+          created_at?: string | null
+          folder_structure?: string
+          id?: string
+          refresh_token: string
+          root_folder_id?: string | null
+          updated_at?: string | null
+        }
+        Update: {
+          auto_upload_enabled?: boolean
+          client_id?: string
+          client_secret?: string
+          created_at?: string | null
+          folder_structure?: string
+          id?: string
+          refresh_token?: string
+          root_folder_id?: string | null
+          updated_at?: string | null
+        }
+        Relationships: []
+      }
       mensagens_whatsapp: {
         Row: {
           created_at: string | null
@@ -332,6 +368,8 @@ export type Database = {
           created_at: string | null
           data_impressao: string | null
           data_pedido: string
+          drive_folder_id: string | null
+          drive_folder_url: string | null
           foto_aprovacao: string[] | null
           foto_cliente: string | null
           fotos_cliente: string[] | null
@@ -351,6 +389,8 @@ export type Database = {
           created_at?: string | null
           data_impressao?: string | null
           data_pedido?: string
+          drive_folder_id?: string | null
+          drive_folder_url?: string | null
           foto_aprovacao?: string[] | null
           foto_cliente?: string | null
           fotos_cliente?: string[] | null
@@ -370,6 +410,8 @@ export type Database = {
           created_at?: string | null
           data_impressao?: string | null
           data_pedido?: string
+          drive_folder_id?: string | null
+          drive_folder_url?: string | null
           foto_aprovacao?: string[] | null
           foto_cliente?: string | null
           fotos_cliente?: string[] | null
