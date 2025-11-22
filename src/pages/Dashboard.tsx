@@ -2,7 +2,7 @@ import { useState, useEffect } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Plus, Search, Filter, Trash2, Upload, FileSpreadsheet, Download } from "lucide-react";
+import { Plus, Search, Filter, Trash2, Upload, FileSpreadsheet, Download, Archive } from "lucide-react";
 import { toast } from "sonner";
 import { PedidosTable } from "@/components/pedidos/PedidosTable";
 import { NovoPedidoDialog } from "@/components/pedidos/NovoPedidoDialog";
@@ -45,10 +45,11 @@ export default function Dashboard() {
   const [tipoDownload, setTipoDownload] = useState<'aprovacao' | 'molde'>('molde');
   const [paginaAtual, setPaginaAtual] = useState(1);
   const [itensPorPagina, setItensPorPagina] = useState(50);
+  const [filterArquivado, setFilterArquivado] = useState<string>("ativos");
 
   useEffect(() => {
     carregarPedidos();
-  }, []);
+  }, [filterArquivado]);
 
   useEffect(() => {
     setPaginaAtual(1);
@@ -56,10 +57,18 @@ export default function Dashboard() {
 
   const carregarPedidos = async () => {
     try {
-      const { data, error } = await supabase
+      let query = supabase
         .from("pedidos")
         .select("*")
         .order("created_at", { ascending: false });
+      
+      if (filterArquivado === "ativos") {
+        query = query.eq("arquivado", false);
+      } else if (filterArquivado === "arquivados") {
+        query = query.eq("arquivado", true);
+      }
+      
+      const { data, error } = await query;
 
       if (error) throw error;
       setPedidos(data || []);
@@ -97,6 +106,50 @@ export default function Dashboard() {
     } catch (error) {
       console.error("Erro ao excluir:", error);
       toast.error("Erro ao excluir pedidos");
+    }
+  };
+
+  const handleArquivarSelecionados = async () => {
+    if (selectedIds.size === 0) return;
+    
+    try {
+      const pedidoIds = Array.from(selectedIds);
+      
+      const { error } = await supabase
+        .from("pedidos")
+        .update({ arquivado: true })
+        .in("id", pedidoIds);
+
+      if (error) throw error;
+      
+      toast.success(`${selectedIds.size} pedido(s) arquivado(s)`);
+      setSelectedIds(new Set());
+      carregarPedidos();
+    } catch (error) {
+      console.error("Erro ao arquivar:", error);
+      toast.error("Erro ao arquivar pedidos");
+    }
+  };
+
+  const handleDesarquivarSelecionados = async () => {
+    if (selectedIds.size === 0) return;
+    
+    try {
+      const pedidoIds = Array.from(selectedIds);
+      
+      const { error } = await supabase
+        .from("pedidos")
+        .update({ arquivado: false })
+        .in("id", pedidoIds);
+
+      if (error) throw error;
+      
+      toast.success(`${selectedIds.size} pedido(s) restaurado(s)`);
+      setSelectedIds(new Set());
+      carregarPedidos();
+    } catch (error) {
+      console.error("Erro ao restaurar:", error);
+      toast.error("Erro ao restaurar pedidos");
     }
   };
 
@@ -260,6 +313,25 @@ export default function Dashboard() {
                     <Download className="mr-2 h-4 w-4" />
                     Baixar Arquivos ({selectedIds.size})
                   </Button>
+                  {filterArquivado === "arquivados" ? (
+                    <Button
+                      variant="outline"
+                      onClick={handleDesarquivarSelecionados}
+                      className="bg-green-50 hover:bg-green-100 border-green-200"
+                    >
+                      <Archive className="mr-2 h-4 w-4" />
+                      Restaurar ({selectedIds.size})
+                    </Button>
+                  ) : (
+                    <Button
+                      variant="outline"
+                      onClick={handleArquivarSelecionados}
+                      className="bg-amber-50 hover:bg-amber-100 border-amber-200"
+                    >
+                      <Archive className="mr-2 h-4 w-4" />
+                      Arquivar ({selectedIds.size})
+                    </Button>
+                  )}
                   <Button
                     variant="destructive"
                     onClick={handleExcluirSelecionados}
@@ -363,6 +435,18 @@ export default function Dashboard() {
                   <SelectItem value="aprovado">Aprovado</SelectItem>
                   <SelectItem value="reprovado">Reprovado</SelectItem>
                   <SelectItem value="pendente">Pendente</SelectItem>
+                </SelectContent>
+              </Select>
+
+              <Select value={filterArquivado} onValueChange={setFilterArquivado}>
+                <SelectTrigger className="w-[160px]">
+                  <Filter className="mr-2 h-4 w-4" />
+                  <SelectValue placeholder="Status" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="ativos">Pedidos Ativos</SelectItem>
+                  <SelectItem value="arquivados">Arquivados</SelectItem>
+                  <SelectItem value="todos">Todos</SelectItem>
                 </SelectContent>
               </Select>
             </div>

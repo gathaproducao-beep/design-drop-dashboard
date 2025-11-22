@@ -364,6 +364,7 @@ export type Database = {
       }
       pedidos: {
         Row: {
+          arquivado: boolean | null
           codigo_produto: string
           created_at: string | null
           data_impressao: string | null
@@ -385,6 +386,7 @@ export type Database = {
           updated_at: string | null
         }
         Insert: {
+          arquivado?: boolean | null
           codigo_produto: string
           created_at?: string | null
           data_impressao?: string | null
@@ -406,6 +408,7 @@ export type Database = {
           updated_at?: string | null
         }
         Update: {
+          arquivado?: boolean | null
           codigo_produto?: string
           created_at?: string | null
           data_impressao?: string | null
