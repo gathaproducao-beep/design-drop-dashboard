@@ -25,6 +25,16 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
 import { Label } from "@/components/ui/label";
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 
@@ -46,6 +56,7 @@ export default function Dashboard() {
   const [paginaAtual, setPaginaAtual] = useState(1);
   const [itensPorPagina, setItensPorPagina] = useState(50);
   const [filterArquivado, setFilterArquivado] = useState<string>("ativos");
+  const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
 
   useEffect(() => {
     carregarPedidos();
@@ -80,9 +91,12 @@ export default function Dashboard() {
     }
   };
 
-  const handleExcluirSelecionados = async () => {
+  const handleExcluirSelecionados = () => {
     if (selectedIds.size === 0) return;
-    
+    setDeleteDialogOpen(true);
+  };
+
+  const confirmDelete = async () => {
     try {
       const pedidoIds = Array.from(selectedIds);
       
@@ -102,6 +116,7 @@ export default function Dashboard() {
       
       toast.success(`${selectedIds.size} pedido(s) excluído(s)`);
       setSelectedIds(new Set());
+      setDeleteDialogOpen(false);
       carregarPedidos();
     } catch (error) {
       console.error("Erro ao excluir:", error);
@@ -573,6 +588,24 @@ export default function Dashboard() {
             </DialogFooter>
           </DialogContent>
         </Dialog>
+
+        <AlertDialog open={deleteDialogOpen} onOpenChange={setDeleteDialogOpen}>
+          <AlertDialogContent>
+            <AlertDialogHeader>
+              <AlertDialogTitle>Confirmar Exclusão</AlertDialogTitle>
+              <AlertDialogDescription>
+                Tem certeza que deseja excluir {selectedIds.size} pedido(s)?
+                Esta ação não pode ser desfeita e removerá permanentemente os registros do sistema.
+              </AlertDialogDescription>
+            </AlertDialogHeader>
+            <AlertDialogFooter>
+              <AlertDialogCancel>Cancelar</AlertDialogCancel>
+              <AlertDialogAction onClick={confirmDelete} className="bg-destructive text-destructive-foreground hover:bg-destructive/90">
+                Excluir
+              </AlertDialogAction>
+            </AlertDialogFooter>
+          </AlertDialogContent>
+        </AlertDialog>
       </div>
     </div>
   );
