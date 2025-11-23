@@ -82,6 +82,7 @@ const Auth = () => {
       await initializeAdmin(email, password, "Administrador");
       toast.success("Administrador criado com sucesso! Faça login agora.");
       setShowInitAdmin(false);
+      await checkForAdmins(); // Recarrega para confirmar
     } catch (error: any) {
       console.error("Erro ao criar admin:", error);
       toast.error(error.message || "Erro ao criar administrador");
