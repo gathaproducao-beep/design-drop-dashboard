@@ -6,16 +6,13 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { toast } from "sonner";
-import { Loader2, Lock, UserPlus } from "lucide-react";
-import { initializeAdmin } from "@/lib/auth";
+import { Loader2, Lock } from "lucide-react";
 
 const Auth = () => {
   const navigate = useNavigate();
   const [loading, setLoading] = useState(false);
-  const [initializingAdmin, setInitializingAdmin] = useState(false);
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
-  const [showInitAdmin, setShowInitAdmin] = useState(false);
 
   useEffect(() => {
     // Verificar se já está autenticado
@@ -24,23 +21,7 @@ const Auth = () => {
         navigate("/");
       }
     });
-
-    // Verificar se há admins no sistema
-    checkForAdmins();
   }, [navigate]);
-
-  const checkForAdmins = async () => {
-    try {
-      const { data } = await supabase
-        .from('user_roles')
-        .select('id')
-        .limit(1);
-      
-      setShowInitAdmin(!data || data.length === 0);
-    } catch (error) {
-      console.error('Erro ao verificar admins:', error);
-    }
-  };
 
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -67,27 +48,6 @@ const Auth = () => {
       toast.error(error.message || "Erro ao fazer login");
     } finally {
       setLoading(false);
-    }
-  };
-
-  const handleInitializeAdmin = async () => {
-    if (!email || !password) {
-      toast.error("Preencha email e senha para criar o administrador");
-      return;
-    }
-
-    setInitializingAdmin(true);
-
-    try {
-      await initializeAdmin(email, password, "Administrador");
-      toast.success("Administrador criado com sucesso! Faça login agora.");
-      setShowInitAdmin(false);
-      await checkForAdmins(); // Recarrega para confirmar
-    } catch (error: any) {
-      console.error("Erro ao criar admin:", error);
-      toast.error(error.message || "Erro ao criar administrador");
-    } finally {
-      setInitializingAdmin(false);
     }
   };
 
@@ -135,20 +95,6 @@ const Auth = () => {
               {loading && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
               Entrar
             </Button>
-
-            {showInitAdmin && (
-              <Button
-                type="button"
-                variant="outline"
-                className="w-full mt-2"
-                onClick={handleInitializeAdmin}
-                disabled={initializingAdmin}
-              >
-                {initializingAdmin && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-                {!initializingAdmin && <UserPlus className="mr-2 h-4 w-4" />}
-                Criar Primeiro Administrador
-              </Button>
-            )}
           </form>
         </CardContent>
       </Card>
