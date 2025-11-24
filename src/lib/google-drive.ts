@@ -255,18 +255,11 @@ export async function uploadPedidoToDriveByDate(
       // 9. Upload dos moldes
       for (let i = 0; i < pedido.molde_producao.length; i++) {
         const imageUrl = pedido.molde_producao[i];
-        onProgress?.(`Enviando molde ${i + 1}/${pedido.molde_producao.length}...`);
+        onProgress?.(`Comprimindo molde ${i + 1}/${pedido.molde_producao.length}...`);
 
-        const response = await fetch(imageUrl);
-        const blob = await response.blob();
-        const base64 = await new Promise<string>((resolve) => {
-          const reader = new FileReader();
-          reader.onloadend = () => {
-            const base64String = reader.result as string;
-            resolve(base64String.split(",")[1]);
-          };
-          reader.readAsDataURL(blob);
-        });
+        const base64 = await compressImage(imageUrl);
+
+        onProgress?.(`Enviando molde ${i + 1}/${pedido.molde_producao.length}...`);
 
         await supabase.functions.invoke("google-drive-operations", {
           body: {
