@@ -7,7 +7,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
-import { ArrowLeft, Plus, Trash2, GripVertical, Edit, Copy, Save, Download } from "lucide-react";
+import { ArrowLeft, Plus, Trash2, GripVertical, Edit, Copy, Save, Download, RefreshCw } from "lucide-react";
 import { SalvarTemplateDialog } from "@/components/templates/SalvarTemplateDialog";
 import { AplicarTemplateDialog } from "@/components/templates/AplicarTemplateDialog";
 
@@ -128,32 +128,27 @@ export function MockupEditor({ mockup, onClose, onSave }: MockupEditorProps) {
       const naturalWidth = imageRef.current.naturalWidth;
       const naturalHeight = imageRef.current.naturalHeight;
       const renderedWidth = imageRef.current.width;
-      const renderedHeight = imageRef.current.height;
 
-      // VERIFICAR SE JÁ TEM ESCALA SALVA NO BANCO
-      if (canvas.escala_calculada && canvas.largura_original && canvas.altura_original) {
-        // Usar escala do banco (consistente!)
+      // SEMPRE usar escala do banco se existir - NUNCA recalcular
+      if (canvas.escala_calculada) {
         const scaleDoBanco = canvas.escala_calculada;
         
         console.log(`[Scale] ✅ Canvas: ${canvas.nome} - USANDO ESCALA DO BANCO`);
-        console.log(`  - Dimensões salvas: ${canvas.largura_original}x${canvas.altura_original}px`);
         console.log(`  - Escala salva: ${scaleDoBanco}`);
-        console.log(`  - Natural atual: ${naturalWidth}x${naturalHeight}px`);
-        console.log(`  - Rendered atual: ${renderedWidth}x${renderedHeight}px`);
+        console.log(`  - Natural atual: ${naturalWidth}px`);
+        console.log(`  - Rendered atual: ${renderedWidth}px`);
         
         setCanvasScales(prev => ({ ...prev, [activeCanvas]: scaleDoBanco }));
         setScale(scaleDoBanco);
         setScaleReady(true);
       } else {
-        // PRIMEIRA VEZ - Calcular e salvar no banco
-        const newScale = naturalWidth / renderedWidth;
+        // CANVAS ANTIGO sem escala - calcular UMA vez baseado em 800px e salvar
+        const newScale = naturalWidth / 800;
         
-        console.log(`[Scale] 🆕 Canvas: ${canvas.nome} - CALCULANDO E SALVANDO PRIMEIRA VEZ`);
-        console.log(`  - Natural: ${naturalWidth}x${naturalHeight}px`);
-        console.log(`  - Rendered: ${renderedWidth}x${renderedHeight}px`);
-        console.log(`  - Scale calculada: ${newScale}`);
+        console.log(`[Scale] 🆕 Canvas: ${canvas.nome} - CALCULANDO PRIMEIRA VEZ (canvas antigo)`);
+        console.log(`  - Natural: ${naturalWidth}px`);
+        console.log(`  - Scale calculada: ${newScale} (baseado em 800px)`);
         
-        // Salvar no banco para próximas vezes
         try {
           await (supabase as any)
             .from("mockup_canvases")
@@ -382,6 +377,30 @@ export function MockupEditor({ mockup, onClose, onSave }: MockupEditorProps) {
     }
   };
 
+  const handleRecalcularEscala = async (canvasId: string) => {
+    const canvas = canvases.find(c => c.id === canvasId);
+    if (!canvas?.largura_original) {
+      toast.error("Canvas não tem dimensões originais salvas");
+      return;
+    }
+    
+    // Recalcular com base em largura fixa de 800px
+    const novaEscala = canvas.largura_original / 800;
+    
+    try {
+      await (supabase as any)
+        .from("mockup_canvases")
+        .update({ escala_calculada: novaEscala })
+        .eq("id", canvasId);
+      
+      toast.success(`Escala recalculada: ${novaEscala.toFixed(2)}`);
+      carregarCanvases();
+    } catch (error) {
+      console.error("Erro ao recalcular escala:", error);
+      toast.error("Erro ao recalcular escala");
+    }
+  };
+
   const handleUploadCanvasImage = async (canvasId: string, file: File) => {
     setUploading(true);
     try {
@@ -414,15 +433,18 @@ export function MockupEditor({ mockup, onClose, onSave }: MockupEditorProps) {
         .from("mockup-images")
         .getPublicUrl(`mockups/${fileName}`);
 
-      // 3. Calcular escala inicial (será recalculada quando renderizar)
-      // Por enquanto, salvar null e deixar o useEffect calcular na primeira renderização
+      // 3. Calcular escala com base em largura fixa de 800px
+      const escalaCalculada = larguraOriginal / 800;
+      
+      console.log(`[Upload Canvas] Escala calculada: ${escalaCalculada}`);
+      
       await (supabase as any)
         .from("mockup_canvases")
         .update({ 
           imagem_base: urlData.publicUrl,
           largura_original: larguraOriginal,
           altura_original: alturaOriginal,
-          escala_calculada: null // Será calculada ao renderizar
+          escala_calculada: escalaCalculada
         })
         .eq("id", canvasId);
 
@@ -899,6 +921,16 @@ export function MockupEditor({ mockup, onClose, onSave }: MockupEditorProps) {
                     >
                       <Save className="w-4 h-4 mr-2" />
                       Salvar como Template
+                    </Button>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => handleRecalcularEscala(canvas.id)}
+                      disabled={!canvas.largura_original || uploading}
+                      title="Recalcular escala baseado nas dimensões originais"
+                    >
+                      <RefreshCw className="w-4 h-4 mr-2" />
+                      Recalcular Escala
                     </Button>
                     <Input
                       type="file"
