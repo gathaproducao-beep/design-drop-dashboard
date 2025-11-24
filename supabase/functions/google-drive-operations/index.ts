@@ -108,6 +108,47 @@ serve(async (req) => {
         );
       }
 
+      case 'find_folder_by_name': {
+        const { name, parent_id } = params;
+        console.log('Buscando pasta:', name, 'no parent:', parent_id);
+
+        // Montar query de busca
+        const searchQuery = parent_id === 'root' 
+          ? `name='${name}' and 'root' in parents and mimeType='application/vnd.google-apps.folder' and trashed=false`
+          : `name='${name}' and '${parent_id}' in parents and mimeType='application/vnd.google-apps.folder' and trashed=false`;
+        
+        const searchResponse = await fetch(
+          `https://www.googleapis.com/drive/v3/files?q=${encodeURIComponent(searchQuery)}&fields=files(id,name,webViewLink)`,
+          {
+            headers: {
+              'Authorization': `Bearer ${accessToken}`,
+            },
+          }
+        );
+
+        if (!searchResponse.ok) {
+          const errorText = await searchResponse.text();
+          console.error('Erro ao buscar pasta:', errorText);
+          return new Response(
+            JSON.stringify({ error: 'Erro ao buscar pasta', details: errorText }),
+            { status: searchResponse.status, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+          );
+        }
+
+        const searchData = await searchResponse.json();
+        const found = searchData.files && searchData.files.length > 0;
+        
+        console.log(found ? 'Pasta encontrada!' : 'Pasta não encontrada');
+
+        return new Response(
+          JSON.stringify({ 
+            found,
+            folder: found ? searchData.files[0] : null
+          }),
+          { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        );
+      }
+
       case 'upload_file': {
         const { file_name, file_data_base64, mime_type, folder_id } = params;
         console.log('Fazendo upload do arquivo:', file_name);

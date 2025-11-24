@@ -382,6 +382,7 @@ export type Database = {
           numero_pedido: string
           observacao: string | null
           pasta_drive_url: string | null
+          salvar_drive: boolean | null
           telefone: string | null
           updated_at: string | null
         }
@@ -404,6 +405,7 @@ export type Database = {
           numero_pedido: string
           observacao?: string | null
           pasta_drive_url?: string | null
+          salvar_drive?: boolean | null
           telefone?: string | null
           updated_at?: string | null
         }
@@ -426,6 +428,7 @@ export type Database = {
           numero_pedido?: string
           observacao?: string | null
           pasta_drive_url?: string | null
+          salvar_drive?: boolean | null
           telefone?: string | null
           updated_at?: string | null
         }
