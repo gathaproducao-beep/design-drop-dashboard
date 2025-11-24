@@ -271,39 +271,13 @@ export function PedidosTable({
         }
       }
       
-      // Upload para Google Drive quando layout for aprovado
+      // Upload para Google Drive quando layout for aprovado e checkbox marcado
       if (field === "layout_aprovado" && value === "aprovado") {
         const pedidoAtualizado = pedidos.find(p => p.id === pedidoId);
-        
-        // Se já tem foto de aprovação e ainda não foi enviado ao Drive
-        if (pedidoAtualizado?.foto_aprovacao?.length > 0 && !pedidoAtualizado.drive_folder_id) {
-          toast.info('Enviando mockups para Google Drive...');
-          
-          try {
-            const { uploadImagesToDrive } = await import('@/lib/google-drive');
-            
-            const images = pedidoAtualizado.foto_aprovacao.map((url: string, i: number) => ({
-              url,
-              name: `foto-aprovacao-${i + 1}.png`
-            }));
-            
-            const result = await uploadImagesToDrive(pedidoAtualizado, images);
-            
-            if (result) {
-              await supabase
-                .from('pedidos')
-                .update({
-                  drive_folder_id: result.folderId,
-                  drive_folder_url: result.folderUrl
-                })
-                .eq('id', pedidoId);
-              
-              toast.success('Mockups salvos no Google Drive!');
-            }
-          } catch (error) {
-            console.error('Erro ao enviar para Drive:', error);
-            toast.error('Erro ao enviar para Drive');
-          }
+        if (pedidoAtualizado?.salvar_drive) {
+          setTimeout(() => {
+            handleSalvarNoDrive(pedidoAtualizado);
+          }, 500);
         }
       }
       
@@ -347,6 +321,54 @@ export function PedidosTable({
         console.error("Erro na geração automática:", error);
         toast.error("Erro ao gerar foto de aprovação automaticamente");
       }
+    }
+  };
+
+  const handleSalvarNoDrive = async (pedido: any) => {
+    // Validações
+    if (pedido.layout_aprovado !== "aprovado") {
+      toast.error("Layout precisa estar aprovado para salvar no Drive");
+      return;
+    }
+
+    if (!pedido.foto_aprovacao || pedido.foto_aprovacao.length === 0) {
+      toast.error("Nenhuma foto de aprovação para enviar");
+      return;
+    }
+
+    setUploadingToDrive(pedido.id);
+
+    try {
+      const { uploadPedidoToDriveByDate } = await import("@/lib/google-drive");
+      
+      const result = await uploadPedidoToDriveByDate(
+        pedido,
+        (message) => {
+          console.log(message);
+        }
+      );
+
+      if (result.success) {
+        toast.success(
+          <>
+            Arquivos salvos no Google Drive!
+            <br />
+            <a
+              href={result.folderUrl}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="underline"
+            >
+              Abrir pasta
+            </a>
+          </>
+        );
+        onRefresh();
+      }
+    } catch (error: any) {
+      toast.error(error.message || "Erro ao salvar no Drive");
+    } finally {
+      setUploadingToDrive(null);
     }
   };
 
@@ -560,6 +582,7 @@ export function PedidosTable({
               <TableHead className="font-semibold">Molde</TableHead>
               <TableHead className="font-semibold">Data Impressão</TableHead>
               <TableHead className="font-semibold">Observação</TableHead>
+              <TableHead className="text-center font-semibold">Salvar Drive</TableHead>
               <TableHead className="font-semibold">Drive</TableHead>
               <TableHead className="font-semibold">Ações</TableHead>
             </TableRow>
@@ -690,8 +713,38 @@ export function PedidosTable({
                     onSave={(value) => handleUpdateField(pedido.id, "observacao", value)}
                   />
                 </TableCell>
+                <TableCell className="text-center">
+                  <Checkbox
+                    checked={pedido.salvar_drive || false}
+                    onCheckedChange={async (checked) => {
+                      const { error } = await supabase
+                        .from("pedidos")
+                        .update({ salvar_drive: !!checked })
+                        .eq("id", pedido.id);
+
+                      if (!error) {
+                        if (checked && pedido.layout_aprovado === "aprovado") {
+                          handleSalvarNoDrive(pedido);
+                        }
+                        onRefresh();
+                      } else {
+                        toast.error("Erro ao atualizar configuração");
+                      }
+                    }}
+                  />
+                </TableCell>
                 <TableCell>
-                  {pedido.pasta_drive_url ? (
+                  {pedido.drive_folder_url ? (
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      onClick={() => window.open(pedido.drive_folder_url, "_blank")}
+                      className="text-blue-500 hover:text-blue-600"
+                      title="Abrir pasta no Drive"
+                    >
+                      <Cloud className="h-5 w-5 fill-blue-500" />
+                    </Button>
+                  ) : pedido.pasta_drive_url ? (
                     <Button
                       variant="ghost"
                       size="sm"
@@ -721,14 +774,21 @@ export function PedidosTable({
                     <Button
                       size="sm"
                       variant="outline"
-                      onClick={() => handleUploadToDrive(pedido)}
-                      disabled={uploadingToDrive === pedido.id || !pedido.foto_aprovacao || pedido.foto_aprovacao.length === 0}
-                      title="Enviar para Google Drive"
+                      onClick={() => {
+                        if (pedido.drive_folder_url) {
+                          window.open(pedido.drive_folder_url, "_blank");
+                        } else {
+                          handleSalvarNoDrive(pedido);
+                        }
+                      }}
+                      disabled={uploadingToDrive === pedido.id}
+                      title={pedido.drive_folder_url ? "Abrir no Drive" : "Salvar no Drive"}
+                      className={pedido.drive_folder_url ? "text-blue-500 hover:text-blue-600" : ""}
                     >
                       {uploadingToDrive === pedido.id ? (
                         <Loader2 className="h-4 w-4 animate-spin" />
                       ) : (
-                        <Cloud className="h-4 w-4" />
+                        <Cloud className={`h-4 w-4 ${pedido.drive_folder_url ? 'fill-blue-500' : ''}`} />
                       )}
                     </Button>
                     <Button
