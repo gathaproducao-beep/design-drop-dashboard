@@ -288,27 +288,36 @@ export type Database = {
       }
       mockup_canvases: {
         Row: {
+          altura_original: number | null
           created_at: string | null
+          escala_calculada: number | null
           id: string
           imagem_base: string
+          largura_original: number | null
           mockup_id: string
           nome: string
           ordem: number
           updated_at: string | null
         }
         Insert: {
+          altura_original?: number | null
           created_at?: string | null
+          escala_calculada?: number | null
           id?: string
           imagem_base: string
+          largura_original?: number | null
           mockup_id: string
           nome: string
           ordem?: number
           updated_at?: string | null
         }
         Update: {
+          altura_original?: number | null
           created_at?: string | null
+          escala_calculada?: number | null
           id?: string
           imagem_base?: string
+          largura_original?: number | null
           mockup_id?: string
           nome?: string
           ordem?: number

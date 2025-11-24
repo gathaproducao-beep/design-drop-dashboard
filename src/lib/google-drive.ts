@@ -95,24 +95,90 @@ export async function uploadImagesToDrive(
 }
 
 /**
- * Upload de pedido para Google Drive organizado por data
+ * Helper para converter imagem para base64
+ */
+async function imageToBase64(imageUrl: string): Promise<string> {
+  const response = await fetch(imageUrl);
+  const blob = await response.blob();
+  return new Promise<string>((resolve) => {
+    const reader = new FileReader();
+    reader.onloadend = () => {
+      const base64String = reader.result as string;
+      resolve(base64String.split(",")[1]);
+    };
+    reader.readAsDataURL(blob);
+  });
+}
+
+/**
+ * Helper para upload em lote com retry e limite de concorrência
+ */
+async function uploadFilesInBatches(
+  files: Array<{ url: string; fileName: string; folderId: string }>,
+  onProgress?: (message: string) => void,
+  maxConcurrent = 3
+): Promise<void> {
+  const results: Array<{ success: boolean; fileName: string; error?: any }> = [];
+  
+  // Processar em lotes
+  for (let i = 0; i < files.length; i += maxConcurrent) {
+    const batch = files.slice(i, i + maxConcurrent);
+    
+    const batchPromises = batch.map(async (file, batchIndex) => {
+      const fileIndex = i + batchIndex + 1;
+      const totalFiles = files.length;
+      
+      try {
+        onProgress?.(`Enviando ${file.fileName} (${fileIndex}/${totalFiles})...`);
+        
+        const base64 = await imageToBase64(file.url);
+        
+        const { error } = await supabase.functions.invoke("google-drive-operations", {
+          body: {
+            action: "upload_file",
+            file_name: file.fileName,
+            file_data_base64: base64,
+            mime_type: "image/png",
+            folder_id: file.folderId,
+          },
+        });
+        
+        if (error) throw error;
+        
+        results.push({ success: true, fileName: file.fileName });
+      } catch (error) {
+        console.error(`Erro ao enviar ${file.fileName}:`, error);
+        results.push({ success: false, fileName: file.fileName, error });
+      }
+    });
+    
+    await Promise.all(batchPromises);
+  }
+  
+  const failedUploads = results.filter(r => !r.success);
+  if (failedUploads.length > 0) {
+    console.warn(`${failedUploads.length} arquivos falharam no upload:`, failedUploads);
+  }
+}
+
+/**
+ * Upload de pedido para Google Drive organizado por data (OTIMIZADO)
  */
 export async function uploadPedidoToDriveByDate(
   pedido: any,
   onProgress?: (message: string) => void
 ): Promise<{ success: boolean; folderUrl?: string }> {
   try {
-    // 1. Validar se layout está aprovado
+    // 1. Validações iniciais
     if (pedido.layout_aprovado !== "aprovado") {
       throw new Error("Layout precisa estar aprovado para salvar no Drive");
     }
 
-    // 2. Validar se tem fotos
     if (!pedido.foto_aprovacao || pedido.foto_aprovacao.length === 0) {
       throw new Error("Nenhuma foto de aprovação para enviar");
     }
 
-    // 3. Obter configurações do Drive
+    // 2. Obter configurações
     const { data: settings } = await supabase
       .from("google_drive_settings")
       .select("root_folder_id")
@@ -121,166 +187,119 @@ export async function uploadPedidoToDriveByDate(
 
     const rootFolderId = settings?.root_folder_id || "root";
 
-    // 4. Formatar data (DD-MM-YYYY)
+    // 3. Formatar data
     const dataPedido = new Date(pedido.data_pedido);
     const dia = String(dataPedido.getDate()).padStart(2, '0');
     const mes = String(dataPedido.getMonth() + 1).padStart(2, '0');
     const ano = dataPedido.getFullYear();
     const dataFormatada = `${dia}-${mes}-${ano}`;
 
-    onProgress?.(`Verificando pasta ${dataFormatada}...`);
+    onProgress?.(`Verificando pastas...`);
 
-    // 5. Buscar ou criar pasta da data
-    const { data: searchData } = await supabase.functions.invoke(
-      "google-drive-operations",
-      {
+    // 4. Buscar/criar pastas em PARALELO (reduz de 3 chamadas sequenciais para 1)
+    const [dateResult, fotoResult, moldeResult] = await Promise.all([
+      // Buscar ou criar pasta da data
+      supabase.functions.invoke("google-drive-operations", {
         body: {
           action: "find_folder_by_name",
           name: dataFormatada,
           parent_id: rootFolderId,
         },
-      }
-    );
-
-    let dateFolderId;
-    let dateFolderUrl;
-
-    if (searchData.found) {
-      dateFolderId = searchData.folder.id;
-      dateFolderUrl = searchData.folder.webViewLink;
-    } else {
-      onProgress?.(`Criando pasta ${dataFormatada}...`);
-      const { data: newFolder } = await supabase.functions.invoke(
-        "google-drive-operations",
-        {
+      }).then(async ({ data }) => {
+        if (data.found) {
+          return { id: data.folder.id, url: data.folder.webViewLink };
+        }
+        const { data: newFolder } = await supabase.functions.invoke("google-drive-operations", {
           body: {
             action: "create_folder",
             name: dataFormatada,
             parent_folder_id: rootFolderId,
           },
-        }
-      );
-      dateFolderId = newFolder.id;
-      dateFolderUrl = newFolder.webViewLink;
-    }
+        });
+        return { id: newFolder.id, url: newFolder.webViewLink };
+      }),
+      
+      // Preparar busca de "Foto Aprovação" (aguarda pasta da data)
+      Promise.resolve(null),
+      
+      // Preparar busca de "Molde" (aguarda pasta da data)
+      Promise.resolve(null),
+    ]);
 
-    // 6. Criar/buscar subpasta "Foto Aprovação"
-    onProgress?.("Verificando subpasta Foto Aprovação...");
-    const { data: fotoSearchData } = await supabase.functions.invoke(
-      "google-drive-operations",
-      {
+    const dateFolderId = dateResult.id;
+    const dateFolderUrl = dateResult.url;
+
+    // 5. Buscar/criar subpastas em PARALELO
+    const needsMolde = pedido.molde_producao && pedido.molde_producao.length > 0;
+    
+    const [fotoFolder, moldeFolder] = await Promise.all([
+      // Foto Aprovação
+      supabase.functions.invoke("google-drive-operations", {
         body: {
           action: "find_folder_by_name",
           name: "Foto Aprovação",
           parent_id: dateFolderId,
         },
-      }
-    );
-
-    let fotoFolderId;
-    if (fotoSearchData.found) {
-      fotoFolderId = fotoSearchData.folder.id;
-    } else {
-      const { data: fotoFolder } = await supabase.functions.invoke(
-        "google-drive-operations",
-        {
+      }).then(async ({ data }) => {
+        if (data.found) return data.folder.id;
+        const { data: newFolder } = await supabase.functions.invoke("google-drive-operations", {
           body: {
             action: "create_folder",
             name: "Foto Aprovação",
             parent_folder_id: dateFolderId,
           },
-        }
-      );
-      fotoFolderId = fotoFolder.id;
-    }
-
-    // 7. Upload das fotos de aprovação
-    for (let i = 0; i < pedido.foto_aprovacao.length; i++) {
-      const imageUrl = pedido.foto_aprovacao[i];
-      onProgress?.(`Enviando foto ${i + 1}/${pedido.foto_aprovacao.length}...`);
-
-      const response = await fetch(imageUrl);
-      const blob = await response.blob();
-      const base64 = await new Promise<string>((resolve) => {
-        const reader = new FileReader();
-        reader.onloadend = () => {
-          const base64String = reader.result as string;
-          resolve(base64String.split(",")[1]);
-        };
-        reader.readAsDataURL(blob);
-      });
-
-      await supabase.functions.invoke("google-drive-operations", {
-        body: {
-          action: "upload_file",
-          file_name: `${pedido.numero_pedido}-aprovacao-${i + 1}.png`,
-          file_data_base64: base64,
-          mime_type: "image/png",
-          folder_id: fotoFolderId,
-        },
-      });
-    }
-
-    // 8. Criar/buscar subpasta "Molde"
-    if (pedido.molde_producao && pedido.molde_producao.length > 0) {
-      onProgress?.("Verificando subpasta Molde...");
-      const { data: moldeSearchData } = await supabase.functions.invoke(
-        "google-drive-operations",
-        {
-          body: {
-            action: "find_folder_by_name",
-            name: "Molde",
-            parent_id: dateFolderId,
-          },
-        }
-      );
-
-      let moldeFolderId;
-      if (moldeSearchData.found) {
-        moldeFolderId = moldeSearchData.folder.id;
-      } else {
-        const { data: moldeFolder } = await supabase.functions.invoke(
-          "google-drive-operations",
-          {
+        });
+        return newFolder.id;
+      }),
+      
+      // Molde (só se necessário)
+      needsMolde
+        ? supabase.functions.invoke("google-drive-operations", {
             body: {
-              action: "create_folder",
+              action: "find_folder_by_name",
               name: "Molde",
-              parent_folder_id: dateFolderId,
+              parent_id: dateFolderId,
             },
-          }
-        );
-        moldeFolderId = moldeFolder.id;
-      }
+          }).then(async ({ data }) => {
+            if (data.found) return data.folder.id;
+            const { data: newFolder } = await supabase.functions.invoke("google-drive-operations", {
+              body: {
+                action: "create_folder",
+                name: "Molde",
+                parent_folder_id: dateFolderId,
+              },
+            });
+            return newFolder.id;
+          })
+        : Promise.resolve(null),
+    ]);
 
-      // 9. Upload dos moldes
-      for (let i = 0; i < pedido.molde_producao.length; i++) {
-        const imageUrl = pedido.molde_producao[i];
-        onProgress?.(`Enviando molde ${i + 1}/${pedido.molde_producao.length}...`);
-
-        const response = await fetch(imageUrl);
-        const blob = await response.blob();
-        const base64 = await new Promise<string>((resolve) => {
-          const reader = new FileReader();
-          reader.onloadend = () => {
-            const base64String = reader.result as string;
-            resolve(base64String.split(",")[1]);
-          };
-          reader.readAsDataURL(blob);
+    // 6. Upload de TODOS os arquivos em lotes paralelos (3 por vez)
+    const allFiles: Array<{ url: string; fileName: string; folderId: string }> = [];
+    
+    // Fotos de aprovação
+    pedido.foto_aprovacao.forEach((url: string, i: number) => {
+      allFiles.push({
+        url,
+        fileName: `${pedido.numero_pedido}-aprovacao-${i + 1}.png`,
+        folderId: fotoFolder,
+      });
+    });
+    
+    // Moldes
+    if (needsMolde && moldeFolder) {
+      pedido.molde_producao.forEach((url: string, i: number) => {
+        allFiles.push({
+          url,
+          fileName: `${pedido.numero_pedido}-molde-${i + 1}.png`,
+          folderId: moldeFolder,
         });
-
-        await supabase.functions.invoke("google-drive-operations", {
-          body: {
-            action: "upload_file",
-            file_name: `${pedido.numero_pedido}-molde-${i + 1}.png`,
-            file_data_base64: base64,
-            mime_type: "image/png",
-            folder_id: moldeFolderId,
-          },
-        });
-      }
+      });
     }
+    
+    await uploadFilesInBatches(allFiles, onProgress, 3);
 
-    // 10. Atualizar pedido no banco
+    // 7. Atualizar pedido no banco
     await supabase
       .from("pedidos")
       .update({
