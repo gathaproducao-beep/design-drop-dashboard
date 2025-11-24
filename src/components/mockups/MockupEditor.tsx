@@ -22,6 +22,9 @@ interface Canvas {
   nome: string;
   imagem_base: string;
   ordem: number;
+  largura_original?: number;
+  altura_original?: number;
+  escala_calculada?: number;
 }
 
 interface Area {
@@ -109,34 +112,66 @@ export function MockupEditor({ mockup, onClose, onSave }: MockupEditorProps) {
     }
   }, [activeCanvas, scaleReady]);
 
-  // Calcular escala quando a imagem carregar
+  // Calcular escala quando a imagem carregar OU usar escala salva no banco
   useEffect(() => {
-    setScaleReady(false); // Marcar escala como não pronta ao trocar canvas
-    setAreas([]); // Limpar áreas ao trocar canvas
+    setScaleReady(false);
+    setAreas([]);
     
-    const updateScale = () => {
-      if (imageRef.current && imageRef.current.complete && imageRef.current.naturalWidth > 0) {
-        const naturalWidth = imageRef.current.naturalWidth;
-        const naturalHeight = imageRef.current.naturalHeight;
-        const renderedWidth = imageRef.current.width;
-        const renderedHeight = imageRef.current.height;
+    const updateScale = async () => {
+      if (!imageRef.current || !imageRef.current.complete || imageRef.current.naturalWidth === 0) {
+        return;
+      }
+
+      const canvas = canvases.find(c => c.id === activeCanvas);
+      if (!canvas) return;
+
+      const naturalWidth = imageRef.current.naturalWidth;
+      const naturalHeight = imageRef.current.naturalHeight;
+      const renderedWidth = imageRef.current.width;
+      const renderedHeight = imageRef.current.height;
+
+      // VERIFICAR SE JÁ TEM ESCALA SALVA NO BANCO
+      if (canvas.escala_calculada && canvas.largura_original && canvas.altura_original) {
+        // Usar escala do banco (consistente!)
+        const scaleDoBanco = canvas.escala_calculada;
+        
+        console.log(`[Scale] ✅ Canvas: ${canvas.nome} - USANDO ESCALA DO BANCO`);
+        console.log(`  - Dimensões salvas: ${canvas.largura_original}x${canvas.altura_original}px`);
+        console.log(`  - Escala salva: ${scaleDoBanco}`);
+        console.log(`  - Natural atual: ${naturalWidth}x${naturalHeight}px`);
+        console.log(`  - Rendered atual: ${renderedWidth}x${renderedHeight}px`);
+        
+        setCanvasScales(prev => ({ ...prev, [activeCanvas]: scaleDoBanco }));
+        setScale(scaleDoBanco);
+        setScaleReady(true);
+      } else {
+        // PRIMEIRA VEZ - Calcular e salvar no banco
         const newScale = naturalWidth / renderedWidth;
         
-        const canvas = canvases.find(c => c.id === activeCanvas);
-        console.log(`[Scale] Canvas: ${canvas?.nome}`);
-        console.log(`  - Natural: ${naturalWidth} x ${naturalHeight}px`);
-        console.log(`  - Rendered: ${renderedWidth} x ${renderedHeight}px`);
-        console.log(`  - Scale: ${newScale}`);
+        console.log(`[Scale] 🆕 Canvas: ${canvas.nome} - CALCULANDO E SALVANDO PRIMEIRA VEZ`);
+        console.log(`  - Natural: ${naturalWidth}x${naturalHeight}px`);
+        console.log(`  - Rendered: ${renderedWidth}x${renderedHeight}px`);
+        console.log(`  - Scale calculada: ${newScale}`);
         
-        // Armazenar escala específica deste canvas
-        setCanvasScales(prev => {
-          const updated = { ...prev, [activeCanvas]: newScale };
-          console.log(`  - Escalas armazenadas:`, updated);
-          return updated;
-        });
+        // Salvar no banco para próximas vezes
+        try {
+          await (supabase as any)
+            .from("mockup_canvases")
+            .update({
+              largura_original: naturalWidth,
+              altura_original: naturalHeight,
+              escala_calculada: newScale
+            })
+            .eq("id", activeCanvas);
+          
+          console.log(`  - ✓ Escala salva no banco`);
+        } catch (error) {
+          console.error("Erro ao salvar escala:", error);
+        }
         
+        setCanvasScales(prev => ({ ...prev, [activeCanvas]: newScale }));
         setScale(newScale);
-        setScaleReady(true); // Marcar escala como pronta
+        setScaleReady(true);
       }
     };
 
@@ -146,7 +181,6 @@ export function MockupEditor({ mockup, onClose, onSave }: MockupEditorProps) {
         updateScale();
       } else {
         img.addEventListener('load', updateScale);
-        // Adicionar timeout de segurança
         const timeout = setTimeout(updateScale, 1000);
         return () => {
           img.removeEventListener('load', updateScale);
@@ -351,6 +385,24 @@ export function MockupEditor({ mockup, onClose, onSave }: MockupEditorProps) {
   const handleUploadCanvasImage = async (canvasId: string, file: File) => {
     setUploading(true);
     try {
+      // 1. Ler dimensões originais da imagem
+      const img = new Image();
+      const imageUrl = URL.createObjectURL(file);
+      
+      await new Promise((resolve, reject) => {
+        img.onload = resolve;
+        img.onerror = reject;
+        img.src = imageUrl;
+      });
+
+      const larguraOriginal = img.naturalWidth;
+      const alturaOriginal = img.naturalHeight;
+      
+      console.log(`[Upload Canvas] Dimensões originais: ${larguraOriginal}x${alturaOriginal}px`);
+      
+      URL.revokeObjectURL(imageUrl);
+
+      // 2. Upload da imagem
       const fileName = `canvas-${canvasId}-${Date.now()}.${file.name.split(".").pop()}`;
       const { error: uploadError } = await supabase.storage
         .from("mockup-images")
@@ -362,14 +414,22 @@ export function MockupEditor({ mockup, onClose, onSave }: MockupEditorProps) {
         .from("mockup-images")
         .getPublicUrl(`mockups/${fileName}`);
 
+      // 3. Calcular escala inicial (será recalculada quando renderizar)
+      // Por enquanto, salvar null e deixar o useEffect calcular na primeira renderização
       await (supabase as any)
         .from("mockup_canvases")
-        .update({ imagem_base: urlData.publicUrl })
+        .update({ 
+          imagem_base: urlData.publicUrl,
+          largura_original: larguraOriginal,
+          altura_original: alturaOriginal,
+          escala_calculada: null // Será calculada ao renderizar
+        })
         .eq("id", canvasId);
 
       toast.success("Imagem atualizada");
       carregarCanvases();
     } catch (error) {
+      console.error("Erro no upload:", error);
       toast.error("Erro ao fazer upload");
     } finally {
       setUploading(false);
