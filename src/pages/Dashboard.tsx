@@ -9,6 +9,7 @@ import { NovoPedidoDialog } from "@/components/pedidos/NovoPedidoDialog";
 import { ImportarPedidosDialog } from "@/components/pedidos/ImportarPedidosDialog";
 import { ImportarFotosDialog } from "@/components/pedidos/ImportarFotosDialog";
 import { Navigation } from "@/components/Navigation";
+import { StorageCleanupDialog } from "@/components/drive/StorageCleanupDialog";
 import { Checkbox } from "@/components/ui/checkbox";
 import {
   Select,
@@ -100,13 +101,35 @@ export default function Dashboard() {
     try {
       const pedidoIds = Array.from(selectedIds);
       
-      // Primeiro excluir mensagens da fila do WhatsApp relacionadas aos pedidos
+      // Buscar dados dos pedidos para deletar arquivos do storage
+      const { data: pedidosParaDeletar, error: fetchError } = await supabase
+        .from("pedidos")
+        .select("*")
+        .in("id", pedidoIds);
+      
+      if (fetchError) throw fetchError;
+      
+      // Deletar arquivos do storage para cada pedido
+      if (pedidosParaDeletar && pedidosParaDeletar.length > 0) {
+        const { deletePedidoStorageFiles } = await import("@/lib/storage-utils");
+        
+        for (const pedido of pedidosParaDeletar) {
+          try {
+            await deletePedidoStorageFiles(pedido);
+          } catch (storageError) {
+            console.error(`Erro ao deletar arquivos do pedido ${pedido.numero_pedido}:`, storageError);
+            // Continua mesmo se houver erro no storage
+          }
+        }
+      }
+      
+      // Excluir mensagens da fila do WhatsApp relacionadas aos pedidos
       await supabase
         .from("whatsapp_queue")
         .delete()
         .in("pedido_id", pedidoIds);
       
-      // Depois excluir os pedidos
+      // Excluir os pedidos do banco
       const { error } = await supabase
         .from("pedidos")
         .delete()
@@ -114,7 +137,7 @@ export default function Dashboard() {
 
       if (error) throw error;
       
-      toast.success(`${selectedIds.size} pedido(s) excluído(s)`);
+      toast.success(`${selectedIds.size} pedido(s) e seus arquivos excluídos`);
       setSelectedIds(new Set());
       setDeleteDialogOpen(false);
       carregarPedidos();
@@ -381,6 +404,7 @@ export default function Dashboard() {
               </label>
             </div>
             <div className="flex gap-2">
+              <StorageCleanupDialog />
               <Button
                 onClick={handleImportarFotos}
                 variant="outline"

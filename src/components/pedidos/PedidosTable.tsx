@@ -465,35 +465,30 @@ export function PedidosTable({
       const pedido = pedidos.find(p => p.id === pedidoToDelete);
       if (!pedido) return;
 
-      // Deletar fotos do storage
-      const fotosParaDeletar: string[] = [];
-      
-      if (pedido.fotos_cliente) {
-        pedido.fotos_cliente.forEach((url: string) => {
-          const fileName = url.split("/").pop();
-          if (fileName) fotosParaDeletar.push(`clientes/${fileName}`);
-        });
+      // Deletar todos os arquivos do storage usando função utilitária
+      const { deletePedidoStorageFiles } = await import("@/lib/storage-utils");
+      try {
+        await deletePedidoStorageFiles(pedido);
+      } catch (storageError) {
+        console.error("Erro ao deletar arquivos do storage:", storageError);
+        // Continua mesmo se houver erro no storage
       }
 
-      if (fotosParaDeletar.length > 0) {
-        await supabase.storage.from("mockup-images").remove(fotosParaDeletar);
-      }
-
-      // Primeiro excluir mensagens da fila do WhatsApp relacionadas ao pedido
+      // Excluir mensagens da fila do WhatsApp relacionadas ao pedido
       await supabase
         .from("whatsapp_queue")
         .delete()
         .eq("pedido_id", pedidoToDelete);
 
-      // Depois deletar o pedido
-      const { error } = await (supabase as any)
+      // Deletar o pedido do banco
+      const { error } = await supabase
         .from("pedidos")
         .delete()
         .eq("id", pedidoToDelete);
 
       if (error) throw error;
 
-      toast.success("Pedido excluído com sucesso!");
+      toast.success("Pedido e seus arquivos excluídos com sucesso!");
       onRefresh();
     } catch (error) {
       console.error("Erro ao deletar pedido:", error);

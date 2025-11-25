@@ -11,3 +11,6 @@ verify_jwt = false
 
 [functions.google-drive-operations]
 verify_jwt = false
+
+[functions.cleanup-orphan-files]
+verify_jwt = false
