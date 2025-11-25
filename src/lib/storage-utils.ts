@@ -9,12 +9,13 @@ export function extractStoragePath(url: string): string | null {
   
   const parts = url.split("/mockup-images/");
   if (parts.length === 2) {
-    return parts[1];
+    // Decode URI components to handle %20 and other encoded characters
+    return decodeURIComponent(parts[1]);
   }
   
   // Fallback: tentar extrair apenas o nome do arquivo
   const fileName = url.split("/").pop();
-  return fileName || null;
+  return fileName ? decodeURIComponent(fileName) : null;
 }
 
 /**

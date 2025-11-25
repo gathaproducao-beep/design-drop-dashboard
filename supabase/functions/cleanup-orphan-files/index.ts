@@ -109,7 +109,7 @@ Deno.serve(async (req) => {
     const orphanFiles: OrphanFile[] = [];
     const extractPath = (url: string): string | null => {
       const parts = url.split("/mockup-images/");
-      return parts.length === 2 ? parts[1] : null;
+      return parts.length === 2 ? decodeURIComponent(parts[1]) : null;
     };
 
     for (const filePath of allStorageFiles) {
