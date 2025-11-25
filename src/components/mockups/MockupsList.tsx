@@ -94,13 +94,23 @@ export function MockupsList({ mockups, loading, onEdit, onRefresh }: MockupsList
 
     setDeleting(mockupToDelete.id);
     try {
+      // Deletar imagens do storage primeiro
+      const { deleteMockupStorageFiles } = await import("@/lib/storage-utils");
+      try {
+        await deleteMockupStorageFiles(mockupToDelete.id);
+      } catch (storageError) {
+        console.error("Erro ao deletar imagens do storage:", storageError);
+        // Continua mesmo se houver erro no storage
+      }
+
+      // Deletar mockup do banco (cascade delete irá remover canvas e areas)
       const { error } = await supabase
         .from("mockups")
         .delete()
         .eq("id", mockupToDelete.id);
 
       if (error) throw error;
-      toast.success("Mockup excluído");
+      toast.success("Mockup e suas imagens excluídos");
       onRefresh();
     } catch (error) {
       console.error("Erro ao excluir:", error);
