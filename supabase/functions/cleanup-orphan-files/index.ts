@@ -103,6 +103,23 @@ Deno.serve(async (req) => {
       }
     });
 
+    console.log(`[Cleanup] URLs em mockup_canvases: ${referencedUrls.size}`);
+
+    // 3. URLs dos mockups (imagem_base)
+    const { data: mockups, error: mockupsError } = await supabase
+      .from("mockups")
+      .select("imagem_base");
+
+    if (mockupsError) {
+      throw new Error(`Erro ao buscar mockups: ${mockupsError.message}`);
+    }
+
+    mockups?.forEach((mockup: any) => {
+      if (mockup.imagem_base) {
+        referencedUrls.add(mockup.imagem_base);
+      }
+    });
+
     console.log(`[Cleanup] Total de URLs referenciadas: ${referencedUrls.size}`);
 
     // 3. Identificar arquivos órfãos
