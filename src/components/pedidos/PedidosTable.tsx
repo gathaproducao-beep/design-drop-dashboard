@@ -194,6 +194,7 @@ interface PedidosTableProps {
   selectedIds: Set<string>;
   onSelectionChange: (ids: Set<string>) => void;
   gerarFotoAuto?: boolean;
+  salvarDriveAuto?: boolean;
 }
 
 export function PedidosTable({ 
@@ -202,7 +203,8 @@ export function PedidosTable({
   onRefresh, 
   selectedIds, 
   onSelectionChange,
-  gerarFotoAuto = false
+  gerarFotoAuto = false,
+  salvarDriveAuto = false
 }: PedidosTableProps) {
   const [uploadDialogOpen, setUploadDialogOpen] = useState(false);
   const [viewDialogOpen, setViewDialogOpen] = useState(false);
@@ -271,10 +273,10 @@ export function PedidosTable({
         }
       }
       
-      // Upload para Google Drive quando layout for aprovado e checkbox marcado
-      if (field === "layout_aprovado" && value === "aprovado") {
+      // Upload para Google Drive quando layout for aprovado e opção automática ativa
+      if (salvarDriveAuto && field === "layout_aprovado" && value === "aprovado") {
         const pedidoAtualizado = pedidos.find(p => p.id === pedidoId);
-        if (pedidoAtualizado?.salvar_drive) {
+        if (pedidoAtualizado) {
           setTimeout(() => {
             handleSalvarNoDrive(pedidoAtualizado);
           }, 500);
@@ -577,8 +579,7 @@ export function PedidosTable({
               <TableHead className="font-semibold">Molde</TableHead>
               <TableHead className="font-semibold">Data Impressão</TableHead>
               <TableHead className="font-semibold">Observação</TableHead>
-              <TableHead className="text-center font-semibold">Salvar Drive</TableHead>
-              <TableHead className="font-semibold">Drive</TableHead>
+              <TableHead className="font-semibold">Pasta Drive</TableHead>
               <TableHead className="font-semibold">Ações</TableHead>
             </TableRow>
           </TableHeader>
@@ -709,26 +710,6 @@ export function PedidosTable({
                   />
                 </TableCell>
                 <TableCell className="text-center">
-                  <Checkbox
-                    checked={pedido.salvar_drive || false}
-                    onCheckedChange={async (checked) => {
-                      const { error } = await supabase
-                        .from("pedidos")
-                        .update({ salvar_drive: !!checked })
-                        .eq("id", pedido.id);
-
-                      if (!error) {
-                        if (checked && pedido.layout_aprovado === "aprovado") {
-                          handleSalvarNoDrive(pedido);
-                        }
-                        onRefresh();
-                      } else {
-                        toast.error("Erro ao atualizar configuração");
-                      }
-                    }}
-                  />
-                </TableCell>
-                <TableCell>
                   {pedido.drive_folder_url ? (
                     <Button
                       variant="ghost"

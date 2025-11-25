@@ -51,6 +51,7 @@ export default function Dashboard() {
   const [importarPedidosOpen, setImportarPedidosOpen] = useState(false);
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [gerarFotoAuto, setGerarFotoAuto] = useState(true);
+  const [salvarDriveAuto, setSalvarDriveAuto] = useState(false);
   const [importarFotosOpen, setImportarFotosOpen] = useState(false);
   const [downloadDialogOpen, setDownloadDialogOpen] = useState(false);
   const [tipoDownload, setTipoDownload] = useState<'aprovacao' | 'molde'>('molde');
@@ -390,18 +391,33 @@ export default function Dashboard() {
           </div>
 
           <div className="flex items-center justify-between gap-4 p-3 bg-muted/30 rounded-lg border">
-            <div className="flex items-center gap-2">
-              <Checkbox
-                id="gerar-auto"
-                checked={gerarFotoAuto}
-                onCheckedChange={(checked) => setGerarFotoAuto(checked as boolean)}
-              />
-              <label
-                htmlFor="gerar-auto"
-                className="text-sm font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70 cursor-pointer"
-              >
-                Gerar foto aprovação automaticamente
-              </label>
+            <div className="flex items-center gap-6">
+              <div className="flex items-center gap-2">
+                <Checkbox
+                  id="gerar-auto"
+                  checked={gerarFotoAuto}
+                  onCheckedChange={(checked) => setGerarFotoAuto(checked as boolean)}
+                />
+                <label
+                  htmlFor="gerar-auto"
+                  className="text-sm font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70 cursor-pointer"
+                >
+                  Gerar foto aprovação automaticamente
+                </label>
+              </div>
+              <div className="flex items-center gap-2">
+                <Checkbox
+                  id="salvar-drive-auto"
+                  checked={salvarDriveAuto}
+                  onCheckedChange={(checked) => setSalvarDriveAuto(checked as boolean)}
+                />
+                <label
+                  htmlFor="salvar-drive-auto"
+                  className="text-sm font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70 cursor-pointer"
+                >
+                  Salvar no Drive automaticamente
+                </label>
+              </div>
             </div>
             <div className="flex gap-2">
               <StorageCleanupDialog />
@@ -545,6 +561,7 @@ export default function Dashboard() {
           selectedIds={selectedIds}
           onSelectionChange={setSelectedIds}
           gerarFotoAuto={gerarFotoAuto}
+          salvarDriveAuto={salvarDriveAuto}
         />
 
         <div className="mt-4">
