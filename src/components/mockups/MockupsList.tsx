@@ -35,19 +35,31 @@ export function MockupsList({ mockups, loading, onEdit, onRefresh }: MockupsList
     const loadCanvasImages = async () => {
       const images: Record<string, string> = {};
       
-      for (const mockup of mockups) {
-        if (!mockup.imagem_base) {
-          const { data: canvases } = await supabase
-            .from("mockup_canvases")
-            .select("imagem_base")
-            .eq("mockup_id", mockup.id)
-            .order("ordem", { ascending: true })
-            .limit(1)
-            .single();
+      // Filtrar mockups que não tem imagem_base
+      const mockupsWithoutImage = mockups.filter(m => !m.imagem_base);
+      
+      if (mockupsWithoutImage.length > 0) {
+        const mockupIds = mockupsWithoutImage.map(m => m.id);
+        
+        // Buscar todos os canvas em uma única query
+        const { data: allCanvases } = await supabase
+          .from("mockup_canvases")
+          .select("mockup_id, imagem_base, ordem")
+          .in("mockup_id", mockupIds)
+          .order("ordem", { ascending: true });
+        
+        // Agrupar por mockup_id e pegar o primeiro canvas de cada
+        if (allCanvases) {
+          const canvasMap = new Map<string, string>();
+          allCanvases.forEach(canvas => {
+            if (!canvasMap.has(canvas.mockup_id) && canvas.imagem_base) {
+              canvasMap.set(canvas.mockup_id, canvas.imagem_base);
+            }
+          });
           
-          if (canvases?.imagem_base) {
-            images[mockup.id] = canvases.imagem_base;
-          }
+          canvasMap.forEach((imagem, mockupId) => {
+            images[mockupId] = imagem;
+          });
         }
       }
       
@@ -57,17 +69,32 @@ export function MockupsList({ mockups, loading, onEdit, onRefresh }: MockupsList
     const loadMockupsVinculados = async () => {
       const vinculados: Record<string, any> = {};
       
-      for (const mockup of mockups) {
-        if (mockup.mockup_aprovacao_vinculado_id) {
-          const { data: mockupVinculado } = await supabase
-            .from("mockups")
-            .select("codigo_mockup")
-            .eq("id", mockup.mockup_aprovacao_vinculado_id)
-            .single();
+      // Filtrar mockups que tem vinculado
+      const mockupsWithVinculado = mockups.filter(m => m.mockup_aprovacao_vinculado_id);
+      
+      if (mockupsWithVinculado.length > 0) {
+        const vinculadoIds = mockupsWithVinculado.map(m => m.mockup_aprovacao_vinculado_id);
+        
+        // Buscar todos os mockups vinculados em uma única query
+        const { data: allVinculados } = await supabase
+          .from("mockups")
+          .select("id, codigo_mockup")
+          .in("id", vinculadoIds);
+        
+        // Criar map para acesso rápido
+        if (allVinculados) {
+          const vinculadoMap = new Map<string, any>();
+          allVinculados.forEach(v => {
+            vinculadoMap.set(v.id, v);
+          });
           
-          if (mockupVinculado) {
-            vinculados[mockup.id] = mockupVinculado;
-          }
+          // Mapear de volta para os mockups originais
+          mockupsWithVinculado.forEach(mockup => {
+            const vinculado = vinculadoMap.get(mockup.mockup_aprovacao_vinculado_id);
+            if (vinculado) {
+              vinculados[mockup.id] = vinculado;
+            }
+          });
         }
       }
       

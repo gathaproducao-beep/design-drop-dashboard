@@ -20,7 +20,10 @@ Deno.serve(async (req) => {
   }
 
   try {
-    console.log('Iniciando processamento da fila WhatsApp');
+    // Detectar origem da chamada (trigger, cron ou manual)
+    const body = await req.json().catch(() => ({}));
+    const source = body.source || 'manual';
+    console.log(`Iniciando processamento da fila WhatsApp (origem: ${source})`);
 
     // Inicializar cliente Supabase
     const supabaseUrl = Deno.env.get('SUPABASE_URL')!;
