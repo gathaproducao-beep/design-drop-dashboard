@@ -180,25 +180,9 @@ export async function generateMockupsForPedido(
     }
 
     if (mockups.length === 0) {
-      onProgress?.('Mockup não configurado - usando foto do cliente');
-      
-      // Atualizar com foto do cliente se não houver mockup configurado
-      if (tipoGerar === 'aprovacao' || tipoGerar === 'all') {
-        const fotoCliente = pedido.fotos_cliente?.[0];
-        if (fotoCliente) {
-          await supabase
-            .from('pedidos')
-            .update({ 
-              foto_aprovacao: [fotoCliente],
-              layout_aprovado: 'pendente'
-            })
-            .eq('id', pedido.id);
-          
-          return { aprovacao: [fotoCliente] };
-        }
-      }
-      
-      return {};
+      onProgress?.('Produto sem mockup configurado - nenhuma ação realizada');
+      console.log(`[Mockup] Produto ${pedido.codigo_produto} não possui mockup configurado`);
+      return {}; // Retorna vazio sem fazer nada
     }
 
     // Processar cada mockup

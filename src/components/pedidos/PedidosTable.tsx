@@ -317,6 +317,19 @@ export function PedidosTable({
   const handleFotosClienteUpdated = async (pedido: any) => {
     if (gerarFotoAuto && pedido.fotos_cliente?.length > 0) {
       try {
+        // Verificar se existe mockup antes de tentar gerar
+        const { data: mockups } = await supabase
+          .from("mockups")
+          .select("id")
+          .eq("codigo_mockup", pedido.codigo_produto)
+          .limit(1);
+        
+        if (!mockups || mockups.length === 0) {
+          // Silenciosamente não faz nada - produto sem mockup configurado
+          console.log(`[Auto] Produto ${pedido.codigo_produto} sem mockup - ignorando geração automática`);
+          return;
+        }
+        
         toast.info("Gerando foto de aprovação automaticamente...");
         await handleGerarMockups(pedido, 'aprovacao');
       } catch (error) {
