@@ -317,16 +317,20 @@ export function PedidosTable({
   const handleFotosClienteUpdated = async (pedido: any) => {
     if (gerarFotoAuto && pedido.fotos_cliente?.length > 0) {
       try {
-        // Verificar se existe mockup antes de tentar gerar
-        const { data: mockups } = await supabase
+        // Verificar se existe mockup (molde com vínculo OU aprovação direta)
+        const { data: mockupMolde } = await supabase
           .from("mockups")
-          .select("id")
+          .select("id, tipo, mockup_aprovacao_vinculado_id")
           .eq("codigo_mockup", pedido.codigo_produto)
           .limit(1);
         
-        if (!mockups || mockups.length === 0) {
-          // Silenciosamente não faz nada - produto sem mockup configurado
-          console.log(`[Auto] Produto ${pedido.codigo_produto} sem mockup - ignorando geração automática`);
+        // Se encontrou mockup molde com vínculo OU mockup de aprovação direto
+        const temMockup = mockupMolde && mockupMolde.length > 0 && 
+          (mockupMolde[0].mockup_aprovacao_vinculado_id || mockupMolde[0].tipo === 'aprovacao');
+        
+        if (!temMockup) {
+          // Produto sem mockup configurado - não fazer nada
+          console.log(`[Auto] Produto ${pedido.codigo_produto} sem mockup configurado`);
           return;
         }
         
