@@ -66,7 +66,7 @@ export default function Dashboard() {
 
   useEffect(() => {
     setPaginaAtual(1);
-  }, [searchTerm, filterMensagem, filterLayout, filterDataInicio, filterDataFim]);
+  }, [searchTerm, filterMensagem, filterLayout, filterDataInicio, filterDataFim, filterArquivado]);
 
   const carregarPedidos = async () => {
     try {
