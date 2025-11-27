@@ -2,11 +2,12 @@ import { useState, useEffect } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Plus, Search } from "lucide-react";
+import { Plus, Search, FlaskConical } from "lucide-react";
 import { toast } from "sonner";
 import { MockupsList } from "@/components/mockups/MockupsList";
 import { NovoMockupDialog } from "@/components/mockups/NovoMockupDialog";
 import { MockupEditor } from "@/components/mockups/MockupEditor";
+import { TesteExportacaoDialog } from "@/components/mockups/TesteExportacaoDialog";
 import { Navigation } from "@/components/Navigation";
 import {
   Select,
@@ -28,6 +29,7 @@ export default function Mockups() {
   const [mockups, setMockups] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [novoMockupOpen, setNovoMockupOpen] = useState(false);
+  const [testeExportacaoOpen, setTesteExportacaoOpen] = useState(false);
   const [selectedMockup, setSelectedMockup] = useState<any>(null);
   const [filtroNome, setFiltroNome] = useState("");
   const [filtroTipo, setFiltroTipo] = useState<string>("todos");
@@ -93,13 +95,22 @@ export default function Mockups() {
                   Gerencie templates de mockups e suas áreas editáveis
                 </p>
               </div>
-              <Button
-                onClick={() => setNovoMockupOpen(true)}
-                className="bg-gradient-to-r from-primary to-primary/80 hover:shadow-lg transition-all"
-              >
-                <Plus className="mr-2 h-4 w-4" />
-                Novo Mockup
-              </Button>
+              <div className="flex gap-2">
+                <Button
+                  onClick={() => setTesteExportacaoOpen(true)}
+                  variant="outline"
+                >
+                  <FlaskConical className="mr-2 h-4 w-4" />
+                  Testar Exportação
+                </Button>
+                <Button
+                  onClick={() => setNovoMockupOpen(true)}
+                  className="bg-gradient-to-r from-primary to-primary/80 hover:shadow-lg transition-all"
+                >
+                  <Plus className="mr-2 h-4 w-4" />
+                  Novo Mockup
+                </Button>
+              </div>
             </div>
 
             <div className="mb-6 flex gap-4 items-center">
@@ -167,6 +178,11 @@ export default function Mockups() {
               open={novoMockupOpen}
               onOpenChange={setNovoMockupOpen}
               onSuccess={carregarMockups}
+            />
+            
+            <TesteExportacaoDialog
+              open={testeExportacaoOpen}
+              onOpenChange={setTesteExportacaoOpen}
             />
           </>
         )}
