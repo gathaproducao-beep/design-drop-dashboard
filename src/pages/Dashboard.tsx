@@ -11,6 +11,7 @@ import { ImportarFotosDialog } from "@/components/pedidos/ImportarFotosDialog";
 import { Navigation } from "@/components/Navigation";
 import { StorageCleanupDialog } from "@/components/drive/StorageCleanupDialog";
 import { Checkbox } from "@/components/ui/checkbox";
+import { getDataBrasilia } from "@/lib/utils";
 import {
   Select,
   SelectContent,
@@ -277,7 +278,7 @@ export default function Dashboard() {
         numero_pedido: `NOVO-${Date.now()}`,
         nome_cliente: "",
         codigo_produto: "",
-        data_pedido: new Date().toISOString().split('T')[0],
+        data_pedido: getDataBrasilia(),
       };
 
       const { error } = await supabase.from("pedidos").insert([novaLinha]);
