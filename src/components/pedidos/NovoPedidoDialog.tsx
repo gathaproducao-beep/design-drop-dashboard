@@ -13,6 +13,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
 import { Loader2 } from "lucide-react";
+import { getDataBrasilia } from "@/lib/utils";
 
 interface NovoPedidoDialogProps {
   open: boolean;
@@ -31,7 +32,7 @@ export function NovoPedidoDialog({
     nome_cliente: "",
     codigo_produto: "",
     telefone: "",
-    data_pedido: new Date().toISOString().split("T")[0],
+    data_pedido: getDataBrasilia(),
     observacao: "",
     pasta_drive_url: "",
   });
@@ -53,7 +54,7 @@ export function NovoPedidoDialog({
         nome_cliente: "",
         codigo_produto: "",
         telefone: "",
-        data_pedido: new Date().toISOString().split("T")[0],
+        data_pedido: getDataBrasilia(),
         observacao: "",
         pasta_drive_url: "",
       });

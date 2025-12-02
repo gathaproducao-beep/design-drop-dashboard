@@ -13,6 +13,7 @@ import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
 import * as XLSX from "xlsx";
 import { Alert, AlertDescription } from "@/components/ui/alert";
+import { getDataBrasilia } from "@/lib/utils";
 
 interface ImportarPedidosDialogProps {
   open: boolean;
@@ -106,7 +107,7 @@ export function ImportarPedidosDialog({
         nome_cliente: p.nome_cliente,
         codigo_produto: p.codigo_produto,
         telefone: p.telefone || null,
-        data_pedido: p.data_pedido || new Date().toISOString().split("T")[0],
+        data_pedido: p.data_pedido || getDataBrasilia(),
         observacao: p.observacao || null,
         mensagem_enviada: "pendente",
         layout_aprovado: "pendente",
