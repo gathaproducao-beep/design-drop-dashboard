@@ -93,10 +93,22 @@ serve(async (req) => {
     console.log(`Encontradas ${instances.length} instâncias ativas`);
 
     // Tentar enviar por cada instância até conseguir
-    let lastError = null;
+    let lastError: any = null;
+    let lastErrorMessage = '';
     for (const instance of instances) {
       try {
         console.log(`Tentando enviar pela instância: ${instance.nome} (${instance.evolution_instance})`);
+
+        // Limpar espaços da URL e dados da instância
+        const apiUrl = instance.evolution_api_url?.trim();
+        const apiKey = instance.evolution_api_key?.trim();
+        const instanceName = instance.evolution_instance?.trim();
+
+        if (!apiUrl || !apiKey || !instanceName) {
+          console.error(`Instância ${instance.nome} com dados incompletos`);
+          lastErrorMessage = `Instância "${instance.nome}" está com dados incompletos. Verifique URL, API Key e nome da instância.`;
+          continue;
+        }
 
         let response;
         let data;
@@ -104,13 +116,13 @@ serve(async (req) => {
         // Se tem mídia, enviar como mídia
         if (media_url && media_type) {
           console.log(`Enviando mídia: ${media_type} - ${media_url}`);
-          const mediaUrl = `${instance.evolution_api_url}/message/sendMedia/${instance.evolution_instance}`;
+          const mediaUrl = `${apiUrl}/message/sendMedia/${instanceName}`;
           
           response = await fetch(mediaUrl, {
             method: 'POST',
             headers: {
               'Content-Type': 'application/json',
-              'apikey': instance.evolution_api_key,
+              'apikey': apiKey,
             },
             body: JSON.stringify({
               number: normalizedPhone,
@@ -124,13 +136,13 @@ serve(async (req) => {
         } else {
           // Enviar como texto
           console.log(`Enviando texto: ${message}`);
-          const textUrl = `${instance.evolution_api_url}/message/sendText/${instance.evolution_instance}`;
+          const textUrl = `${apiUrl}/message/sendText/${instanceName}`;
           
           response = await fetch(textUrl, {
             method: 'POST',
             headers: {
               'Content-Type': 'application/json',
-              'apikey': instance.evolution_api_key,
+              'apikey': apiKey,
             },
             body: JSON.stringify({
               number: normalizedPhone,
@@ -144,7 +156,20 @@ serve(async (req) => {
         if (!response.ok) {
           console.error(`Erro na instância ${instance.nome}:`, data);
           lastError = data;
-          continue; // Tenta próxima instância
+          
+          // Traduzir erros comuns para mensagens mais claras
+          if (response.status === 401 || response.status === 403) {
+            lastErrorMessage = `API Key inválida na instância "${instance.nome}". Verifique a chave de autenticação.`;
+          } else if (response.status === 404) {
+            lastErrorMessage = `Instância "${instanceName}" não encontrada no servidor Evolution. Verifique se o nome está correto.`;
+          } else if (data?.message?.includes('not connected') || data?.message?.includes('disconnected')) {
+            lastErrorMessage = `WhatsApp não conectado na instância "${instance.nome}". Escaneie o QR Code novamente.`;
+          } else if (data?.message?.includes('number') || data?.message?.includes('phone')) {
+            lastErrorMessage = `Número de telefone inválido: ${normalizedPhone}. Verifique se está no formato correto (com DDD).`;
+          } else {
+            lastErrorMessage = `Erro na instância "${instance.nome}": ${data?.message || 'Erro desconhecido'}`;
+          }
+          continue;
         }
 
         console.log(`Mensagem enviada com sucesso pela instância: ${instance.nome}`);
@@ -161,14 +186,25 @@ serve(async (req) => {
       } catch (error) {
         console.error(`Erro ao enviar pela instância ${instance.nome}:`, error);
         lastError = error;
-        continue; // Tenta próxima instância
+        
+        // Traduzir erros de conexão
+        const errorMsg = error instanceof Error ? error.message : String(error);
+        if (errorMsg.includes('Invalid URL')) {
+          lastErrorMessage = `URL inválida na instância "${instance.nome}". Verifique se a URL está correta e sem espaços.`;
+        } else if (errorMsg.includes('fetch') || errorMsg.includes('network') || errorMsg.includes('ECONNREFUSED')) {
+          lastErrorMessage = `Não foi possível conectar ao servidor Evolution da instância "${instance.nome}". Verifique se o servidor está online.`;
+        } else {
+          lastErrorMessage = `Erro ao conectar com "${instance.nome}": ${errorMsg}`;
+        }
+        continue;
       }
     }
 
     // Se chegou aqui, nenhuma instância conseguiu enviar
     return new Response(
       JSON.stringify({ 
-        error: 'Falha ao enviar mensagem por todas as instâncias',
+        error: lastErrorMessage || 'Não foi possível enviar a mensagem. Verifique as configurações das instâncias.',
+        message: lastErrorMessage || 'Falha ao enviar mensagem por todas as instâncias',
         details: lastError 
       }),
       { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }

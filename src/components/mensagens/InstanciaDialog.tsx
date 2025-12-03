@@ -53,10 +53,10 @@ export const InstanciaDialog = ({ open, onOpenChange, instancia, onSuccess }: In
 
     try {
       const data = {
-        nome,
-        evolution_api_url: evolutionApiUrl,
-        evolution_api_key: evolutionApiKey,
-        evolution_instance: evolutionInstance,
+        nome: nome.trim(),
+        evolution_api_url: evolutionApiUrl.trim(),
+        evolution_api_key: evolutionApiKey.trim(),
+        evolution_instance: evolutionInstance.trim(),
         is_active: isActive,
         ordem: parseInt(ordem.toString()) || 0,
       };
