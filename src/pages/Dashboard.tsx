@@ -2,7 +2,8 @@ import { useState, useEffect } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Plus, Search, Filter, Trash2, Upload, FileSpreadsheet, Download, Archive } from "lucide-react";
+import { Plus, Search, Filter, Trash2, Upload, FileSpreadsheet, Download, Archive, Edit } from "lucide-react";
+import { AtualizarLoteDialog } from "@/components/pedidos/AtualizarLoteDialog";
 import { toast } from "sonner";
 import { PedidosTable } from "@/components/pedidos/PedidosTable";
 import { NovoPedidoDialog } from "@/components/pedidos/NovoPedidoDialog";
@@ -60,6 +61,7 @@ export default function Dashboard() {
   const [itensPorPagina, setItensPorPagina] = useState(50);
   const [filterArquivado, setFilterArquivado] = useState<string>("ativos");
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
+  const [atualizarLoteOpen, setAtualizarLoteOpen] = useState(false);
 
   useEffect(() => {
     carregarPedidos();
@@ -301,6 +303,54 @@ export default function Dashboard() {
     setImportarPedidosOpen(true);
   };
 
+  const handleAtualizarLote = async (campo: string, valor: string) => {
+    const pedidoIds = Array.from(selectedIds);
+    
+    try {
+      // Caso especial: reenviar mensagem
+      if (campo === "mensagem_enviada" && valor === "reenviar") {
+        const { processarEnvioPedido } = await import("@/lib/whatsapp");
+        let enviados = 0;
+        let erros = 0;
+        
+        for (const id of pedidoIds) {
+          try {
+            await processarEnvioPedido(id);
+            enviados++;
+          } catch (error) {
+            console.error(`Erro ao processar pedido ${id}:`, error);
+            erros++;
+          }
+        }
+        
+        if (erros > 0) {
+          toast.warning(`${enviados} mensagem(ns) adicionada(s) à fila. ${erros} erro(s).`);
+        } else {
+          toast.success(`${enviados} mensagem(ns) adicionada(s) à fila`);
+        }
+        setSelectedIds(new Set());
+        carregarPedidos();
+        return;
+      }
+      
+      // Atualização normal
+      const { error } = await supabase
+        .from("pedidos")
+        .update({ [campo]: valor || null })
+        .in("id", pedidoIds);
+      
+      if (error) throw error;
+      
+      toast.success(`${pedidoIds.length} pedido(s) atualizado(s)`);
+      setSelectedIds(new Set());
+      carregarPedidos();
+    } catch (error) {
+      console.error("Erro ao atualizar em lote:", error);
+      toast.error("Erro ao atualizar pedidos");
+      throw error;
+    }
+  };
+
   const pedidosFiltrados = pedidos.filter((pedido) => {
     const matchSearch =
       !searchTerm ||
@@ -347,8 +397,16 @@ export default function Dashboard() {
                 <>
                   <Button
                     variant="outline"
+                    onClick={() => setAtualizarLoteOpen(true)}
+                    className="bg-purple-50 hover:bg-purple-100 border-purple-200 dark:bg-purple-950/30 dark:hover:bg-purple-900/40 dark:border-purple-800"
+                  >
+                    <Edit className="mr-2 h-4 w-4" />
+                    Atualizar em Lote ({selectedIds.size})
+                  </Button>
+                  <Button
+                    variant="outline"
                     onClick={handleDownloadClick}
-                    className="bg-blue-50 hover:bg-blue-100 border-blue-200"
+                    className="bg-blue-50 hover:bg-blue-100 border-blue-200 dark:bg-blue-950/30 dark:hover:bg-blue-900/40 dark:border-blue-800"
                   >
                     <Download className="mr-2 h-4 w-4" />
                     Baixar Arquivos ({selectedIds.size})
@@ -357,7 +415,7 @@ export default function Dashboard() {
                     <Button
                       variant="outline"
                       onClick={handleDesarquivarSelecionados}
-                      className="bg-green-50 hover:bg-green-100 border-green-200"
+                      className="bg-green-50 hover:bg-green-100 border-green-200 dark:bg-green-950/30 dark:hover:bg-green-900/40 dark:border-green-800"
                     >
                       <Archive className="mr-2 h-4 w-4" />
                       Restaurar ({selectedIds.size})
@@ -366,7 +424,7 @@ export default function Dashboard() {
                     <Button
                       variant="outline"
                       onClick={handleArquivarSelecionados}
-                      className="bg-amber-50 hover:bg-amber-100 border-amber-200"
+                      className="bg-amber-50 hover:bg-amber-100 border-amber-200 dark:bg-amber-950/30 dark:hover:bg-amber-900/40 dark:border-amber-800"
                     >
                       <Archive className="mr-2 h-4 w-4" />
                       Arquivar ({selectedIds.size})
@@ -648,6 +706,13 @@ export default function Dashboard() {
             </AlertDialogFooter>
           </AlertDialogContent>
         </AlertDialog>
+
+        <AtualizarLoteDialog
+          open={atualizarLoteOpen}
+          onOpenChange={setAtualizarLoteOpen}
+          selectedCount={selectedIds.size}
+          onConfirm={handleAtualizarLote}
+        />
       </div>
     </div>
   );
