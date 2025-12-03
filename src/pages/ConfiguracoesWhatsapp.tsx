@@ -9,7 +9,7 @@ import { Badge } from "@/components/ui/badge";
 import { toast } from "@/hooks/use-toast";
 import { supabase } from "@/integrations/supabase/client";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { Loader2, Settings, MessageSquare, AlertCircle, Plus, Edit, Trash2 } from "lucide-react";
+import { Loader2, Settings, MessageSquare, AlertCircle, Plus, Edit, Trash2, Copy } from "lucide-react";
 import { TesteEnvioDialog } from "@/components/mensagens/TesteEnvioDialog";
 import { InstanciaDialog } from "@/components/mensagens/InstanciaDialog";
 import {
@@ -217,6 +217,18 @@ const ConfiguracoesWhatsapp = () => {
     setInstanciaDialogOpen(true);
   };
 
+  const handleDuplicarInstancia = (instancia: WhatsappInstance) => {
+    // Criar cópia sem o ID para que seja tratada como nova instância
+    const copia = {
+      ...instancia,
+      id: undefined,
+      nome: `${instancia.nome} (cópia)`,
+      ordem: (instancia.ordem || 0) + 1,
+    };
+    setInstanciaSelecionada(copia as any);
+    setInstanciaDialogOpen(true);
+  };
+
   const handleDeleteInstancia = (id: string) => {
     setInstanciaParaDeletar(id);
     setDeleteDialogOpen(true);
@@ -386,18 +398,28 @@ const ConfiguracoesWhatsapp = () => {
                           </p>
                         </div>
                       </div>
-                      <div className="flex gap-2">
+                      <div className="flex gap-1">
                         <Button
                           variant="ghost"
                           size="sm"
                           onClick={() => handleEditInstancia(inst)}
+                          title="Editar"
                         >
                           <Edit className="h-4 w-4" />
                         </Button>
                         <Button
                           variant="ghost"
                           size="sm"
+                          onClick={() => handleDuplicarInstancia(inst)}
+                          title="Duplicar"
+                        >
+                          <Copy className="h-4 w-4" />
+                        </Button>
+                        <Button
+                          variant="ghost"
+                          size="sm"
                           onClick={() => handleDeleteInstancia(inst.id)}
+                          title="Excluir"
                         >
                           <Trash2 className="h-4 w-4" />
                         </Button>
