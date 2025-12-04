@@ -189,6 +189,9 @@ export function MockupsList({ mockups, loading, onEdit, onRefresh }: MockupsList
               nome: canvas.nome,
               imagem_base: canvas.imagem_base,
               ordem: canvas.ordem,
+              largura_original: canvas.largura_original,
+              altura_original: canvas.altura_original,
+              escala_calculada: canvas.escala_calculada,
             },
           ])
           .select()
@@ -215,6 +218,7 @@ export function MockupsList({ mockups, loading, onEdit, onRefresh }: MockupsList
             width: area.width,
             height: area.height,
             z_index: area.z_index,
+            rotation: area.rotation,
             font_family: area.font_family,
             font_size: area.font_size,
             font_weight: area.font_weight,
