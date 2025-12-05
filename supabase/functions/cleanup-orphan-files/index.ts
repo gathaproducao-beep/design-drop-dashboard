@@ -11,6 +11,28 @@ interface OrphanFile {
   lastModified: string;
 }
 
+// Normaliza o path para comparação consistente
+const normalizePath = (path: string): string => {
+  try {
+    return decodeURIComponent(path).toLowerCase().trim();
+  } catch {
+    return path.toLowerCase().trim();
+  }
+};
+
+// Extrai o path do storage de uma URL
+const extractPath = (url: string): string | null => {
+  const parts = url.split("/mockup-images/");
+  if (parts.length === 2) {
+    try {
+      return decodeURIComponent(parts[1]);
+    } catch {
+      return parts[1];
+    }
+  }
+  return null;
+};
+
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") {
     return new Response(null, { headers: corsHeaders });
@@ -22,20 +44,6 @@ Deno.serve(async (req) => {
     const supabase = createClient(supabaseUrl, supabaseServiceKey);
 
     console.log("[Cleanup] Iniciando limpeza de arquivos órfãos...");
-
-    // Listar todos os arquivos no bucket mockup-images
-    const { data: allFiles, error: listError } = await supabase.storage
-      .from("mockup-images")
-      .list("", {
-        limit: 10000,
-        sortBy: { column: "name", order: "asc" },
-      });
-
-    if (listError) {
-      throw new Error(`Erro ao listar arquivos: ${listError.message}`);
-    }
-
-    console.log(`[Cleanup] Total de arquivos encontrados: ${allFiles?.length || 0}`);
 
     // Listar arquivos em subpastas
     const folders = ["clientes", "aprovacao", "molde", "mockups"];
@@ -55,15 +63,17 @@ Deno.serve(async (req) => {
 
       if (folderFiles) {
         folderFiles.forEach((file) => {
-          allStorageFiles.push(`${folder}/${file.name}`);
+          if (file.name && !file.name.startsWith(".")) {
+            allStorageFiles.push(`${folder}/${file.name}`);
+          }
         });
       }
     }
 
-    console.log(`[Cleanup] Total de arquivos em subpastas: ${allStorageFiles.length}`);
+    console.log(`[Cleanup] Total de arquivos no storage: ${allStorageFiles.length}`);
 
     // Buscar todas as URLs referenciadas no banco
-    const referencedUrls = new Set<string>();
+    const referencedPaths = new Set<string>();
 
     // 1. URLs dos pedidos
     const { data: pedidos, error: pedidosError } = await supabase
@@ -76,19 +86,28 @@ Deno.serve(async (req) => {
 
     pedidos?.forEach((pedido: any) => {
       if (pedido.fotos_cliente) {
-        pedido.fotos_cliente.forEach((url: string) => referencedUrls.add(url));
+        pedido.fotos_cliente.forEach((url: string) => {
+          const path = extractPath(url);
+          if (path) referencedPaths.add(normalizePath(path));
+        });
       }
       if (pedido.foto_aprovacao) {
-        pedido.foto_aprovacao.forEach((url: string) => referencedUrls.add(url));
+        pedido.foto_aprovacao.forEach((url: string) => {
+          const path = extractPath(url);
+          if (path) referencedPaths.add(normalizePath(path));
+        });
       }
       if (pedido.molde_producao) {
-        pedido.molde_producao.forEach((url: string) => referencedUrls.add(url));
+        pedido.molde_producao.forEach((url: string) => {
+          const path = extractPath(url);
+          if (path) referencedPaths.add(normalizePath(path));
+        });
       }
     });
 
-    console.log(`[Cleanup] URLs em pedidos: ${referencedUrls.size}`);
+    console.log(`[Cleanup] Paths referenciados em pedidos: ${referencedPaths.size}`);
 
-    // 2. URLs dos mockup_canvases
+    // 2. URLs dos mockup_canvases (CRÍTICO - imagens base dos mockups)
     const { data: canvases, error: canvasesError } = await supabase
       .from("mockup_canvases")
       .select("imagem_base");
@@ -99,13 +118,17 @@ Deno.serve(async (req) => {
 
     canvases?.forEach((canvas: any) => {
       if (canvas.imagem_base) {
-        referencedUrls.add(canvas.imagem_base);
+        const path = extractPath(canvas.imagem_base);
+        if (path) {
+          referencedPaths.add(normalizePath(path));
+          console.log(`[Cleanup] Canvas referencia: ${path}`);
+        }
       }
     });
 
-    console.log(`[Cleanup] URLs em mockup_canvases: ${referencedUrls.size}`);
+    console.log(`[Cleanup] Paths após mockup_canvases: ${referencedPaths.size}`);
 
-    // 3. URLs dos mockups (imagem_base)
+    // 3. URLs dos mockups (imagem_base legado)
     const { data: mockups, error: mockupsError } = await supabase
       .from("mockups")
       .select("imagem_base");
@@ -116,36 +139,76 @@ Deno.serve(async (req) => {
 
     mockups?.forEach((mockup: any) => {
       if (mockup.imagem_base) {
-        referencedUrls.add(mockup.imagem_base);
+        const path = extractPath(mockup.imagem_base);
+        if (path) {
+          referencedPaths.add(normalizePath(path));
+        }
       }
     });
 
-    console.log(`[Cleanup] Total de URLs referenciadas: ${referencedUrls.size}`);
+    console.log(`[Cleanup] Total de paths referenciados: ${referencedPaths.size}`);
 
-    // 3. Identificar arquivos órfãos
+    // Identificar arquivos órfãos
     const orphanFiles: OrphanFile[] = [];
-    const extractPath = (url: string): string | null => {
-      const parts = url.split("/mockup-images/");
-      return parts.length === 2 ? decodeURIComponent(parts[1]) : null;
-    };
+    const protectedFiles: string[] = [];
 
     for (const filePath of allStorageFiles) {
-      // Verificar se este path existe em alguma URL referenciada
-      const isReferenced = Array.from(referencedUrls).some((url) => {
-        const path = extractPath(url);
-        return path === filePath;
-      });
+      const normalizedFilePath = normalizePath(filePath);
+      const isReferenced = referencedPaths.has(normalizedFilePath);
 
-      if (!isReferenced) {
+      // PROTEÇÃO EXTRA: Arquivos na pasta mockups/ recebem verificação dupla
+      if (filePath.startsWith("mockups/") && !isReferenced) {
+        // Buscar diretamente no banco se existe alguma referência com ILIKE
+        const { count, error: countError } = await supabase
+          .from("mockup_canvases")
+          .select("id", { count: "exact", head: true })
+          .ilike("imagem_base", `%${filePath}%`);
+
+        if (countError) {
+          console.error(`[Cleanup] Erro ao verificar ${filePath}:`, countError);
+          // Em caso de erro, NÃO marcar como órfão (segurança)
+          protectedFiles.push(filePath);
+          continue;
+        }
+
+        if (count && count > 0) {
+          console.log(`[Cleanup] PROTEGIDO: ${filePath} tem ${count} referência(s) no banco`);
+          protectedFiles.push(filePath);
+          continue;
+        }
+
+        // Verificar também na tabela mockups
+        const { count: mockupCount, error: mockupCountError } = await supabase
+          .from("mockups")
+          .select("id", { count: "exact", head: true })
+          .ilike("imagem_base", `%${filePath}%`);
+
+        if (mockupCountError) {
+          console.error(`[Cleanup] Erro ao verificar mockups ${filePath}:`, mockupCountError);
+          protectedFiles.push(filePath);
+          continue;
+        }
+
+        if (mockupCount && mockupCount > 0) {
+          console.log(`[Cleanup] PROTEGIDO: ${filePath} tem ${mockupCount} referência(s) em mockups`);
+          protectedFiles.push(filePath);
+          continue;
+        }
+
+        console.log(`[Cleanup] ÓRFÃO CONFIRMADO (mockups/): ${filePath}`);
+      }
+
+      if (!isReferenced && !protectedFiles.includes(filePath)) {
         orphanFiles.push({
           path: filePath,
-          size: 0, // Poderia buscar metadata se necessário
+          size: 0,
           lastModified: "",
         });
       }
     }
 
     console.log(`[Cleanup] Arquivos órfãos identificados: ${orphanFiles.length}`);
+    console.log(`[Cleanup] Arquivos protegidos: ${protectedFiles.length}`);
 
     // Verificar se é uma requisição para apenas contar ou para deletar
     const { action } = await req.json().catch(() => ({ action: "count" }));
@@ -157,6 +220,9 @@ Deno.serve(async (req) => {
 
       for (let i = 0; i < orphanFiles.length; i += batchSize) {
         const batch = orphanFiles.slice(i, i + batchSize).map((f) => f.path);
+        
+        console.log(`[Cleanup] Deletando lote ${Math.floor(i / batchSize) + 1}:`, batch.slice(0, 5));
+        
         const { error: deleteError } = await supabase.storage
           .from("mockup-images")
           .remove(batch);
@@ -175,7 +241,8 @@ Deno.serve(async (req) => {
           success: true,
           message: `${deleted} arquivos órfãos foram deletados`,
           deleted,
-          orphanFiles: orphanFiles.slice(0, 50), // Retorna primeiros 50 para referência
+          protectedCount: protectedFiles.length,
+          orphanFiles: orphanFiles.slice(0, 50),
         }),
         {
           headers: { ...corsHeaders, "Content-Type": "application/json" },
@@ -189,8 +256,9 @@ Deno.serve(async (req) => {
         success: true,
         orphanCount: orphanFiles.length,
         totalFiles: allStorageFiles.length,
-        referencedFiles: referencedUrls.size,
-        orphanFiles: orphanFiles.slice(0, 50), // Retorna primeiros 50 para referência
+        referencedFiles: referencedPaths.size,
+        protectedCount: protectedFiles.length,
+        orphanFiles: orphanFiles.slice(0, 50),
       }),
       {
         headers: { ...corsHeaders, "Content-Type": "application/json" },
