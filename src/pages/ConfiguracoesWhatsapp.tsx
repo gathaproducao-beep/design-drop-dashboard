@@ -31,6 +31,8 @@ interface WhatsappSettings {
   delay_minimo: number;
   delay_maximo: number;
   envio_pausado: boolean;
+  usar_todas_instancias: boolean;
+  mensagens_por_instancia: number;
 }
 
 interface MensagemWhatsapp {
@@ -59,6 +61,8 @@ const ConfiguracoesWhatsapp = () => {
   const [envioPausado, setEnvioPausado] = useState(false);
   const [delayMinimo, setDelayMinimo] = useState(5);
   const [delayMaximo, setDelayMaximo] = useState(15);
+  const [usarTodasInstancias, setUsarTodasInstancias] = useState(false);
+  const [mensagensPorInstancia, setMensagensPorInstancia] = useState(5);
   const [testeDialogOpen, setTesteDialogOpen] = useState(false);
   const [mensagemSelecionada, setMensagemSelecionada] = useState<MensagemWhatsapp | null>(null);
   const [instanciaDialogOpen, setInstanciaDialogOpen] = useState(false);
@@ -117,6 +121,8 @@ const ConfiguracoesWhatsapp = () => {
       setEnvioPausado(settings.envio_pausado || false);
       setDelayMinimo(settings.delay_minimo || 5);
       setDelayMaximo(settings.delay_maximo || 15);
+      setUsarTodasInstancias(settings.usar_todas_instancias || false);
+      setMensagensPorInstancia(settings.mensagens_por_instancia || 5);
     }
   }, [settings]);
 
@@ -199,6 +205,8 @@ const ConfiguracoesWhatsapp = () => {
       envio_pausado: envioPausado,
       delay_minimo: delayMinimo,
       delay_maximo: delayMaximo,
+      usar_todas_instancias: usarTodasInstancias,
+      mensagens_por_instancia: mensagensPorInstancia,
     });
   };
 
@@ -365,7 +373,48 @@ const ConfiguracoesWhatsapp = () => {
                 </Button>
               </div>
             </CardHeader>
-            <CardContent>
+            <CardContent className="space-y-4">
+              {/* Opção de rotação entre instâncias */}
+              <div className="border rounded-lg p-4 bg-accent/30">
+                <div className="flex items-center justify-between mb-4">
+                  <div className="space-y-1">
+                    <Label htmlFor="usar-todas-instancias" className="text-base font-medium">
+                      Usar todas as instâncias ativas
+                    </Label>
+                    <p className="text-sm text-muted-foreground">
+                      Distribui as mensagens entre todas as instâncias ativas, rotacionando após enviar o número definido de mensagens em cada uma
+                    </p>
+                  </div>
+                  <Switch
+                    id="usar-todas-instancias"
+                    checked={usarTodasInstancias}
+                    onCheckedChange={setUsarTodasInstancias}
+                  />
+                </div>
+                
+                {usarTodasInstancias && (
+                  <div className="space-y-2 pt-2 border-t">
+                    <Label htmlFor="mensagens-por-instancia">Mensagens por instância antes de rotacionar</Label>
+                    <div className="flex items-center gap-2">
+                      <Input
+                        id="mensagens-por-instancia"
+                        type="number"
+                        min="1"
+                        max="50"
+                        value={mensagensPorInstancia}
+                        onChange={(e) => setMensagensPorInstancia(parseInt(e.target.value) || 1)}
+                        className="w-24"
+                      />
+                      <span className="text-sm text-muted-foreground">
+                        mensagens
+                      </span>
+                    </div>
+                    <p className="text-xs text-muted-foreground">
+                      Em caso de erro, o sistema automaticamente tenta na próxima instância ativa
+                    </p>
+                  </div>
+                )}
+              </div>
               {!instances || instances.length === 0 ? (
                 <div className="text-center py-8 text-muted-foreground">
                   <p>Nenhuma instância configurada</p>

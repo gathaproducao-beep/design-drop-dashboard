@@ -13,6 +13,47 @@ const getRandomDelay = (min: number, max: number): number => {
   return Math.floor(Math.random() * (max - min + 1)) + min;
 };
 
+interface WhatsappInstance {
+  id: string;
+  nome: string;
+  evolution_api_url: string;
+  evolution_api_key: string;
+  evolution_instance: string;
+  is_active: boolean;
+  ordem: number;
+}
+
+interface RotationState {
+  currentIndex: number;
+  messageCount: number;
+}
+
+// Função para obter próxima instância na rotação
+function getNextInstance(
+  instances: WhatsappInstance[],
+  state: RotationState,
+  messagesPerInstance: number,
+  forceRotate: boolean = false
+): { instance: WhatsappInstance; newState: RotationState } {
+  if (instances.length === 0) {
+    throw new Error('Nenhuma instância disponível');
+  }
+
+  // Se forçar rotação (erro) ou atingiu limite, ir para próxima
+  if (forceRotate || state.messageCount >= messagesPerInstance) {
+    const newIndex = (state.currentIndex + 1) % instances.length;
+    return {
+      instance: instances[newIndex],
+      newState: { currentIndex: newIndex, messageCount: 0 }
+    };
+  }
+
+  return {
+    instance: instances[state.currentIndex],
+    newState: state
+  };
+}
+
 Deno.serve(async (req) => {
   // Handle CORS preflight requests
   if (req.method === 'OPTIONS') {
@@ -30,10 +71,10 @@ Deno.serve(async (req) => {
     const supabaseServiceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
     const supabase = createClient(supabaseUrl, supabaseServiceKey);
 
-    // 1. Buscar configurações de delay e verificar se o envio está pausado
+    // 1. Buscar configurações de delay, rotação e verificar se o envio está pausado
     const { data: settings } = await supabase
       .from('whatsapp_settings')
-      .select('delay_minimo, delay_maximo, envio_pausado')
+      .select('delay_minimo, delay_maximo, envio_pausado, usar_todas_instancias, mensagens_por_instancia')
       .single();
 
     // Verificar se o envio está pausado
@@ -51,8 +92,11 @@ Deno.serve(async (req) => {
 
     const delayMinimo = settings?.delay_minimo || 5;
     const delayMaximo = settings?.delay_maximo || 15;
+    const usarTodasInstancias = settings?.usar_todas_instancias || false;
+    const mensagensPorInstancia = settings?.mensagens_por_instancia || 5;
 
     console.log(`Delay configurado: ${delayMinimo}s - ${delayMaximo}s`);
+    console.log(`Rotação: ${usarTodasInstancias ? `ativa (${mensagensPorInstancia} msgs/instância)` : 'desativada'}`);
 
     // 2. Buscar mensagens pendentes com lock atômico (previne race conditions)
     const { data: messages, error: messagesError } = await supabase
@@ -98,8 +142,10 @@ Deno.serve(async (req) => {
       );
     }
 
-    const activeInstance = instances[0]; // Usar a primeira instância ativa (maior prioridade)
-    console.log(`Usando instância: ${activeInstance.nome}`);
+    console.log(`📱 Instâncias ativas: ${instances.map(i => i.nome).join(', ')}`);
+
+    // Estado da rotação
+    let rotationState: RotationState = { currentIndex: 0, messageCount: 0 };
 
     // 4. Processar cada mensagem
     for (const msg of messages) {
@@ -117,15 +163,31 @@ Deno.serve(async (req) => {
           continue;
         }
 
+        // Determinar qual instância usar
+        let activeInstance: WhatsappInstance;
+        
+        if (usarTodasInstancias && instances.length > 1) {
+          // Modo rotação: usar próxima instância baseado no estado
+          const rotation = getNextInstance(instances, rotationState, mensagensPorInstancia);
+          activeInstance = rotation.instance;
+          rotationState = rotation.newState;
+        } else {
+          // Modo padrão: usar primeira instância
+          activeInstance = instances[0];
+        }
+
         // Marcar como processando
         await supabase
           .from('whatsapp_queue')
-          .update({ status: 'processing' })
+          .update({ 
+            status: 'processing',
+            instance_id: activeInstance.id
+          })
           .eq('id', msg.id);
 
-        console.log(`Processando mensagem ${msg.id} para ${msg.phone}`);
+        console.log(`📤 Processando ${msg.id} para ${msg.phone} via ${activeInstance.nome} (${rotationState.messageCount + 1}/${mensagensPorInstancia})`);
 
-        // Tentar enviar usando instância ativa
+        // Tentar enviar usando instância selecionada
         const { data, error } = await supabase.functions.invoke('send-whatsapp', {
           body: { 
             phone: msg.phone, 
@@ -140,6 +202,13 @@ Deno.serve(async (req) => {
         if (error || !data?.success) {
           // Falha no envio
           const newAttempts = msg.attempts + 1;
+          
+          // Se usa rotação e há mais instâncias, forçar rotação para próxima tentativa
+          if (usarTodasInstancias && instances.length > 1) {
+            const fallback = getNextInstance(instances, rotationState, mensagensPorInstancia, true);
+            rotationState = fallback.newState;
+            console.log(`⚠️ Erro na ${activeInstance.nome}, próxima tentativa usará ${fallback.instance.nome}`);
+          }
           
           if (newAttempts >= msg.max_attempts) {
             // Máximo de tentativas atingido - marcar como falha
@@ -160,7 +229,7 @@ Deno.serve(async (req) => {
                 .eq('id', msg.pedido_id);
             }
             
-            console.log(`Mensagem ${msg.id} falhou após ${newAttempts} tentativas`);
+            console.log(`❌ Mensagem ${msg.id} falhou após ${newAttempts} tentativas`);
             failedCount++;
           } else {
             // Reagendar para nova tentativa
@@ -174,16 +243,19 @@ Deno.serve(async (req) => {
               })
               .eq('id', msg.id);
             
-            console.log(`Mensagem ${msg.id} reagendada (tentativa ${newAttempts})`);
+            console.log(`🔄 Mensagem ${msg.id} reagendada (tentativa ${newAttempts})`);
           }
         } else {
-          // Sucesso
+          // Sucesso - incrementar contador de rotação
+          rotationState.messageCount++;
+          
           await supabase
             .from('whatsapp_queue')
             .update({ 
               status: 'sent',
               sent_at: new Date().toISOString(),
-              attempts: msg.attempts + 1
+              attempts: msg.attempts + 1,
+              instance_id: activeInstance.id
             })
             .eq('id', msg.id);
           
@@ -195,8 +267,15 @@ Deno.serve(async (req) => {
               .eq('id', msg.pedido_id);
           }
           
-          console.log(`Mensagem ${msg.id} enviada com sucesso`);
+          console.log(`✅ Mensagem ${msg.id} enviada via ${activeInstance.nome}`);
           successCount++;
+          
+          // Verificar se precisa rotacionar após sucesso
+          if (usarTodasInstancias && rotationState.messageCount >= mensagensPorInstancia) {
+            const nextRotation = getNextInstance(instances, rotationState, mensagensPorInstancia);
+            rotationState = nextRotation.newState;
+            console.log(`🔄 Rotacionando para: ${nextRotation.instance.nome}`);
+          }
         }
 
         processedCount++;
@@ -204,12 +283,18 @@ Deno.serve(async (req) => {
         // Aplicar delay antes da próxima mensagem (exceto na última)
         if (processedCount < messages.length) {
           const delaySeconds = getRandomDelay(delayMinimo, delayMaximo);
-          console.log(`Aguardando ${delaySeconds}s antes da próxima mensagem...`);
+          console.log(`⏳ Aguardando ${delaySeconds}s antes da próxima mensagem...`);
           await sleep(delaySeconds * 1000);
         }
 
       } catch (error) {
         console.error(`Erro ao processar mensagem ${msg.id}:`, error);
+        
+        // Em caso de erro, forçar rotação se habilitado
+        if (usarTodasInstancias && instances.length > 1) {
+          const fallback = getNextInstance(instances, rotationState, mensagensPorInstancia, true);
+          rotationState = fallback.newState;
+        }
         
         // Marcar como erro e reagendar se possível
         const newAttempts = msg.attempts + 1;
@@ -228,7 +313,7 @@ Deno.serve(async (req) => {
       }
     }
 
-    console.log(`Processamento concluído: ${successCount} enviadas, ${failedCount} falharam`);
+    console.log(`📊 Processamento concluído: ${successCount} enviadas, ${failedCount} falharam`);
 
     return new Response(
       JSON.stringify({ 
