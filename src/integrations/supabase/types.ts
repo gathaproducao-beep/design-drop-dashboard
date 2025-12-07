@@ -682,8 +682,10 @@ export type Database = {
           delay_minimo: number | null
           envio_pausado: boolean
           id: string
+          mensagens_por_instancia: number | null
           test_phone: string | null
           updated_at: string | null
+          usar_todas_instancias: boolean | null
         }
         Insert: {
           auto_send_enabled?: boolean
@@ -693,8 +695,10 @@ export type Database = {
           delay_minimo?: number | null
           envio_pausado?: boolean
           id?: string
+          mensagens_por_instancia?: number | null
           test_phone?: string | null
           updated_at?: string | null
+          usar_todas_instancias?: boolean | null
         }
         Update: {
           auto_send_enabled?: boolean
@@ -704,8 +708,10 @@ export type Database = {
           delay_minimo?: number | null
           envio_pausado?: boolean
           id?: string
+          mensagens_por_instancia?: number | null
           test_phone?: string | null
           updated_at?: string | null
+          usar_todas_instancias?: boolean | null
         }
         Relationships: []
       }
