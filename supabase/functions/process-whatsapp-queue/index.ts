@@ -24,8 +24,15 @@ interface WhatsappInstance {
 }
 
 interface RotationState {
-  currentIndex: number;
+  currentInstanceId: string | null;
   messageCount: number;
+}
+
+// Função para obter índice da instância pelo ID
+function getInstanceIndex(instances: WhatsappInstance[], instanceId: string | null): number {
+  if (!instanceId) return 0;
+  const idx = instances.findIndex(i => i.id === instanceId);
+  return idx >= 0 ? idx : 0;
 }
 
 // Função para obter próxima instância na rotação
@@ -39,17 +46,19 @@ function getNextInstance(
     throw new Error('Nenhuma instância disponível');
   }
 
+  const currentIndex = getInstanceIndex(instances, state.currentInstanceId);
+
   // Se forçar rotação (erro) ou atingiu limite, ir para próxima
   if (forceRotate || state.messageCount >= messagesPerInstance) {
-    const newIndex = (state.currentIndex + 1) % instances.length;
+    const newIndex = (currentIndex + 1) % instances.length;
     return {
       instance: instances[newIndex],
-      newState: { currentIndex: newIndex, messageCount: 0 }
+      newState: { currentInstanceId: instances[newIndex].id, messageCount: 0 }
     };
   }
 
   return {
-    instance: instances[state.currentIndex],
+    instance: instances[currentIndex],
     newState: state
   };
 }
@@ -71,10 +80,10 @@ Deno.serve(async (req) => {
     const supabaseServiceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
     const supabase = createClient(supabaseUrl, supabaseServiceKey);
 
-    // 1. Buscar configurações de delay, rotação e verificar se o envio está pausado
+    // 1. Buscar configurações de delay, rotação e estado persistido
     const { data: settings } = await supabase
       .from('whatsapp_settings')
-      .select('delay_minimo, delay_maximo, envio_pausado, usar_todas_instancias, mensagens_por_instancia')
+      .select('id, delay_minimo, delay_maximo, envio_pausado, usar_todas_instancias, mensagens_por_instancia, rotacao_instancia_atual, rotacao_contador')
       .single();
 
     // Verificar se o envio está pausado
@@ -90,6 +99,7 @@ Deno.serve(async (req) => {
       );
     }
 
+    const settingsId = settings?.id;
     const delayMinimo = settings?.delay_minimo || 5;
     const delayMaximo = settings?.delay_maximo || 15;
     const usarTodasInstancias = settings?.usar_todas_instancias || false;
@@ -144,10 +154,28 @@ Deno.serve(async (req) => {
 
     console.log(`📱 Instâncias ativas: ${instances.map(i => i.nome).join(', ')}`);
 
-    // Estado da rotação
-    let rotationState: RotationState = { currentIndex: 0, messageCount: 0 };
+    // 4. Inicializar estado da rotação a partir do banco (persistência entre ciclos)
+    let rotationState: RotationState = { 
+      currentInstanceId: settings?.rotacao_instancia_atual || instances[0].id, 
+      messageCount: settings?.rotacao_contador || 0 
+    };
+    
+    console.log(`📊 Estado rotação inicial: instância=${rotationState.currentInstanceId}, contador=${rotationState.messageCount}`);
 
-    // 4. Processar cada mensagem
+    // Função auxiliar para persistir estado de rotação
+    const saveRotationState = async (state: RotationState) => {
+      if (settingsId && usarTodasInstancias) {
+        await supabase
+          .from('whatsapp_settings')
+          .update({ 
+            rotacao_instancia_atual: state.currentInstanceId,
+            rotacao_contador: state.messageCount 
+          })
+          .eq('id', settingsId);
+      }
+    };
+
+    // 5. Processar cada mensagem
     for (const msg of messages) {
       try {
         // Verificação dupla: confirmar que a mensagem ainda está pendente
@@ -167,7 +195,7 @@ Deno.serve(async (req) => {
         let activeInstance: WhatsappInstance;
         
         if (usarTodasInstancias && instances.length > 1) {
-          // Modo rotação: usar próxima instância baseado no estado
+          // Modo rotação: usar próxima instância baseado no estado persistido
           const rotation = getNextInstance(instances, rotationState, mensagensPorInstancia);
           activeInstance = rotation.instance;
           rotationState = rotation.newState;
@@ -207,6 +235,7 @@ Deno.serve(async (req) => {
           if (usarTodasInstancias && instances.length > 1) {
             const fallback = getNextInstance(instances, rotationState, mensagensPorInstancia, true);
             rotationState = fallback.newState;
+            await saveRotationState(rotationState);
             console.log(`⚠️ Erro na ${activeInstance.nome}, próxima tentativa usará ${fallback.instance.nome}`);
           }
           
@@ -276,6 +305,9 @@ Deno.serve(async (req) => {
             rotationState = nextRotation.newState;
             console.log(`🔄 Rotacionando para: ${nextRotation.instance.nome}`);
           }
+          
+          // Persistir estado após cada envio com sucesso
+          await saveRotationState(rotationState);
         }
 
         processedCount++;
@@ -294,6 +326,7 @@ Deno.serve(async (req) => {
         if (usarTodasInstancias && instances.length > 1) {
           const fallback = getNextInstance(instances, rotationState, mensagensPorInstancia, true);
           rotationState = fallback.newState;
+          await saveRotationState(rotationState);
         }
         
         // Marcar como erro e reagendar se possível

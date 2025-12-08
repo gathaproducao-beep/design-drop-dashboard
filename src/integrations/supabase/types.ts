@@ -683,6 +683,8 @@ export type Database = {
           envio_pausado: boolean
           id: string
           mensagens_por_instancia: number | null
+          rotacao_contador: number | null
+          rotacao_instancia_atual: string | null
           test_phone: string | null
           updated_at: string | null
           usar_todas_instancias: boolean | null
@@ -696,6 +698,8 @@ export type Database = {
           envio_pausado?: boolean
           id?: string
           mensagens_por_instancia?: number | null
+          rotacao_contador?: number | null
+          rotacao_instancia_atual?: string | null
           test_phone?: string | null
           updated_at?: string | null
           usar_todas_instancias?: boolean | null
@@ -709,6 +713,8 @@ export type Database = {
           envio_pausado?: boolean
           id?: string
           mensagens_por_instancia?: number | null
+          rotacao_contador?: number | null
+          rotacao_instancia_atual?: string | null
           test_phone?: string | null
           updated_at?: string | null
           usar_todas_instancias?: boolean | null
