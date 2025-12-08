@@ -165,9 +165,13 @@ export function FilaWhatsappTable() {
     return phone;
   };
 
-  const truncateMessage = (message: string, maxLength = 50) => {
+  const truncateMessage = (message: string, maxLength = 40) => {
     if (message.length <= maxLength) return message;
     return message.substring(0, maxLength) + "...";
+  };
+
+  const formatDateShort = (dateStr: string) => {
+    return format(new Date(dateStr), "dd/MM HH:mm", { locale: ptBR });
   };
 
   if (isLoading) {
@@ -194,7 +198,7 @@ export function FilaWhatsappTable() {
                 onClick={handleCancelSelected}
               >
                 <X className="h-4 w-4 mr-2" />
-                Cancelar Selecionadas
+                Cancelar
               </Button>
               <Button 
                 variant="outline" 
@@ -202,7 +206,7 @@ export function FilaWhatsappTable() {
                 onClick={handleReprocessSelected}
               >
                 <RotateCcw className="h-4 w-4 mr-2" />
-                Reprocessar Selecionadas
+                Reprocessar
               </Button>
             </>
           )}
@@ -222,61 +226,63 @@ export function FilaWhatsappTable() {
         </div>
       </div>
 
-      <div className="border rounded-lg">
+      <div className="border rounded-lg overflow-x-auto">
         <Table>
           <TableHeader>
               <TableRow>
-                <TableHead className="w-12">
+                <TableHead className="w-10">
                   <Checkbox
                     checked={selectedIds.length === queueItems?.length && queueItems?.length > 0}
                     onCheckedChange={toggleSelectAll}
                   />
                 </TableHead>
-                <TableHead>Pedido</TableHead>
-                <TableHead>Cliente</TableHead>
-                <TableHead>Telefone</TableHead>
-                <TableHead>Tipo</TableHead>
-                <TableHead>Mensagem</TableHead>
-                <TableHead>Status</TableHead>
-                <TableHead>Enviado via</TableHead>
-                <TableHead>Tentativas</TableHead>
-                <TableHead>Criado em</TableHead>
-                <TableHead>Enviado em</TableHead>
-                <TableHead></TableHead>
+                <TableHead className="w-20">Pedido</TableHead>
+                <TableHead className="w-28">Cliente</TableHead>
+                <TableHead className="w-36">Telefone</TableHead>
+                <TableHead className="w-16">Tipo</TableHead>
+                <TableHead className="min-w-[120px] max-w-[180px]">Mensagem</TableHead>
+                <TableHead className="w-24">Status</TableHead>
+                <TableHead className="w-28">Enviado via</TableHead>
+                <TableHead className="w-16">Tent.</TableHead>
+                <TableHead className="w-24">Criado</TableHead>
+                <TableHead className="w-24">Enviado</TableHead>
+                <TableHead className="w-10"></TableHead>
               </TableRow>
           </TableHeader>
           <TableBody>
             {queueItems && queueItems.length > 0 ? (
               queueItems.map((item) => (
                 <TableRow key={item.id}>
-                  <TableCell>
+                  <TableCell className="p-2">
                     <Checkbox
                       checked={selectedIds.includes(item.id)}
                       onCheckedChange={() => toggleSelectItem(item.id)}
                     />
                   </TableCell>
-                  <TableCell className="font-medium">
+                  <TableCell className="font-medium p-2 text-sm">
                     {item.pedidos?.numero_pedido || "-"}
                   </TableCell>
-                  <TableCell>{item.pedidos?.nome_cliente || "-"}</TableCell>
-                  <TableCell className="font-mono text-sm">
+                  <TableCell className="p-2 text-sm truncate max-w-[112px]" title={item.pedidos?.nome_cliente || ""}>
+                    {item.pedidos?.nome_cliente || "-"}
+                  </TableCell>
+                  <TableCell className="font-mono text-xs p-2">
                     {formatPhone(item.phone)}
                   </TableCell>
-                  <TableCell>
+                  <TableCell className="p-2">
                     {item.media_type ? (
-                      <Badge variant="outline" className="gap-1">
+                      <Badge variant="outline" className="gap-1 text-xs px-1">
                         <ImageIcon className="h-3 w-3" />
-                        {item.media_type}
+                        {item.media_type === 'image' ? 'Img' : item.media_type}
                       </Badge>
                     ) : (
-                      <Badge variant="secondary">Texto</Badge>
+                      <Badge variant="secondary" className="text-xs px-1">Txt</Badge>
                     )}
                   </TableCell>
-                  <TableCell className="max-w-xs">
+                  <TableCell className="p-2 max-w-[180px]">
                     {item.media_url ? (
-                      <div className="space-y-1">
-                        <span className="text-sm text-muted-foreground block truncate">
-                          {truncateMessage(item.caption || item.message)}
+                      <div className="space-y-0.5">
+                        <span className="text-xs text-muted-foreground block truncate">
+                          {truncateMessage(item.caption || item.message, 30)}
                         </span>
                         <a 
                           href={item.media_url} 
@@ -285,43 +291,42 @@ export function FilaWhatsappTable() {
                           className="text-xs text-primary hover:underline flex items-center gap-1"
                         >
                           <ImageIcon className="h-3 w-3" />
-                          Ver imagem
+                          Ver
                         </a>
                       </div>
                     ) : (
-                      <span className="text-sm text-muted-foreground">
-                        {truncateMessage(item.message)}
+                      <span className="text-xs text-muted-foreground truncate block" title={item.message}>
+                        {truncateMessage(item.message, 30)}
                       </span>
                     )}
                   </TableCell>
-                  <TableCell>{getStatusBadge(item.status)}</TableCell>
-                  <TableCell>
+                  <TableCell className="p-2">{getStatusBadge(item.status)}</TableCell>
+                  <TableCell className="p-2">
                     {item.whatsapp_instances ? (
-                      <span className="text-sm font-medium" title={item.whatsapp_instances.evolution_instance}>
+                      <span className="text-xs font-medium truncate block max-w-[100px]" title={item.whatsapp_instances.evolution_instance}>
                         {item.whatsapp_instances.nome}
                       </span>
                     ) : (
-                      <span className="text-muted-foreground text-sm">-</span>
+                      <span className="text-muted-foreground text-xs">-</span>
                     )}
                   </TableCell>
-                  <TableCell>
-                    <span className={item.attempts >= item.max_attempts ? "text-destructive font-semibold" : ""}>
+                  <TableCell className="p-2">
+                    <span className={`text-xs ${item.attempts >= item.max_attempts ? "text-destructive font-semibold" : ""}`}>
                       {item.attempts}/{item.max_attempts}
                     </span>
                   </TableCell>
-                  <TableCell className="text-sm">
-                    {format(new Date(item.created_at), "dd/MM/yyyy HH:mm", { locale: ptBR })}
+                  <TableCell className="text-xs p-2 whitespace-nowrap">
+                    {formatDateShort(item.created_at)}
                   </TableCell>
-                  <TableCell className="text-sm">
-                    {item.sent_at
-                      ? format(new Date(item.sent_at), "dd/MM/yyyy HH:mm", { locale: ptBR })
-                      : "-"}
+                  <TableCell className="text-xs p-2 whitespace-nowrap">
+                    {item.sent_at ? formatDateShort(item.sent_at) : "-"}
                   </TableCell>
-                  <TableCell>
+                  <TableCell className="p-2">
                     {item.error_message && (
                       <Button
                         variant="ghost"
                         size="sm"
+                        className="h-6 w-6 p-0"
                         onClick={() =>
                           setSelectedError({
                             pedido: item.pedidos?.numero_pedido || item.phone,
