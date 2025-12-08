@@ -25,9 +25,14 @@ interface QueueItem {
   media_url: string | null;
   media_type: string | null;
   caption: string | null;
+  instance_id: string | null;
   pedidos: {
     numero_pedido: string;
     nome_cliente: string;
+  } | null;
+  whatsapp_instances: {
+    nome: string;
+    evolution_instance: string;
   } | null;
 }
 
@@ -46,6 +51,10 @@ export function FilaWhatsappTable() {
           pedidos (
             numero_pedido,
             nome_cliente
+          ),
+          whatsapp_instances (
+            nome,
+            evolution_instance
           )
         `)
         .order("created_at", { ascending: false })
@@ -229,6 +238,7 @@ export function FilaWhatsappTable() {
                 <TableHead>Tipo</TableHead>
                 <TableHead>Mensagem</TableHead>
                 <TableHead>Status</TableHead>
+                <TableHead>Enviado via</TableHead>
                 <TableHead>Tentativas</TableHead>
                 <TableHead>Criado em</TableHead>
                 <TableHead>Enviado em</TableHead>
@@ -286,6 +296,15 @@ export function FilaWhatsappTable() {
                   </TableCell>
                   <TableCell>{getStatusBadge(item.status)}</TableCell>
                   <TableCell>
+                    {item.whatsapp_instances ? (
+                      <span className="text-sm font-medium" title={item.whatsapp_instances.evolution_instance}>
+                        {item.whatsapp_instances.nome}
+                      </span>
+                    ) : (
+                      <span className="text-muted-foreground text-sm">-</span>
+                    )}
+                  </TableCell>
+                  <TableCell>
                     <span className={item.attempts >= item.max_attempts ? "text-destructive font-semibold" : ""}>
                       {item.attempts}/{item.max_attempts}
                     </span>
@@ -318,7 +337,7 @@ export function FilaWhatsappTable() {
               ))
             ) : (
               <TableRow>
-                <TableCell colSpan={10} className="text-center py-8 text-muted-foreground">
+                <TableCell colSpan={12} className="text-center py-8 text-muted-foreground">
                   Nenhuma mensagem na fila
                 </TableCell>
               </TableRow>
