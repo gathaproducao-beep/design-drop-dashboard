@@ -1234,37 +1234,33 @@ export function MockupEditor({ mockup, onClose, onSave }: MockupEditorProps) {
                           }}
                           onMouseDown={(e) => handleMouseDown(e, area.id!, false)}
                         >
-                          {/* Label da área */}
-                          <div className="absolute -top-6 left-0 bg-primary text-primary-foreground text-xs px-2 py-1 rounded whitespace-nowrap flex items-center gap-1">
-                            {area.kind === "image" ? "📷" : "📝"} 
-                            {area.kind === "text" 
-                              ? TEXT_FIELDS.find(f => f.value === area.field_key)?.label || area.field_key
-                              : area.field_key}
-                          </div>
-
-                          {/* Preview de texto */}
-                          {area.kind === "text" && (
-                            <div 
-                              className="absolute inset-0 flex items-center justify-center p-2 pointer-events-none overflow-hidden"
-                              style={{
-                                fontFamily: area.font_family,
-                                fontSize: `${(area.font_size || 16) / scale}px`,
-                                fontWeight: area.font_weight,
-                                color: area.color,
-                                textAlign: area.text_align as any,
-                                letterSpacing: `${(area.letter_spacing || 0) / scale}px`,
-                                lineHeight: area.line_height
-                              }}
-                            >
-                              <span className="opacity-50">
-                                {TEXT_FIELDS.find(f => f.value === area.field_key)?.label}
-                              </span>
-                            </div>
-                          )}
-
-                          {/* Grip para mover */}
-                          <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
-                            <GripVertical className="w-6 h-6 text-primary" />
+                          {/* Label da área - dentro da área */}
+                          <div className="absolute inset-0 flex items-center justify-center pointer-events-none overflow-hidden">
+                            {area.kind === "text" ? (
+                              <div 
+                                className="w-full h-full flex items-center justify-center p-1"
+                                style={{
+                                  fontFamily: area.font_family,
+                                  fontSize: `${Math.min((area.font_size || 16) / scale, area.height * 0.4)}px`,
+                                  fontWeight: area.font_weight,
+                                  color: area.color,
+                                  textAlign: area.text_align as any,
+                                  letterSpacing: `${(area.letter_spacing || 0) / scale}px`,
+                                  lineHeight: area.line_height
+                                }}
+                              >
+                                <span className="opacity-50 truncate">
+                                  {TEXT_FIELDS.find(f => f.value === area.field_key)?.label}
+                                </span>
+                              </div>
+                            ) : (
+                              <div className="flex flex-col items-center gap-0.5">
+                                <GripVertical className="w-5 h-5 text-primary/70" />
+                                <span className="text-[10px] bg-primary/80 text-primary-foreground px-1.5 py-0.5 rounded truncate max-w-full">
+                                  {area.field_key}
+                                </span>
+                              </div>
+                            )}
                           </div>
 
                           {/* Handle de redimensionamento */}
