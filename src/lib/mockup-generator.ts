@@ -428,7 +428,10 @@ export async function generateMockupsForPedido(
     
     if (results.aprovacao) {
       updateData.foto_aprovacao = results.aprovacao;
-      updateData.layout_aprovado = 'pendente';
+      // Só define layout_aprovado como pendente se ainda não tiver valor
+      if (!pedido.layout_aprovado) {
+        updateData.layout_aprovado = 'pendente';
+      }
     }
     if (results.molde) {
       updateData.molde_producao = results.molde;
