@@ -4,12 +4,14 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
-import { RefreshCw, AlertCircle, Play, X, RotateCcw, ImageIcon } from "lucide-react";
+import { RefreshCw, AlertCircle, Play, X, RotateCcw, ImageIcon, ChevronLeft, ChevronRight } from "lucide-react";
 import { format } from "date-fns";
 import { ptBR } from "date-fns/locale";
 import { ErrorDialog } from "./ErrorDialog";
 import { useState } from "react";
 import { toast } from "sonner";
+
+const PAGE_SIZE = 50;
 
 interface QueueItem {
   id: string;
@@ -40,10 +42,30 @@ export function FilaWhatsappTable() {
   const [selectedError, setSelectedError] = useState<{ pedido: string; error: string } | null>(null);
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
   const [isProcessing, setIsProcessing] = useState(false);
+  const [currentPage, setCurrentPage] = useState(1);
+
+  // Query para contar total de registros
+  const { data: totalCount } = useQuery({
+    queryKey: ["whatsapp-queue-count"],
+    queryFn: async () => {
+      const { count, error } = await supabase
+        .from("whatsapp_queue")
+        .select("*", { count: "exact", head: true });
+
+      if (error) throw error;
+      return count || 0;
+    },
+    refetchInterval: 30000,
+  });
+
+  const totalPages = Math.ceil((totalCount || 0) / PAGE_SIZE);
 
   const { data: queueItems, isLoading, refetch } = useQuery({
-    queryKey: ["whatsapp-queue"],
+    queryKey: ["whatsapp-queue", currentPage],
     queryFn: async () => {
+      const from = (currentPage - 1) * PAGE_SIZE;
+      const to = from + PAGE_SIZE - 1;
+
       const { data, error } = await supabase
         .from("whatsapp_queue")
         .select(`
@@ -58,12 +80,12 @@ export function FilaWhatsappTable() {
           )
         `)
         .order("created_at", { ascending: false })
-        .limit(50);
+        .range(from, to);
 
       if (error) throw error;
       return data as QueueItem[];
     },
-    refetchInterval: 30000, // Auto-refresh a cada 30s
+    refetchInterval: 30000,
   });
 
   const handleProcessQueue = async () => {
@@ -162,6 +184,13 @@ export function FilaWhatsappTable() {
     );
   };
 
+  const goToPage = (page: number) => {
+    if (page >= 1 && page <= totalPages) {
+      setCurrentPage(page);
+      setSelectedIds([]);
+    }
+  };
+
   const getStatusBadge = (status: string) => {
     const variants: Record<string, { variant: "default" | "secondary" | "outline" | "destructive"; label: string }> = {
       pending: { variant: "secondary", label: "Pendente" },
@@ -199,7 +228,7 @@ export function FilaWhatsappTable() {
     <div className="space-y-4">
       <div className="flex justify-between items-center flex-wrap gap-2">
         <div className="text-sm text-muted-foreground">
-          {queueItems?.length || 0} mensagens na fila
+          {totalCount || 0} mensagens na fila
           {selectedIds.length > 0 && (
             <span className="ml-2 font-semibold">
               ({selectedIds.length} selecionadas)
@@ -367,6 +396,60 @@ export function FilaWhatsappTable() {
           </TableBody>
         </Table>
       </div>
+
+      {/* Paginação */}
+      {totalPages > 1 && (
+        <div className="flex items-center justify-between">
+          <div className="text-sm text-muted-foreground">
+            Página {currentPage} de {totalPages}
+          </div>
+          <div className="flex items-center gap-2">
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => goToPage(currentPage - 1)}
+              disabled={currentPage === 1}
+            >
+              <ChevronLeft className="h-4 w-4" />
+              Anterior
+            </Button>
+            <div className="flex gap-1">
+              {Array.from({ length: Math.min(5, totalPages) }, (_, i) => {
+                let pageNum: number;
+                if (totalPages <= 5) {
+                  pageNum = i + 1;
+                } else if (currentPage <= 3) {
+                  pageNum = i + 1;
+                } else if (currentPage >= totalPages - 2) {
+                  pageNum = totalPages - 4 + i;
+                } else {
+                  pageNum = currentPage - 2 + i;
+                }
+                return (
+                  <Button
+                    key={pageNum}
+                    variant={pageNum === currentPage ? "default" : "outline"}
+                    size="sm"
+                    className="w-8"
+                    onClick={() => goToPage(pageNum)}
+                  >
+                    {pageNum}
+                  </Button>
+                );
+              })}
+            </div>
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => goToPage(currentPage + 1)}
+              disabled={currentPage === totalPages}
+            >
+              Próxima
+              <ChevronRight className="h-4 w-4" />
+            </Button>
+          </div>
+        </div>
+      )}
 
       {selectedError && (
         <ErrorDialog
