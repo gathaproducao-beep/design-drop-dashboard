@@ -384,6 +384,86 @@ export function MockupEditor({ mockup, onClose, onSave }: MockupEditorProps) {
     }
   };
 
+  const handleRenameCanvas = async (canvasId: string, currentName: string) => {
+    const newName = prompt("Novo nome do canvas:", currentName);
+    if (!newName || newName === currentName) return;
+
+    try {
+      await (supabase as any)
+        .from("mockup_canvases")
+        .update({ nome: newName })
+        .eq("id", canvasId);
+      
+      toast.success("Canvas renomeado");
+      carregarCanvases();
+    } catch (error) {
+      console.error("Erro ao renomear canvas:", error);
+      toast.error("Erro ao renomear canvas");
+    }
+  };
+
+  const handleDuplicateCanvas = async (canvasId: string) => {
+    const canvas = canvases.find(c => c.id === canvasId);
+    if (!canvas) return;
+
+    try {
+      // Criar novo canvas
+      const { data: newCanvas, error: canvasError } = await (supabase as any)
+        .from("mockup_canvases")
+        .insert({
+          mockup_id: mockup.id,
+          nome: `${canvas.nome} (cópia)`,
+          imagem_base: canvas.imagem_base,
+          ordem: canvases.length,
+          largura_original: canvas.largura_original,
+          altura_original: canvas.altura_original,
+          escala_calculada: canvas.escala_calculada,
+        })
+        .select()
+        .single();
+
+      if (canvasError) throw canvasError;
+
+      // Copiar áreas do canvas original
+      const { data: areasOriginais, error: areasError } = await (supabase as any)
+        .from("mockup_areas")
+        .select("*")
+        .eq("canvas_id", canvasId);
+
+      if (areasError) throw areasError;
+
+      if (areasOriginais && areasOriginais.length > 0) {
+        const novasAreas = areasOriginais.map((area: any) => ({
+          canvas_id: newCanvas.id,
+          mockup_id: mockup.id,
+          kind: area.kind,
+          field_key: area.field_key,
+          x: area.x,
+          y: area.y,
+          width: area.width,
+          height: area.height,
+          z_index: area.z_index,
+          rotation: area.rotation,
+          font_family: area.font_family,
+          font_size: area.font_size,
+          font_weight: area.font_weight,
+          color: area.color,
+          text_align: area.text_align,
+          letter_spacing: area.letter_spacing,
+          line_height: area.line_height,
+        }));
+
+        await (supabase as any).from("mockup_areas").insert(novasAreas);
+      }
+
+      toast.success("Canvas duplicado com sucesso");
+      carregarCanvases();
+    } catch (error) {
+      console.error("Erro ao duplicar canvas:", error);
+      toast.error("Erro ao duplicar canvas");
+    }
+  };
+
   const handleRecalcularEscala = async (canvasId: string) => {
     const canvas = canvases.find(c => c.id === canvasId);
     if (!canvas?.largura_original) {
@@ -977,19 +1057,46 @@ export function MockupEditor({ mockup, onClose, onSave }: MockupEditorProps) {
               <span className="ml-2 text-xs opacity-60">
                 (escala: {canvasScales[c.id]?.toFixed(2) || '?'})
               </span>
-              {canvases.length > 1 && (
+              <div className="ml-2 flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
                 <Button
                   variant="ghost"
                   size="icon"
-                  className="h-4 w-4 ml-2 opacity-0 group-hover:opacity-100 transition-opacity"
+                  className="h-4 w-4"
                   onClick={(e) => {
                     e.stopPropagation();
-                    handleDeleteCanvas(c.id);
+                    handleRenameCanvas(c.id, c.nome);
                   }}
+                  title="Renomear"
                 >
-                  <Trash2 className="h-3 w-3 text-destructive" />
+                  <Edit className="h-3 w-3" />
                 </Button>
-              )}
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  className="h-4 w-4"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    handleDuplicateCanvas(c.id);
+                  }}
+                  title="Duplicar"
+                >
+                  <Copy className="h-3 w-3" />
+                </Button>
+                {canvases.length > 1 && (
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    className="h-4 w-4"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      handleDeleteCanvas(c.id);
+                    }}
+                    title="Excluir"
+                  >
+                    <Trash2 className="h-3 w-3 text-destructive" />
+                  </Button>
+                )}
+              </div>
             </TabsTrigger>
           ))}
         </TabsList>
