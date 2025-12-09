@@ -7,9 +7,11 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
-import { ArrowLeft, Plus, Trash2, GripVertical, Edit, Copy, Save, Download, RefreshCw } from "lucide-react";
+import { ArrowLeft, Plus, Trash2, GripVertical, Edit, Copy, Save, Download, RefreshCw, Grid3X3, Magnet, AlignLeft, AlignCenter, AlignRight, AlignStartVertical, AlignCenterVertical, AlignEndVertical } from "lucide-react";
 import { SalvarTemplateDialog } from "@/components/templates/SalvarTemplateDialog";
 import { AplicarTemplateDialog } from "@/components/templates/AplicarTemplateDialog";
+import { Switch } from "@/components/ui/switch";
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 
 interface MockupEditorProps {
   mockup: any;
@@ -96,6 +98,11 @@ export function MockupEditor({ mockup, onClose, onSave }: MockupEditorProps) {
   
   const [salvarTemplateOpen, setSalvarTemplateOpen] = useState(false);
   const [aplicarTemplateOpen, setAplicarTemplateOpen] = useState(false);
+
+  // Estados para grade e alinhamento
+  const [showGrid, setShowGrid] = useState(false);
+  const [gridSize, setGridSize] = useState(20);
+  const [snapToGrid, setSnapToGrid] = useState(false);
 
   useEffect(() => {
     carregarCanvases();
@@ -523,6 +530,12 @@ export function MockupEditor({ mockup, onClose, onSave }: MockupEditorProps) {
     }
   };
 
+  // Função de snap to grid
+  const snapValue = (value: number): number => {
+    if (!snapToGrid) return value;
+    return Math.round(value / gridSize) * gridSize;
+  };
+
   const handleMouseDown = (e: React.MouseEvent, areaId: string, isResize = false) => {
     e.stopPropagation();
     const area = areas.find(a => a.id === areaId);
@@ -554,8 +567,14 @@ export function MockupEditor({ mockup, onClose, onSave }: MockupEditorProps) {
       const deltaX = e.clientX - dragging.startX;
       const deltaY = e.clientY - dragging.startY;
 
-      const newX = Math.max(0, area.x + deltaX);
-      const newY = Math.max(0, area.y + deltaY);
+      let newX = Math.max(0, area.x + deltaX);
+      let newY = Math.max(0, area.y + deltaY);
+
+      // Aplicar snap durante o arraste se ativado
+      if (snapToGrid) {
+        newX = snapValue(newX);
+        newY = snapValue(newY);
+      }
 
       setAreas(prev => prev.map(a => 
         a.id === dragging.areaId ? { ...a, x: newX, y: newY } : a
@@ -569,8 +588,14 @@ export function MockupEditor({ mockup, onClose, onSave }: MockupEditorProps) {
       const deltaX = e.clientX - resizing.startX;
       const deltaY = e.clientY - resizing.startY;
 
-      const newWidth = Math.max(20, resizing.startWidth + deltaX);
-      const newHeight = Math.max(20, resizing.startHeight + deltaY);
+      let newWidth = Math.max(20, resizing.startWidth + deltaX);
+      let newHeight = Math.max(20, resizing.startHeight + deltaY);
+
+      // Aplicar snap ao redimensionar se ativado
+      if (snapToGrid) {
+        newWidth = Math.max(gridSize, snapValue(newWidth));
+        newHeight = Math.max(gridSize, snapValue(newHeight));
+      }
 
       setAreas(prev => prev.map(a => 
         a.id === resizing.areaId ? { ...a, width: newWidth, height: newHeight } : a
@@ -582,16 +607,96 @@ export function MockupEditor({ mockup, onClose, onSave }: MockupEditorProps) {
     if (dragging) {
       const area = areas.find(a => a.id === dragging.areaId);
       if (area) {
-        handleUpdateArea(area.id!, { x: area.x, y: area.y });
+        // Aplicar snap final
+        const finalX = snapValue(area.x);
+        const finalY = snapValue(area.y);
+        if (finalX !== area.x || finalY !== area.y) {
+          setAreas(prev => prev.map(a => 
+            a.id === area.id ? { ...a, x: finalX, y: finalY } : a
+          ));
+        }
+        handleUpdateArea(area.id!, { x: finalX, y: finalY });
       }
       setDragging(null);
     } else if (resizing) {
       const area = areas.find(a => a.id === resizing.areaId);
       if (area) {
-        handleUpdateArea(area.id!, { width: area.width, height: area.height });
+        // Aplicar snap final
+        const finalWidth = snapValue(area.width);
+        const finalHeight = snapValue(area.height);
+        if (finalWidth !== area.width || finalHeight !== area.height) {
+          setAreas(prev => prev.map(a => 
+            a.id === area.id ? { ...a, width: finalWidth, height: finalHeight } : a
+          ));
+        }
+        handleUpdateArea(area.id!, { width: finalWidth, height: finalHeight });
       }
       setResizing(null);
     }
+  };
+
+  // Funções de alinhamento
+  const getSelectedAreaObj = () => areas.find(a => a.id === selectedArea);
+
+  const handleAlignLeft = () => {
+    const area = getSelectedAreaObj();
+    if (!area) return;
+    const newX = snapToGrid ? 0 : 0;
+    setAreas(prev => prev.map(a => a.id === area.id ? { ...a, x: newX } : a));
+    handleUpdateArea(area.id!, { x: newX });
+  };
+
+  const handleAlignCenter = () => {
+    const area = getSelectedAreaObj();
+    if (!area || !imageRef.current) return;
+    const canvasWidth = imageRef.current.width;
+    const newX = snapValue(Math.round((canvasWidth - area.width) / 2));
+    setAreas(prev => prev.map(a => a.id === area.id ? { ...a, x: newX } : a));
+    handleUpdateArea(area.id!, { x: newX });
+  };
+
+  const handleAlignRight = () => {
+    const area = getSelectedAreaObj();
+    if (!area || !imageRef.current) return;
+    const canvasWidth = imageRef.current.width;
+    const newX = snapValue(canvasWidth - area.width);
+    setAreas(prev => prev.map(a => a.id === area.id ? { ...a, x: newX } : a));
+    handleUpdateArea(area.id!, { x: newX });
+  };
+
+  const handleAlignTop = () => {
+    const area = getSelectedAreaObj();
+    if (!area) return;
+    const newY = 0;
+    setAreas(prev => prev.map(a => a.id === area.id ? { ...a, y: newY } : a));
+    handleUpdateArea(area.id!, { y: newY });
+  };
+
+  const handleAlignMiddle = () => {
+    const area = getSelectedAreaObj();
+    if (!area || !imageRef.current) return;
+    const canvasHeight = imageRef.current.height;
+    const newY = snapValue(Math.round((canvasHeight - area.height) / 2));
+    setAreas(prev => prev.map(a => a.id === area.id ? { ...a, y: newY } : a));
+    handleUpdateArea(area.id!, { y: newY });
+  };
+
+  const handleAlignBottom = () => {
+    const area = getSelectedAreaObj();
+    if (!area || !imageRef.current) return;
+    const canvasHeight = imageRef.current.height;
+    const newY = snapValue(canvasHeight - area.height);
+    setAreas(prev => prev.map(a => a.id === area.id ? { ...a, y: newY } : a));
+    handleUpdateArea(area.id!, { y: newY });
+  };
+
+  // Atualização direta de coordenadas da área selecionada
+  const handleDirectCoordinateUpdate = (field: 'x' | 'y' | 'width' | 'height', value: number) => {
+    const area = getSelectedAreaObj();
+    if (!area) return;
+    const snappedValue = snapToGrid ? snapValue(value) : value;
+    setAreas(prev => prev.map(a => a.id === area.id ? { ...a, [field]: snappedValue } : a));
+    handleUpdateArea(area.id!, { [field]: snappedValue });
   };
 
   const handleDeleteArea = async (areaId: string) => {
@@ -901,47 +1006,168 @@ export function MockupEditor({ mockup, onClose, onSave }: MockupEditorProps) {
             <div className="grid grid-cols-[1fr_400px] gap-6">
               {/* Visual Canvas Editor */}
               <Card>
-                <CardHeader className="flex flex-row items-center justify-between">
-                  <CardTitle>{canvas.nome}</CardTitle>
-                  <div className="flex gap-2">
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      onClick={() => setAplicarTemplateOpen(true)}
-                      disabled={!scaleReady}
-                    >
-                      <Download className="w-4 h-4 mr-2" />
-                      Aplicar Template
-                    </Button>
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      onClick={() => setSalvarTemplateOpen(true)}
-                      disabled={areas.length === 0 || !scaleReady}
-                    >
-                      <Save className="w-4 h-4 mr-2" />
-                      Salvar como Template
-                    </Button>
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      onClick={() => handleRecalcularEscala(canvas.id)}
-                      disabled={!canvas.largura_original || uploading}
-                      title="Recalcular escala baseado nas dimensões originais"
-                    >
-                      <RefreshCw className="w-4 h-4 mr-2" />
-                      Recalcular Escala
-                    </Button>
-                    <Input
-                      type="file"
-                      accept="image/*"
-                      onChange={(e) => {
-                        const file = e.target.files?.[0];
-                        if (file) handleUploadCanvasImage(canvas.id, file);
-                      }}
-                      disabled={uploading}
-                      className="max-w-[200px]"
-                    />
+                <CardHeader className="space-y-4">
+                  <div className="flex flex-row items-center justify-between">
+                    <CardTitle>{canvas.nome}</CardTitle>
+                    <div className="flex gap-2">
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={() => setAplicarTemplateOpen(true)}
+                        disabled={!scaleReady}
+                      >
+                        <Download className="w-4 h-4 mr-2" />
+                        Aplicar Template
+                      </Button>
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={() => setSalvarTemplateOpen(true)}
+                        disabled={areas.length === 0 || !scaleReady}
+                      >
+                        <Save className="w-4 h-4 mr-2" />
+                        Salvar como Template
+                      </Button>
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={() => handleRecalcularEscala(canvas.id)}
+                        disabled={!canvas.largura_original || uploading}
+                        title="Recalcular escala baseado nas dimensões originais"
+                      >
+                        <RefreshCw className="w-4 h-4 mr-2" />
+                        Recalcular Escala
+                      </Button>
+                      <Input
+                        type="file"
+                        accept="image/*"
+                        onChange={(e) => {
+                          const file = e.target.files?.[0];
+                          if (file) handleUploadCanvasImage(canvas.id, file);
+                        }}
+                        disabled={uploading}
+                        className="max-w-[200px]"
+                      />
+                    </div>
+                  </div>
+                  
+                  {/* Barra de ferramentas de grade e alinhamento */}
+                  <div className="flex items-center gap-4 p-3 bg-muted/50 rounded-lg border">
+                    <TooltipProvider>
+                      {/* Toggle Grade */}
+                      <div className="flex items-center gap-2">
+                        <Tooltip>
+                          <TooltipTrigger asChild>
+                            <Button
+                              variant={showGrid ? "default" : "outline"}
+                              size="sm"
+                              onClick={() => setShowGrid(!showGrid)}
+                            >
+                              <Grid3X3 className="w-4 h-4" />
+                            </Button>
+                          </TooltipTrigger>
+                          <TooltipContent>
+                            <p>{showGrid ? "Ocultar" : "Mostrar"} Grade</p>
+                          </TooltipContent>
+                        </Tooltip>
+                        
+                        {showGrid && (
+                          <Select value={String(gridSize)} onValueChange={(v) => setGridSize(Number(v))}>
+                            <SelectTrigger className="w-20 h-8">
+                              <SelectValue />
+                            </SelectTrigger>
+                            <SelectContent>
+                              <SelectItem value="10">10px</SelectItem>
+                              <SelectItem value="20">20px</SelectItem>
+                              <SelectItem value="50">50px</SelectItem>
+                            </SelectContent>
+                          </Select>
+                        )}
+                      </div>
+                      
+                      <div className="w-px h-6 bg-border" />
+                      
+                      {/* Toggle Snap */}
+                      <div className="flex items-center gap-2">
+                        <Tooltip>
+                          <TooltipTrigger asChild>
+                            <Button
+                              variant={snapToGrid ? "default" : "outline"}
+                              size="sm"
+                              onClick={() => setSnapToGrid(!snapToGrid)}
+                            >
+                              <Magnet className="w-4 h-4" />
+                            </Button>
+                          </TooltipTrigger>
+                          <TooltipContent>
+                            <p>{snapToGrid ? "Desativar" : "Ativar"} Snap na Grade</p>
+                          </TooltipContent>
+                        </Tooltip>
+                        <span className="text-xs text-muted-foreground">Snap</span>
+                      </div>
+                      
+                      <div className="w-px h-6 bg-border" />
+                      
+                      {/* Botões de Alinhamento */}
+                      <div className="flex items-center gap-1">
+                        <span className="text-xs text-muted-foreground mr-1">Alinhar:</span>
+                        <Tooltip>
+                          <TooltipTrigger asChild>
+                            <Button variant="outline" size="sm" onClick={handleAlignLeft} disabled={!selectedArea}>
+                              <AlignLeft className="w-4 h-4" />
+                            </Button>
+                          </TooltipTrigger>
+                          <TooltipContent><p>Alinhar à Esquerda</p></TooltipContent>
+                        </Tooltip>
+                        
+                        <Tooltip>
+                          <TooltipTrigger asChild>
+                            <Button variant="outline" size="sm" onClick={handleAlignCenter} disabled={!selectedArea}>
+                              <AlignCenter className="w-4 h-4" />
+                            </Button>
+                          </TooltipTrigger>
+                          <TooltipContent><p>Centralizar Horizontal</p></TooltipContent>
+                        </Tooltip>
+                        
+                        <Tooltip>
+                          <TooltipTrigger asChild>
+                            <Button variant="outline" size="sm" onClick={handleAlignRight} disabled={!selectedArea}>
+                              <AlignRight className="w-4 h-4" />
+                            </Button>
+                          </TooltipTrigger>
+                          <TooltipContent><p>Alinhar à Direita</p></TooltipContent>
+                        </Tooltip>
+                        
+                        <div className="w-px h-4 bg-border mx-1" />
+                        
+                        <Tooltip>
+                          <TooltipTrigger asChild>
+                            <Button variant="outline" size="sm" onClick={handleAlignTop} disabled={!selectedArea}>
+                              <AlignStartVertical className="w-4 h-4" />
+                            </Button>
+                          </TooltipTrigger>
+                          <TooltipContent><p>Alinhar ao Topo</p></TooltipContent>
+                        </Tooltip>
+                        
+                        <Tooltip>
+                          <TooltipTrigger asChild>
+                            <Button variant="outline" size="sm" onClick={handleAlignMiddle} disabled={!selectedArea}>
+                              <AlignCenterVertical className="w-4 h-4" />
+                            </Button>
+                          </TooltipTrigger>
+                          <TooltipContent><p>Centralizar Vertical</p></TooltipContent>
+                        </Tooltip>
+                        
+                        <Tooltip>
+                          <TooltipTrigger asChild>
+                            <Button variant="outline" size="sm" onClick={handleAlignBottom} disabled={!selectedArea}>
+                              <AlignEndVertical className="w-4 h-4" />
+                            </Button>
+                          </TooltipTrigger>
+                          <TooltipContent><p>Alinhar Embaixo</p></TooltipContent>
+                        </Tooltip>
+                      </div>
+                    </TooltipProvider>
                   </div>
                 </CardHeader>
                 <CardContent>
@@ -973,6 +1199,20 @@ export function MockupEditor({ mockup, onClose, onSave }: MockupEditorProps) {
                           style={{ maxWidth: '800px' }}
                           draggable={false}
                         />
+                        
+                        {/* Grade visual */}
+                        {showGrid && (
+                          <div 
+                            className="absolute inset-0 pointer-events-none"
+                            style={{
+                              backgroundImage: `
+                                linear-gradient(to right, hsl(var(--primary) / 0.15) 1px, transparent 1px),
+                                linear-gradient(to bottom, hsl(var(--primary) / 0.15) 1px, transparent 1px)
+                              `,
+                              backgroundSize: `${gridSize}px ${gridSize}px`
+                            }}
+                          />
+                        )}
                       
                       {/* Áreas sobrepostas */}
                       {areas.map((area) => (
@@ -1306,6 +1546,60 @@ export function MockupEditor({ mockup, onClose, onSave }: MockupEditorProps) {
                           Cancelar
                         </Button>
                       </div>
+                    </CardContent>
+                  </Card>
+                )}
+
+                {/* Coordenadas editáveis da área selecionada */}
+                {selectedArea && getSelectedAreaObj() && (
+                  <Card className="border-primary">
+                    <CardHeader className="py-3">
+                      <CardTitle className="text-base">Posição da Área</CardTitle>
+                    </CardHeader>
+                    <CardContent className="space-y-3">
+                      <div className="grid grid-cols-2 gap-2">
+                        <div>
+                          <Label className="text-xs">X</Label>
+                          <Input
+                            type="number"
+                            value={getSelectedAreaObj()?.x || 0}
+                            onChange={(e) => handleDirectCoordinateUpdate('x', Number(e.target.value))}
+                            step={snapToGrid ? gridSize : 1}
+                          />
+                        </div>
+                        <div>
+                          <Label className="text-xs">Y</Label>
+                          <Input
+                            type="number"
+                            value={getSelectedAreaObj()?.y || 0}
+                            onChange={(e) => handleDirectCoordinateUpdate('y', Number(e.target.value))}
+                            step={snapToGrid ? gridSize : 1}
+                          />
+                        </div>
+                        <div>
+                          <Label className="text-xs">Largura</Label>
+                          <Input
+                            type="number"
+                            value={getSelectedAreaObj()?.width || 0}
+                            onChange={(e) => handleDirectCoordinateUpdate('width', Number(e.target.value))}
+                            step={snapToGrid ? gridSize : 1}
+                          />
+                        </div>
+                        <div>
+                          <Label className="text-xs">Altura</Label>
+                          <Input
+                            type="number"
+                            value={getSelectedAreaObj()?.height || 0}
+                            onChange={(e) => handleDirectCoordinateUpdate('height', Number(e.target.value))}
+                            step={snapToGrid ? gridSize : 1}
+                          />
+                        </div>
+                      </div>
+                      {snapToGrid && (
+                        <p className="text-xs text-muted-foreground">
+                          Snap ativo: valores serão ajustados para múltiplos de {gridSize}px
+                        </p>
+                      )}
                     </CardContent>
                   </Card>
                 )}
