@@ -9,7 +9,7 @@ import { Badge } from "@/components/ui/badge";
 import { toast } from "@/hooks/use-toast";
 import { supabase } from "@/integrations/supabase/client";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { Loader2, Settings, MessageSquare, AlertCircle, Plus, Edit, Trash2, Copy } from "lucide-react";
+import { Loader2, Settings, MessageSquare, AlertCircle, Plus, Edit, Trash2, Copy, Wifi, WifiOff, RefreshCw } from "lucide-react";
 import { TesteEnvioDialog } from "@/components/mensagens/TesteEnvioDialog";
 import { InstanciaDialog } from "@/components/mensagens/InstanciaDialog";
 import {
@@ -53,6 +53,13 @@ interface WhatsappInstance {
   ordem: number;
 }
 
+interface InstanceStatus {
+  id: string;
+  nome: string;
+  status: 'connected' | 'disconnected' | 'connecting' | 'error' | 'checking';
+  message?: string;
+}
+
 const ConfiguracoesWhatsapp = () => {
   const queryClient = useQueryClient();
   const [defaultInstance, setDefaultInstance] = useState("personalizado");
@@ -69,6 +76,8 @@ const ConfiguracoesWhatsapp = () => {
   const [instanciaSelecionada, setInstanciaSelecionada] = useState<WhatsappInstance | null>(null);
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
   const [instanciaParaDeletar, setInstanciaParaDeletar] = useState<string | null>(null);
+  const [instanceStatuses, setInstanceStatuses] = useState<Record<string, InstanceStatus>>({});
+  const [checkingStatuses, setCheckingStatuses] = useState(false);
 
   // Buscar configurações
   const { data: settings, isLoading: loadingSettings } = useQuery({
@@ -112,6 +121,46 @@ const ConfiguracoesWhatsapp = () => {
     },
   });
 
+  // Verificar status de conexão das instâncias
+  const checkInstancesStatus = async () => {
+    if (!instances || instances.length === 0) return;
+    
+    setCheckingStatuses(true);
+    
+    // Marcar todas como "checking"
+    const checking: Record<string, InstanceStatus> = {};
+    instances.forEach(inst => {
+      checking[inst.id] = { id: inst.id, nome: inst.nome, status: 'checking' };
+    });
+    setInstanceStatuses(checking);
+    
+    try {
+      const { data, error } = await supabase.functions.invoke('check-instance-status');
+      
+      if (error) {
+        console.error('Erro ao verificar status:', error);
+        toast({
+          title: "Erro ao verificar conexões",
+          description: "Não foi possível verificar o status das instâncias",
+          variant: "destructive",
+        });
+        return;
+      }
+      
+      const statuses: Record<string, InstanceStatus> = {};
+      if (data?.statuses) {
+        data.statuses.forEach((s: InstanceStatus) => {
+          statuses[s.id] = s;
+        });
+      }
+      setInstanceStatuses(statuses);
+    } catch (error) {
+      console.error('Erro ao verificar status:', error);
+    } finally {
+      setCheckingStatuses(false);
+    }
+  };
+
   // Atualizar estados quando carregar settings
   useEffect(() => {
     if (settings) {
@@ -125,6 +174,13 @@ const ConfiguracoesWhatsapp = () => {
       setMensagensPorInstancia(settings.mensagens_por_instancia || 5);
     }
   }, [settings]);
+
+  // Verificar status automaticamente ao carregar instâncias
+  useEffect(() => {
+    if (instances && instances.length > 0) {
+      checkInstancesStatus();
+    }
+  }, [instances]);
 
   // Mutation para salvar configurações
   const saveMutation = useMutation({
@@ -367,13 +423,36 @@ const ConfiguracoesWhatsapp = () => {
                     Configure múltiplas instâncias para envio com fallback automático
                   </CardDescription>
                 </div>
-                <Button onClick={handleAddInstancia}>
-                  <Plus className="h-4 w-4 mr-2" />
-                  Adicionar
-                </Button>
+                <div className="flex gap-2">
+                  <Button variant="outline" size="sm" onClick={checkInstancesStatus} disabled={checkingStatuses}>
+                    <RefreshCw className={`h-4 w-4 mr-2 ${checkingStatuses ? 'animate-spin' : ''}`} />
+                    Verificar Conexões
+                  </Button>
+                  <Button onClick={handleAddInstancia}>
+                    <Plus className="h-4 w-4 mr-2" />
+                    Adicionar
+                  </Button>
+                </div>
               </div>
             </CardHeader>
             <CardContent className="space-y-4">
+              {/* Alerta de instâncias desconectadas */}
+              {Object.values(instanceStatuses).some(s => 
+                s.status === 'disconnected' && instances?.find(i => i.id === s.id)?.is_active
+              ) && (
+                <div className="bg-destructive/10 border border-destructive/20 rounded-lg p-4 flex items-center gap-3">
+                  <WifiOff className="h-5 w-5 text-destructive" />
+                  <div>
+                    <p className="text-sm font-medium text-destructive">
+                      Instância desconectada detectada!
+                    </p>
+                    <p className="text-xs text-muted-foreground">
+                      Uma ou mais instâncias ativas estão desconectadas. Verifique o QR Code na Evolution API.
+                    </p>
+                  </div>
+                </div>
+              )}
+
               {/* Opção de rotação entre instâncias */}
               <div className="border rounded-lg p-4 bg-accent/30">
                 <div className="flex items-center justify-between mb-4">
@@ -422,59 +501,108 @@ const ConfiguracoesWhatsapp = () => {
                 </div>
               ) : (
                 <div className="space-y-3">
-                  {instances.map((inst) => (
-                    <div
-                      key={inst.id}
-                      className="flex items-center justify-between p-4 border rounded-lg bg-card hover:bg-accent/50 transition-colors"
-                    >
-                      <div className="flex items-center gap-4">
-                        <Switch
-                          checked={inst.is_active}
-                          onCheckedChange={(checked) =>
-                            toggleInstanceMutation.mutate({ id: inst.id, isActive: checked })
-                          }
-                        />
-                        <div>
-                          <div className="flex items-center gap-2">
-                            <p className="font-medium">{inst.nome}</p>
-                            <Badge variant={inst.is_active ? "default" : "secondary"}>
-                              {inst.is_active ? "Ativa" : "Inativa"}
+                  {instances.map((inst) => {
+                    const connectionStatus = instanceStatuses[inst.id];
+                    const getConnectionBadge = () => {
+                      if (!connectionStatus || connectionStatus.status === 'checking') {
+                        return (
+                          <Badge variant="outline" className="gap-1">
+                            <Loader2 className="h-3 w-3 animate-spin" />
+                            Verificando...
+                          </Badge>
+                        );
+                      }
+                      switch (connectionStatus.status) {
+                        case 'connected':
+                          return (
+                            <Badge variant="default" className="gap-1 bg-green-600 hover:bg-green-700">
+                              <Wifi className="h-3 w-3" />
+                              Conectado
                             </Badge>
-                            <Badge variant="outline">Ordem: {inst.ordem}</Badge>
+                          );
+                        case 'disconnected':
+                          return (
+                            <Badge variant="destructive" className="gap-1">
+                              <WifiOff className="h-3 w-3" />
+                              Desconectado
+                            </Badge>
+                          );
+                        case 'connecting':
+                          return (
+                            <Badge variant="outline" className="gap-1 border-yellow-500 text-yellow-600">
+                              <Loader2 className="h-3 w-3 animate-spin" />
+                              Conectando...
+                            </Badge>
+                          );
+                        default:
+                          return (
+                            <Badge variant="secondary" className="gap-1">
+                              <AlertCircle className="h-3 w-3" />
+                              Erro
+                            </Badge>
+                          );
+                      }
+                    };
+
+                    return (
+                      <div
+                        key={inst.id}
+                        className={`flex items-center justify-between p-4 border rounded-lg bg-card hover:bg-accent/50 transition-colors ${
+                          connectionStatus?.status === 'disconnected' && inst.is_active 
+                            ? 'border-destructive/50' 
+                            : ''
+                        }`}
+                      >
+                        <div className="flex items-center gap-4">
+                          <Switch
+                            checked={inst.is_active}
+                            onCheckedChange={(checked) =>
+                              toggleInstanceMutation.mutate({ id: inst.id, isActive: checked })
+                            }
+                          />
+                          <div>
+                            <div className="flex items-center gap-2 flex-wrap">
+                              <p className="font-medium">{inst.nome}</p>
+                              <Badge variant={inst.is_active ? "default" : "secondary"}>
+                                {inst.is_active ? "Ativa" : "Inativa"}
+                              </Badge>
+                              {getConnectionBadge()}
+                              <Badge variant="outline">Ordem: {inst.ordem}</Badge>
+                            </div>
+                            <p className="text-sm text-muted-foreground mt-1">
+                              {inst.evolution_instance}
+                            </p>
                           </div>
-                          <p className="text-sm text-muted-foreground mt-1">
-                            {inst.evolution_instance}
-                          </p>
+                        </div>
+                        <div className="flex gap-1">
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            onClick={() => handleEditInstancia(inst)}
+                            title="Editar"
+                          >
+                            <Edit className="h-4 w-4" />
+                          </Button>
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            onClick={() => handleDuplicarInstancia(inst)}
+                            title="Duplicar"
+                          >
+                            <Copy className="h-4 w-4" />
+                          </Button>
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            onClick={() => handleDeleteInstancia(inst.id)}
+                            title="Excluir"
+                          >
+                            <Trash2 className="h-4 w-4" />
+                          </Button>
                         </div>
                       </div>
-                      <div className="flex gap-1">
-                        <Button
-                          variant="ghost"
-                          size="sm"
-                          onClick={() => handleEditInstancia(inst)}
-                          title="Editar"
-                        >
-                          <Edit className="h-4 w-4" />
-                        </Button>
-                        <Button
-                          variant="ghost"
-                          size="sm"
-                          onClick={() => handleDuplicarInstancia(inst)}
-                          title="Duplicar"
-                        >
-                          <Copy className="h-4 w-4" />
-                        </Button>
-                        <Button
-                          variant="ghost"
-                          size="sm"
-                          onClick={() => handleDeleteInstancia(inst.id)}
-                          title="Excluir"
-                        >
-                          <Trash2 className="h-4 w-4" />
-                        </Button>
-                      </div>
-                    </div>
-                  ))}
+                    );
+                  })}
                 </div>
               )}
             </CardContent>
