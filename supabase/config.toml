@@ -14,3 +14,6 @@ verify_jwt = false
 
 [functions.cleanup-orphan-files]
 verify_jwt = false
+
+[functions.check-instance-status]
+verify_jwt = false

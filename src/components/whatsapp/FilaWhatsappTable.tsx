@@ -111,7 +111,10 @@ export function FilaWhatsappTable() {
 
   const handleReprocessSelected = async () => {
     if (selectedIds.length === 0) return;
+    
+    setIsProcessing(true);
     try {
+      // 1. Marcar mensagens como pending
       const { error } = await supabase
         .from('whatsapp_queue')
         .update({ 
@@ -124,10 +127,24 @@ export function FilaWhatsappTable() {
       if (error) throw error;
       toast.success(`${selectedIds.length} mensagens marcadas para reprocessamento`);
       setSelectedIds([]);
+      
+      // 2. Processar a fila automaticamente
+      const { error: processError } = await supabase.functions.invoke('process-whatsapp-queue');
+      if (processError) {
+        console.error("Erro ao processar fila:", processError);
+        toast.error("Erro ao processar fila automaticamente");
+      } else {
+        toast.success("Fila processada!");
+      }
+      
+      // 3. Aguardar um pouco e atualizar
+      await new Promise(resolve => setTimeout(resolve, 2000));
       refetch();
     } catch (error) {
       console.error("Erro ao reprocessar mensagens:", error);
       toast.error("Erro ao reprocessar mensagens");
+    } finally {
+      setIsProcessing(false);
     }
   };
 
