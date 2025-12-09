@@ -10,12 +10,22 @@ interface QueueItem {
   error?: string;
 }
 
+export interface PedidoError {
+  pedidoId: string;
+  error: string;
+  timestamp: number;
+}
+
 export function useMockupQueue(onRefresh?: () => void) {
   const [queue, setQueue] = useState<QueueItem[]>([]);
   const [isProcessing, setIsProcessing] = useState(false);
+  const [errors, setErrors] = useState<PedidoError[]>([]);
   const processingRef = useRef(false);
 
   const addToQueue = useCallback((pedido: any, tipoGerar: 'all' | 'aprovacao' | 'molde' = 'all') => {
+    // Limpar erro anterior deste pedido
+    setErrors(prev => prev.filter(e => e.pedidoId !== pedido.id));
+    
     // Verificar se já está na fila
     setQueue(prev => {
       const exists = prev.some(item => item.pedido.id === pedido.id && item.status === 'pending');
@@ -34,6 +44,10 @@ export function useMockupQueue(onRefresh?: () => void) {
         status: 'pending'
       }];
     });
+  }, []);
+
+  const clearError = useCallback((pedidoId: string) => {
+    setErrors(prev => prev.filter(e => e.pedidoId !== pedidoId));
   }, []);
 
   const processQueue = useCallback(async () => {
@@ -67,6 +81,16 @@ export function useMockupQueue(onRefresh?: () => void) {
           
         } catch (error: any) {
           console.error(`[Queue] Erro ao processar ${pendingItem.pedido.numero_pedido}:`, error);
+          
+          // Registrar erro para exibição na UI
+          setErrors(prev => [
+            ...prev.filter(e => e.pedidoId !== pendingItem.pedido.id),
+            {
+              pedidoId: pendingItem.pedido.id,
+              error: error.message || 'Erro desconhecido',
+              timestamp: Date.now()
+            }
+          ]);
           
           setQueue(prev => prev.map(item => 
             item.id === pendingItem.id 
@@ -113,12 +137,19 @@ export function useMockupQueue(onRefresh?: () => void) {
   const pendingCount = queue.filter(item => item.status === 'pending').length;
   const processingItem = queue.find(item => item.status === 'processing');
 
+  const getErrorForPedido = useCallback((pedidoId: string) => {
+    return errors.find(e => e.pedidoId === pedidoId);
+  }, [errors]);
+
   return {
     queue,
     addToQueue,
     isProcessing,
     pendingCount,
     processingItem,
-    currentProcessingId: processingItem?.pedido?.id || null
+    currentProcessingId: processingItem?.pedido?.id || null,
+    errors,
+    clearError,
+    getErrorForPedido
   };
 }
