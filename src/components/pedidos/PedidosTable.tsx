@@ -195,6 +195,12 @@ interface PedidosTableProps {
   onSelectionChange: (ids: Set<string>) => void;
   gerarFotoAuto?: boolean;
   salvarDriveAuto?: boolean;
+  mockupQueue?: {
+    addToQueue: (pedido: any, tipoGerar: 'all' | 'aprovacao' | 'molde') => void;
+    isProcessing: boolean;
+    currentProcessingId: string | null;
+    pendingCount: number;
+  };
 }
 
 export function PedidosTable({ 
@@ -204,7 +210,8 @@ export function PedidosTable({
   selectedIds, 
   onSelectionChange,
   gerarFotoAuto = false,
-  salvarDriveAuto = false
+  salvarDriveAuto = false,
+  mockupQueue
 }: PedidosTableProps) {
   const [uploadDialogOpen, setUploadDialogOpen] = useState(false);
   const [viewDialogOpen, setViewDialogOpen] = useState(false);
@@ -297,6 +304,13 @@ export function PedidosTable({
       return;
     }
 
+    // Usar fila se disponível
+    if (mockupQueue) {
+      mockupQueue.addToQueue(pedido, tipoGerar);
+      return;
+    }
+
+    // Fallback para geração direta (sem fila)
     setGenerating(pedido.id);
     
     try {
@@ -334,8 +348,8 @@ export function PedidosTable({
           return;
         }
         
-        toast.info("Gerando foto de aprovação automaticamente...");
-        await handleGerarMockups(pedido, 'aprovacao');
+        // Usar fila em vez de geração direta
+        handleGerarMockups(pedido, 'aprovacao');
       } catch (error) {
         console.error("Erro na geração automática:", error);
         toast.error("Erro ao gerar foto de aprovação automaticamente");
@@ -755,10 +769,10 @@ export function PedidosTable({
                     <Button
                       size="sm"
                       onClick={() => handleGerarMockups(pedido)}
-                      disabled={generating === pedido.id || !pedido.fotos_cliente || pedido.fotos_cliente.length === 0}
+                      disabled={generating === pedido.id || mockupQueue?.currentProcessingId === pedido.id || !pedido.fotos_cliente || pedido.fotos_cliente.length === 0}
                       className="bg-gradient-to-r from-accent to-accent/80"
                     >
-                      {generating === pedido.id ? (
+                      {generating === pedido.id || mockupQueue?.currentProcessingId === pedido.id ? (
                         <Loader2 className="h-4 w-4 animate-spin" />
                       ) : (
                         "Gerar"

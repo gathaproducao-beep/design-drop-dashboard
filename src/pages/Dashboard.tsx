@@ -2,7 +2,7 @@ import { useState, useEffect } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Plus, Search, Filter, Trash2, Upload, FileSpreadsheet, Download, Archive, Edit } from "lucide-react";
+import { Plus, Search, Filter, Trash2, Upload, FileSpreadsheet, Download, Archive, Edit, Loader2 } from "lucide-react";
 import { AtualizarLoteDialog } from "@/components/pedidos/AtualizarLoteDialog";
 import { toast } from "sonner";
 import { PedidosTable } from "@/components/pedidos/PedidosTable";
@@ -13,6 +13,8 @@ import { Navigation } from "@/components/Navigation";
 import { StorageCleanupDialog } from "@/components/drive/StorageCleanupDialog";
 import { Checkbox } from "@/components/ui/checkbox";
 import { getDataBrasilia } from "@/lib/utils";
+import { useMockupQueue } from "@/hooks/useMockupQueue";
+import { Badge } from "@/components/ui/badge";
 import {
   Select,
   SelectContent,
@@ -62,6 +64,9 @@ export default function Dashboard() {
   const [filterArquivado, setFilterArquivado] = useState<string>("ativos");
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
   const [atualizarLoteOpen, setAtualizarLoteOpen] = useState(false);
+
+  // Hook para fila de geração de mockups
+  const mockupQueue = useMockupQueue(() => carregarPedidos());
 
   useEffect(() => {
     carregarPedidos();
@@ -477,6 +482,17 @@ export default function Dashboard() {
                   Salvar no Drive automaticamente
                 </label>
               </div>
+              {/* Indicador de fila de mockups */}
+              {(mockupQueue.isProcessing || mockupQueue.pendingCount > 0) && (
+                <div className="flex items-center gap-2 px-3 py-1.5 bg-primary/10 rounded-md border border-primary/20">
+                  <Loader2 className="h-4 w-4 animate-spin text-primary" />
+                  <span className="text-sm font-medium text-primary">
+                    {mockupQueue.isProcessing 
+                      ? `Gerando mockup${mockupQueue.pendingCount > 0 ? ` (+${mockupQueue.pendingCount} na fila)` : '...'}`
+                      : `${mockupQueue.pendingCount} na fila`}
+                  </span>
+                </div>
+              )}
             </div>
             <div className="flex gap-2">
               <StorageCleanupDialog />
@@ -621,6 +637,7 @@ export default function Dashboard() {
           onSelectionChange={setSelectedIds}
           gerarFotoAuto={gerarFotoAuto}
           salvarDriveAuto={salvarDriveAuto}
+          mockupQueue={mockupQueue}
         />
 
         <div className="mt-4">
