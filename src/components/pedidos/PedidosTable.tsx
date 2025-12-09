@@ -20,7 +20,7 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
-import { ExternalLink, Image as ImageIcon, Loader2, Edit, Trash2, Cloud } from "lucide-react";
+import { ExternalLink, Image as ImageIcon, Loader2, Edit, Trash2, Cloud, AlertCircle } from "lucide-react";
 import { ImageUploadDialog } from "./ImageUploadDialog";
 import { ImageViewDialog } from "./ImageViewDialog";
 import { EditableCell } from "./EditableCell";
@@ -187,6 +187,8 @@ function setPHYsTo300DPI(pngData: Uint8Array): Uint8Array {
   return resultArray;
 }
 
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
+
 interface PedidosTableProps {
   pedidos: any[];
   loading: boolean;
@@ -200,6 +202,7 @@ interface PedidosTableProps {
     isProcessing: boolean;
     currentProcessingId: string | null;
     pendingCount: number;
+    getErrorForPedido: (pedidoId: string) => { pedidoId: string; error: string; timestamp: number } | undefined;
   };
 }
 
@@ -766,11 +769,30 @@ export function PedidosTable({
                 </TableCell>
                 <TableCell>
                   <div className="flex items-center gap-1">
+                    {/* Indicador de erro */}
+                    {mockupQueue?.getErrorForPedido(pedido.id) && (
+                      <TooltipProvider>
+                        <Tooltip>
+                          <TooltipTrigger asChild>
+                            <div className="flex items-center">
+                              <AlertCircle className="h-4 w-4 text-destructive cursor-help" />
+                            </div>
+                          </TooltipTrigger>
+                          <TooltipContent side="top" className="max-w-[300px]">
+                            <p className="text-sm font-medium text-destructive">Erro ao gerar mockup:</p>
+                            <p className="text-xs">{mockupQueue.getErrorForPedido(pedido.id)?.error}</p>
+                          </TooltipContent>
+                        </Tooltip>
+                      </TooltipProvider>
+                    )}
                     <Button
                       size="sm"
                       onClick={() => handleGerarMockups(pedido)}
                       disabled={generating === pedido.id || mockupQueue?.currentProcessingId === pedido.id || !pedido.fotos_cliente || pedido.fotos_cliente.length === 0}
-                      className="bg-gradient-to-r from-accent to-accent/80"
+                      className={cn(
+                        "bg-gradient-to-r from-accent to-accent/80",
+                        mockupQueue?.getErrorForPedido(pedido.id) && "ring-2 ring-destructive ring-offset-1"
+                      )}
                     >
                       {generating === pedido.id || mockupQueue?.currentProcessingId === pedido.id ? (
                         <Loader2 className="h-4 w-4 animate-spin" />
