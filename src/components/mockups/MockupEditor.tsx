@@ -1644,6 +1644,20 @@ export function MockupEditor({ mockup, onClose, onSave }: MockupEditorProps) {
                               )}
                             </div>
 
+                            {/* Botão de excluir área */}
+                            <button
+                              className="absolute -top-3 -right-3 w-6 h-6 bg-destructive rounded-full flex items-center justify-center shadow-md z-10 hover:bg-destructive/80 transition-colors"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                if (confirm(`Excluir área "${area.field_key}"?`)) {
+                                  handleDeleteArea(area.id!);
+                                }
+                              }}
+                              title="Excluir área"
+                            >
+                              <Trash2 className="w-3 h-3 text-destructive-foreground" />
+                            </button>
+
                             {/* Handle de redimensionamento */}
                             <div
                               className="absolute bottom-0 right-0 w-4 h-4 bg-primary cursor-se-resize"
