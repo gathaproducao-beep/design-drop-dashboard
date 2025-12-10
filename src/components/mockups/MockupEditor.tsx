@@ -1186,6 +1186,7 @@ export function MockupEditor({ mockup, onClose, onSave }: MockupEditorProps) {
                             <SelectContent>
                               <SelectItem value="10">10px</SelectItem>
                               <SelectItem value="20">20px</SelectItem>
+                              <SelectItem value="30">30px</SelectItem>
                               <SelectItem value="50">50px</SelectItem>
                             </SelectContent>
                           </Select>
@@ -1313,8 +1314,8 @@ export function MockupEditor({ mockup, onClose, onSave }: MockupEditorProps) {
                             className="absolute inset-0 pointer-events-none"
                             style={{
                               backgroundImage: `
-                                linear-gradient(to right, hsl(var(--primary) / 0.15) 1px, transparent 1px),
-                                linear-gradient(to bottom, hsl(var(--primary) / 0.15) 1px, transparent 1px)
+                                linear-gradient(to right, rgba(255, 255, 0, 0.5) 1px, transparent 1px),
+                                linear-gradient(to bottom, rgba(255, 255, 0, 0.5) 1px, transparent 1px)
                               `,
                               backgroundSize: `${gridSize}px ${gridSize}px`
                             }}
