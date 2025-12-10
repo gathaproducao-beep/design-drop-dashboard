@@ -802,94 +802,234 @@ export function MockupEditor({ mockup, onClose, onSave }: MockupEditorProps) {
   };
 
   // Funções de alinhamento (agora funcionam com múltiplas áreas)
+  // CORRIGIDO: Evita race conditions salvando diretamente no banco sem chamar setAreas múltiplas vezes
   const getSelectedAreasObjs = () => areas.filter(a => selectedAreas.includes(a.id!));
+
+  // Proteção contra edições acidentais em lote
+  const BATCH_WARNING_THRESHOLD = 5;
+  
+  const confirmBatchOperation = (count: number, operation: string): boolean => {
+    if (count > BATCH_WARNING_THRESHOLD) {
+      return window.confirm(
+        `Atenção: Você está prestes a ${operation} ${count} áreas.\n\nDeseja continuar?`
+      );
+    }
+    return true;
+  };
+
+  // Função auxiliar para salvar diretamente no banco (evita race condition)
+  const saveAreaPositionDirectly = async (areaId: string, updates: Partial<Area>) => {
+    const canvas = canvases.find(c => c.id === activeCanvas);
+    if (!canvas?.escala_calculada) return;
+
+    const dbUpdates: Record<string, number> = {};
+    
+    if (updates.x !== undefined) {
+      dbUpdates.x = Math.round(updates.x * canvas.escala_calculada);
+    }
+    if (updates.y !== undefined) {
+      dbUpdates.y = Math.round(updates.y * canvas.escala_calculada);
+    }
+    if (updates.width !== undefined) {
+      dbUpdates.width = Math.round(updates.width * canvas.escala_calculada);
+    }
+    if (updates.height !== undefined) {
+      dbUpdates.height = Math.round(updates.height * canvas.escala_calculada);
+    }
+
+    if (Object.keys(dbUpdates).length > 0) {
+      console.log(`[saveAreaPositionDirectly] Área ${areaId}:`, updates, '-> Real:', dbUpdates);
+      await (supabase as any)
+        .from("mockup_areas")
+        .update(dbUpdates)
+        .eq("id", areaId);
+    }
+  };
 
   const handleAlignLeft = async () => {
     const selectedObjs = getSelectedAreasObjs();
     if (selectedObjs.length === 0) return;
+    if (!confirmBatchOperation(selectedObjs.length, 'alinhar à esquerda')) return;
     
-    const newX = snapToGrid ? 0 : 0;
+    const newX = 0;
     
-    for (const area of selectedObjs) {
-      setAreas(prev => prev.map(a => a.id === area.id ? { ...a, x: newX } : a));
-      await handleUpdateArea(area.id!, { x: newX });
+    // 1. Calcular todas as novas posições ANTES de modificar qualquer coisa
+    const updates = selectedObjs.map(area => ({ id: area.id!, x: newX }));
+    
+    // 2. Atualizar estado local UMA VEZ
+    setAreas(prev => prev.map(a => {
+      const update = updates.find(u => u.id === a.id);
+      return update ? { ...a, x: update.x } : a;
+    }));
+    
+    // 3. Salvar no banco sem chamar setAreas novamente
+    for (const update of updates) {
+      await saveAreaPositionDirectly(update.id, { x: update.x });
     }
+    
+    toast.success(`${updates.length} área(s) alinhada(s) à esquerda`);
   };
 
   const handleAlignCenter = async () => {
     const selectedObjs = getSelectedAreasObjs();
     if (selectedObjs.length === 0 || !imageRef.current) return;
+    if (!confirmBatchOperation(selectedObjs.length, 'centralizar horizontalmente')) return;
     
     const canvasWidth = imageRef.current.width;
     
-    for (const area of selectedObjs) {
-      const newX = snapValue(Math.round((canvasWidth - area.width) / 2));
-      setAreas(prev => prev.map(a => a.id === area.id ? { ...a, x: newX } : a));
-      await handleUpdateArea(area.id!, { x: newX });
+    // 1. Calcular todas as novas posições
+    const updates = selectedObjs.map(area => ({
+      id: area.id!,
+      x: snapValue(Math.round((canvasWidth - area.width) / 2))
+    }));
+    
+    // 2. Atualizar estado local UMA VEZ
+    setAreas(prev => prev.map(a => {
+      const update = updates.find(u => u.id === a.id);
+      return update ? { ...a, x: update.x } : a;
+    }));
+    
+    // 3. Salvar no banco
+    for (const update of updates) {
+      await saveAreaPositionDirectly(update.id, { x: update.x });
     }
+    
+    toast.success(`${updates.length} área(s) centralizada(s)`);
   };
 
   const handleAlignRight = async () => {
     const selectedObjs = getSelectedAreasObjs();
     if (selectedObjs.length === 0 || !imageRef.current) return;
+    if (!confirmBatchOperation(selectedObjs.length, 'alinhar à direita')) return;
     
     const canvasWidth = imageRef.current.width;
     
-    for (const area of selectedObjs) {
-      const newX = snapValue(canvasWidth - area.width);
-      setAreas(prev => prev.map(a => a.id === area.id ? { ...a, x: newX } : a));
-      await handleUpdateArea(area.id!, { x: newX });
+    // 1. Calcular todas as novas posições
+    const updates = selectedObjs.map(area => ({
+      id: area.id!,
+      x: snapValue(canvasWidth - area.width)
+    }));
+    
+    // 2. Atualizar estado local UMA VEZ
+    setAreas(prev => prev.map(a => {
+      const update = updates.find(u => u.id === a.id);
+      return update ? { ...a, x: update.x } : a;
+    }));
+    
+    // 3. Salvar no banco
+    for (const update of updates) {
+      await saveAreaPositionDirectly(update.id, { x: update.x });
     }
+    
+    toast.success(`${updates.length} área(s) alinhada(s) à direita`);
   };
 
   const handleAlignTop = async () => {
     const selectedObjs = getSelectedAreasObjs();
     if (selectedObjs.length === 0) return;
+    if (!confirmBatchOperation(selectedObjs.length, 'alinhar ao topo')) return;
     
     const newY = 0;
     
-    for (const area of selectedObjs) {
-      setAreas(prev => prev.map(a => a.id === area.id ? { ...a, y: newY } : a));
-      await handleUpdateArea(area.id!, { y: newY });
+    // 1. Calcular todas as novas posições
+    const updates = selectedObjs.map(area => ({ id: area.id!, y: newY }));
+    
+    // 2. Atualizar estado local UMA VEZ
+    setAreas(prev => prev.map(a => {
+      const update = updates.find(u => u.id === a.id);
+      return update ? { ...a, y: update.y } : a;
+    }));
+    
+    // 3. Salvar no banco
+    for (const update of updates) {
+      await saveAreaPositionDirectly(update.id, { y: update.y });
     }
+    
+    toast.success(`${updates.length} área(s) alinhada(s) ao topo`);
   };
 
   const handleAlignMiddle = async () => {
     const selectedObjs = getSelectedAreasObjs();
     if (selectedObjs.length === 0 || !imageRef.current) return;
+    if (!confirmBatchOperation(selectedObjs.length, 'centralizar verticalmente')) return;
     
     const canvasHeight = imageRef.current.height;
     
-    for (const area of selectedObjs) {
-      const newY = snapValue(Math.round((canvasHeight - area.height) / 2));
-      setAreas(prev => prev.map(a => a.id === area.id ? { ...a, y: newY } : a));
-      await handleUpdateArea(area.id!, { y: newY });
+    // 1. Calcular todas as novas posições
+    const updates = selectedObjs.map(area => ({
+      id: area.id!,
+      y: snapValue(Math.round((canvasHeight - area.height) / 2))
+    }));
+    
+    // 2. Atualizar estado local UMA VEZ
+    setAreas(prev => prev.map(a => {
+      const update = updates.find(u => u.id === a.id);
+      return update ? { ...a, y: update.y } : a;
+    }));
+    
+    // 3. Salvar no banco
+    for (const update of updates) {
+      await saveAreaPositionDirectly(update.id, { y: update.y });
     }
+    
+    toast.success(`${updates.length} área(s) centralizada(s) verticalmente`);
   };
 
   const handleAlignBottom = async () => {
     const selectedObjs = getSelectedAreasObjs();
     if (selectedObjs.length === 0 || !imageRef.current) return;
+    if (!confirmBatchOperation(selectedObjs.length, 'alinhar à base')) return;
     
     const canvasHeight = imageRef.current.height;
     
-    for (const area of selectedObjs) {
-      const newY = snapValue(canvasHeight - area.height);
-      setAreas(prev => prev.map(a => a.id === area.id ? { ...a, y: newY } : a));
-      await handleUpdateArea(area.id!, { y: newY });
+    // 1. Calcular todas as novas posições
+    const updates = selectedObjs.map(area => ({
+      id: area.id!,
+      y: snapValue(canvasHeight - area.height)
+    }));
+    
+    // 2. Atualizar estado local UMA VEZ
+    setAreas(prev => prev.map(a => {
+      const update = updates.find(u => u.id === a.id);
+      return update ? { ...a, y: update.y } : a;
+    }));
+    
+    // 3. Salvar no banco
+    for (const update of updates) {
+      await saveAreaPositionDirectly(update.id, { y: update.y });
     }
+    
+    toast.success(`${updates.length} área(s) alinhada(s) à base`);
   };
 
   // Atualização direta de coordenadas da área selecionada (ou múltiplas)
+  // CORRIGIDO: Evita race conditions calculando tudo antes de salvar
   const handleDirectCoordinateUpdate = async (field: 'x' | 'y' | 'width' | 'height', value: number) => {
     const selectedObjs = getSelectedAreasObjs();
     if (selectedObjs.length === 0) return;
     
+    // Proteção para campos de posição (X, Y) em lote
+    if ((field === 'x' || field === 'y') && !confirmBatchOperation(selectedObjs.length, `alterar ${field.toUpperCase()}`)) {
+      return;
+    }
+    
     const snappedValue = snapToGrid ? snapValue(value) : value;
     
-    for (const area of selectedObjs) {
-      setAreas(prev => prev.map(a => a.id === area.id ? { ...a, [field]: snappedValue } : a));
-      await handleUpdateArea(area.id!, { [field]: snappedValue });
+    // 1. Calcular todas as atualizações
+    const updates = selectedObjs.map(area => ({
+      id: area.id!,
+      [field]: snappedValue
+    }));
+    
+    // 2. Atualizar estado local UMA VEZ
+    setAreas(prev => prev.map(a => {
+      const update = updates.find(u => u.id === a.id);
+      return update ? { ...a, [field]: snappedValue } : a;
+    }));
+    
+    // 3. Salvar no banco
+    for (const update of updates) {
+      await saveAreaPositionDirectly(update.id, { [field]: snappedValue } as Partial<Area>);
     }
   };
 
