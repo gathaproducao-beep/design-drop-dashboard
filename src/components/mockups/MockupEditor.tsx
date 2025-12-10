@@ -2078,8 +2078,37 @@ export function MockupEditor({ mockup, onClose, onSave }: MockupEditorProps) {
                 )}
 
                 <Card>
-                  <CardHeader>
-                    <CardTitle className="text-base">Áreas ({areas.length})</CardTitle>
+                  <CardHeader className="pb-2">
+                    <div className="flex items-center justify-between">
+                      <CardTitle className="text-base">Áreas ({areas.length})</CardTitle>
+                      {areas.length > 0 && (
+                        <div 
+                          className="flex items-center gap-2 cursor-pointer select-none"
+                          onClick={() => {
+                            if (selectedAreas.length === areas.length) {
+                              setSelectedAreas([]);
+                            } else {
+                              setSelectedAreas(areas.map(a => a.id!));
+                            }
+                          }}
+                        >
+                          <span className="text-xs text-muted-foreground">
+                            {selectedAreas.length === areas.length ? 'Desmarcar' : 'Selecionar'} todos
+                          </span>
+                          <div className={`w-5 h-5 rounded border-2 flex items-center justify-center transition-colors ${
+                            selectedAreas.length === areas.length 
+                              ? 'bg-primary border-primary' 
+                              : selectedAreas.length > 0
+                                ? 'bg-primary/50 border-primary'
+                                : 'border-muted-foreground/30'
+                          }`}>
+                            {selectedAreas.length > 0 && (
+                              <Check className={`w-3 h-3 ${selectedAreas.length === areas.length ? 'text-primary-foreground' : 'text-primary-foreground/70'}`} />
+                            )}
+                          </div>
+                        </div>
+                      )}
+                    </div>
                   </CardHeader>
                   <CardContent className="space-y-2">
                     {areas.length === 0 ? (
