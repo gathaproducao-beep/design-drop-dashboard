@@ -2129,7 +2129,15 @@ export function MockupEditor({ mockup, onClose, onSave }: MockupEditorProps) {
                           >
                             <div 
                               className="flex items-center gap-2 flex-1 cursor-pointer"
-                              onClick={(e) => handleAreaClick(e, area.id!)}
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                // Toggle individual na lista - não substitui seleção
+                                setSelectedAreas(prev => 
+                                  prev.includes(area.id!) 
+                                    ? prev.filter(id => id !== area.id!)
+                                    : [...prev, area.id!]
+                                );
+                              }}
                             >
                               {/* Checkbox visual */}
                               <div className={`w-5 h-5 rounded border-2 flex items-center justify-center transition-colors ${
