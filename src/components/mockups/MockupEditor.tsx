@@ -757,18 +757,40 @@ export function MockupEditor({ mockup, onClose, onSave }: MockupEditorProps) {
 
   const handleMouseUp = async () => {
     if (dragging) {
-      // Salvar posições de TODAS as áreas movidas (snap já foi aplicado durante o drag)
+      // IMPORTANTE: Capturar TODAS as posições atuais ANTES de iniciar qualquer salvamento
+      // para evitar race condition onde setAreas dentro de handleUpdateArea altera o estado
       const areasToSave = Object.keys(dragging.initialPositions);
+      const positionsToSave: Record<string, { x: number; y: number }> = {};
       
-      for (const areaId of areasToSave) {
+      // Capturar posições atuais de todas as áreas de uma vez
+      areasToSave.forEach(areaId => {
         const area = areas.find(a => a.id === areaId);
         if (area) {
-          // Salvar no banco com os valores atuais (já com snap aplicado durante o drag)
-          await handleUpdateArea(areaId, { x: area.x, y: area.y });
+          positionsToSave[areaId] = { x: area.x, y: area.y };
+        }
+      });
+      
+      // Limpar o estado de dragging ANTES de salvar para evitar re-renders durante o salvamento
+      setDragging(null);
+      
+      // Agora salvar todas as posições usando os valores capturados (não o estado atual)
+      for (const areaId of Object.keys(positionsToSave)) {
+        const pos = positionsToSave[areaId];
+        // Salvar diretamente no banco convertendo para coordenadas reais
+        // NÃO usar handleUpdateArea para evitar que setAreas cause race conditions
+        const canvas = canvases.find(c => c.id === activeCanvas);
+        if (canvas?.escala_calculada) {
+          const realX = Math.round(pos.x * canvas.escala_calculada);
+          const realY = Math.round(pos.y * canvas.escala_calculada);
+          
+          console.log(`[handleMouseUp] Salvando área ${areaId}: Editor(${pos.x}, ${pos.y}) -> Real(${realX}, ${realY})`);
+          
+          await (supabase as any)
+            .from("mockup_areas")
+            .update({ x: realX, y: realY })
+            .eq("id", areaId);
         }
       }
-      
-      setDragging(null);
     } else if (resizing) {
       const area = areas.find(a => a.id === resizing.areaId);
       if (area) {
