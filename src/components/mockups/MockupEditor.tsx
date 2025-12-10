@@ -7,11 +7,12 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
-import { ArrowLeft, Plus, Trash2, GripVertical, Edit, Copy, Save, Download, RefreshCw, Grid3X3, Magnet, AlignLeft, AlignCenter, AlignRight, AlignStartVertical, AlignCenterVertical, AlignEndVertical } from "lucide-react";
+import { ArrowLeft, Plus, Trash2, GripVertical, Edit, Copy, Save, Download, RefreshCw, Grid3X3, Magnet, AlignLeft, AlignCenter, AlignRight, AlignStartVertical, AlignCenterVertical, AlignEndVertical, CheckSquare, Square } from "lucide-react";
 import { SalvarTemplateDialog } from "@/components/templates/SalvarTemplateDialog";
 import { AplicarTemplateDialog } from "@/components/templates/AplicarTemplateDialog";
 import { Switch } from "@/components/ui/switch";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
+import { Badge } from "@/components/ui/badge";
 
 interface MockupEditorProps {
   mockup: any;
@@ -60,9 +61,9 @@ export function MockupEditor({ mockup, onClose, onSave }: MockupEditorProps) {
   const [canvases, setCanvases] = useState<Canvas[]>([]);
   const [activeCanvas, setActiveCanvas] = useState<string>("");
   const [areas, setAreas] = useState<Area[]>([]);
-  const [selectedArea, setSelectedArea] = useState<string | null>(null);
+  const [selectedAreas, setSelectedAreas] = useState<string[]>([]);
   const [uploading, setUploading] = useState(false);
-  const [dragging, setDragging] = useState<{ areaId: string; startX: number; startY: number } | null>(null);
+  const [dragging, setDragging] = useState<{ areaId: string; startX: number; startY: number; initialPositions: Record<string, { x: number; y: number }> } | null>(null);
   const [resizing, setResizing] = useState<{ areaId: string; startX: number; startY: number; startWidth: number; startHeight: number } | null>(null);
   const canvasRef = useRef<HTMLDivElement>(null);
   const imageRef = useRef<HTMLImageElement>(null);
@@ -71,6 +72,7 @@ export function MockupEditor({ mockup, onClose, onSave }: MockupEditorProps) {
   const [canvasScales, setCanvasScales] = useState<Record<string, number>>({});
   
   const [editingArea, setEditingArea] = useState<Area | null>(null);
+  const [editingMultiple, setEditingMultiple] = useState(false);
   const [showNewAreaForm, setShowNewAreaForm] = useState(false);
   const [newArea, setNewArea] = useState<Partial<Area>>({
     kind: "image",
@@ -320,6 +322,7 @@ export function MockupEditor({ mockup, onClose, onSave }: MockupEditorProps) {
       })));
       
       setAreas(areasConvertidas);
+      setSelectedAreas([]);
     } catch (error) {
       console.error('[carregarAreas] Erro:', error);
       toast.error("Erro ao carregar áreas");
@@ -616,6 +619,38 @@ export function MockupEditor({ mockup, onClose, onSave }: MockupEditorProps) {
     return Math.round(value / gridSize) * gridSize;
   };
 
+  // Seleção de área com suporte a multi-seleção
+  const handleAreaClick = (e: React.MouseEvent, areaId: string) => {
+    e.stopPropagation();
+    
+    if (e.ctrlKey || e.metaKey) {
+      // Ctrl+Click: toggle na seleção
+      setSelectedAreas(prev => 
+        prev.includes(areaId) 
+          ? prev.filter(id => id !== areaId)
+          : [...prev, areaId]
+      );
+    } else {
+      // Click simples: seleciona apenas esta área
+      setSelectedAreas([areaId]);
+    }
+  };
+
+  const handleCanvasClick = (e: React.MouseEvent) => {
+    // Click no canvas (fora das áreas): limpa seleção
+    if (e.target === canvasRef.current || e.target === imageRef.current) {
+      setSelectedAreas([]);
+    }
+  };
+
+  const handleSelectAll = () => {
+    setSelectedAreas(areas.map(a => a.id!));
+  };
+
+  const handleClearSelection = () => {
+    setSelectedAreas([]);
+  };
+
   const handleMouseDown = (e: React.MouseEvent, areaId: string, isResize = false) => {
     e.stopPropagation();
     const area = areas.find(a => a.id === areaId);
@@ -630,37 +665,55 @@ export function MockupEditor({ mockup, onClose, onSave }: MockupEditorProps) {
         startHeight: area.height,
       });
     } else {
+      // Capturar posições iniciais de TODAS as áreas selecionadas
+      const initialPositions: Record<string, { x: number; y: number }> = {};
+      const areasToMove = selectedAreas.includes(areaId) ? selectedAreas : [areaId];
+      
+      areasToMove.forEach(id => {
+        const a = areas.find(ar => ar.id === id);
+        if (a) {
+          initialPositions[id] = { x: a.x, y: a.y };
+        }
+      });
+      
       setDragging({
         areaId,
         startX: e.clientX,
         startY: e.clientY,
+        initialPositions,
       });
+      
+      // Se a área clicada não está selecionada, seleciona apenas ela
+      if (!selectedAreas.includes(areaId)) {
+        setSelectedAreas([areaId]);
+      }
     }
-    setSelectedArea(areaId);
   };
 
   const handleMouseMove = (e: React.MouseEvent) => {
     if (dragging) {
-      const area = areas.find(a => a.id === dragging.areaId);
-      if (!area || !canvasRef.current) return;
-
       const deltaX = e.clientX - dragging.startX;
       const deltaY = e.clientY - dragging.startY;
 
-      let newX = Math.max(0, area.x + deltaX);
-      let newY = Math.max(0, area.y + deltaY);
+      // Mover TODAS as áreas selecionadas (ou apenas a área sendo arrastada)
+      const areasToMove = Object.keys(dragging.initialPositions);
+      
+      setAreas(prev => prev.map(a => {
+        if (areasToMove.includes(a.id!)) {
+          const initial = dragging.initialPositions[a.id!];
+          let newX = Math.max(0, initial.x + deltaX);
+          let newY = Math.max(0, initial.y + deltaY);
 
-      // Aplicar snap durante o arraste se ativado
-      if (snapToGrid) {
-        newX = snapValue(newX);
-        newY = snapValue(newY);
-      }
+          // Aplicar snap durante o arraste se ativado
+          if (snapToGrid) {
+            newX = snapValue(newX);
+            newY = snapValue(newY);
+          }
 
-      setAreas(prev => prev.map(a => 
-        a.id === dragging.areaId ? { ...a, x: newX, y: newY } : a
-      ));
-
-      setDragging({ ...dragging, startX: e.clientX, startY: e.clientY });
+          return { ...a, x: newX, y: newY };
+        }
+        return a;
+      }));
     } else if (resizing) {
       const area = areas.find(a => a.id === resizing.areaId);
       if (!area) return;
@@ -683,20 +736,29 @@ export function MockupEditor({ mockup, onClose, onSave }: MockupEditorProps) {
     }
   };
 
-  const handleMouseUp = () => {
+  const handleMouseUp = async () => {
     if (dragging) {
-      const area = areas.find(a => a.id === dragging.areaId);
-      if (area) {
-        // Aplicar snap final
-        const finalX = snapValue(area.x);
-        const finalY = snapValue(area.y);
-        if (finalX !== area.x || finalY !== area.y) {
-          setAreas(prev => prev.map(a => 
-            a.id === area.id ? { ...a, x: finalX, y: finalY } : a
-          ));
+      // Salvar posições de TODAS as áreas movidas
+      const areasToSave = Object.keys(dragging.initialPositions);
+      
+      for (const areaId of areasToSave) {
+        const area = areas.find(a => a.id === areaId);
+        if (area) {
+          const finalX = snapValue(area.x);
+          const finalY = snapValue(area.y);
+          
+          // Atualizar estado local se houve snap
+          if (finalX !== area.x || finalY !== area.y) {
+            setAreas(prev => prev.map(a => 
+              a.id === areaId ? { ...a, x: finalX, y: finalY } : a
+            ));
+          }
+          
+          // Salvar no banco
+          await handleUpdateArea(areaId, { x: finalX, y: finalY });
         }
-        handleUpdateArea(area.id!, { x: finalX, y: finalY });
       }
+      
       setDragging(null);
     } else if (resizing) {
       const area = areas.find(a => a.id === resizing.areaId);
@@ -715,82 +777,130 @@ export function MockupEditor({ mockup, onClose, onSave }: MockupEditorProps) {
     }
   };
 
-  // Funções de alinhamento
-  const getSelectedAreaObj = () => areas.find(a => a.id === selectedArea);
+  // Funções de alinhamento (agora funcionam com múltiplas áreas)
+  const getSelectedAreasObjs = () => areas.filter(a => selectedAreas.includes(a.id!));
 
-  const handleAlignLeft = () => {
-    const area = getSelectedAreaObj();
-    if (!area) return;
+  const handleAlignLeft = async () => {
+    const selectedObjs = getSelectedAreasObjs();
+    if (selectedObjs.length === 0) return;
+    
     const newX = snapToGrid ? 0 : 0;
-    setAreas(prev => prev.map(a => a.id === area.id ? { ...a, x: newX } : a));
-    handleUpdateArea(area.id!, { x: newX });
+    
+    for (const area of selectedObjs) {
+      setAreas(prev => prev.map(a => a.id === area.id ? { ...a, x: newX } : a));
+      await handleUpdateArea(area.id!, { x: newX });
+    }
   };
 
-  const handleAlignCenter = () => {
-    const area = getSelectedAreaObj();
-    if (!area || !imageRef.current) return;
+  const handleAlignCenter = async () => {
+    const selectedObjs = getSelectedAreasObjs();
+    if (selectedObjs.length === 0 || !imageRef.current) return;
+    
     const canvasWidth = imageRef.current.width;
-    const newX = snapValue(Math.round((canvasWidth - area.width) / 2));
-    setAreas(prev => prev.map(a => a.id === area.id ? { ...a, x: newX } : a));
-    handleUpdateArea(area.id!, { x: newX });
+    
+    for (const area of selectedObjs) {
+      const newX = snapValue(Math.round((canvasWidth - area.width) / 2));
+      setAreas(prev => prev.map(a => a.id === area.id ? { ...a, x: newX } : a));
+      await handleUpdateArea(area.id!, { x: newX });
+    }
   };
 
-  const handleAlignRight = () => {
-    const area = getSelectedAreaObj();
-    if (!area || !imageRef.current) return;
+  const handleAlignRight = async () => {
+    const selectedObjs = getSelectedAreasObjs();
+    if (selectedObjs.length === 0 || !imageRef.current) return;
+    
     const canvasWidth = imageRef.current.width;
-    const newX = snapValue(canvasWidth - area.width);
-    setAreas(prev => prev.map(a => a.id === area.id ? { ...a, x: newX } : a));
-    handleUpdateArea(area.id!, { x: newX });
+    
+    for (const area of selectedObjs) {
+      const newX = snapValue(canvasWidth - area.width);
+      setAreas(prev => prev.map(a => a.id === area.id ? { ...a, x: newX } : a));
+      await handleUpdateArea(area.id!, { x: newX });
+    }
   };
 
-  const handleAlignTop = () => {
-    const area = getSelectedAreaObj();
-    if (!area) return;
+  const handleAlignTop = async () => {
+    const selectedObjs = getSelectedAreasObjs();
+    if (selectedObjs.length === 0) return;
+    
     const newY = 0;
-    setAreas(prev => prev.map(a => a.id === area.id ? { ...a, y: newY } : a));
-    handleUpdateArea(area.id!, { y: newY });
+    
+    for (const area of selectedObjs) {
+      setAreas(prev => prev.map(a => a.id === area.id ? { ...a, y: newY } : a));
+      await handleUpdateArea(area.id!, { y: newY });
+    }
   };
 
-  const handleAlignMiddle = () => {
-    const area = getSelectedAreaObj();
-    if (!area || !imageRef.current) return;
+  const handleAlignMiddle = async () => {
+    const selectedObjs = getSelectedAreasObjs();
+    if (selectedObjs.length === 0 || !imageRef.current) return;
+    
     const canvasHeight = imageRef.current.height;
-    const newY = snapValue(Math.round((canvasHeight - area.height) / 2));
-    setAreas(prev => prev.map(a => a.id === area.id ? { ...a, y: newY } : a));
-    handleUpdateArea(area.id!, { y: newY });
+    
+    for (const area of selectedObjs) {
+      const newY = snapValue(Math.round((canvasHeight - area.height) / 2));
+      setAreas(prev => prev.map(a => a.id === area.id ? { ...a, y: newY } : a));
+      await handleUpdateArea(area.id!, { y: newY });
+    }
   };
 
-  const handleAlignBottom = () => {
-    const area = getSelectedAreaObj();
-    if (!area || !imageRef.current) return;
+  const handleAlignBottom = async () => {
+    const selectedObjs = getSelectedAreasObjs();
+    if (selectedObjs.length === 0 || !imageRef.current) return;
+    
     const canvasHeight = imageRef.current.height;
-    const newY = snapValue(canvasHeight - area.height);
-    setAreas(prev => prev.map(a => a.id === area.id ? { ...a, y: newY } : a));
-    handleUpdateArea(area.id!, { y: newY });
+    
+    for (const area of selectedObjs) {
+      const newY = snapValue(canvasHeight - area.height);
+      setAreas(prev => prev.map(a => a.id === area.id ? { ...a, y: newY } : a));
+      await handleUpdateArea(area.id!, { y: newY });
+    }
   };
 
-  // Atualização direta de coordenadas da área selecionada
-  const handleDirectCoordinateUpdate = (field: 'x' | 'y' | 'width' | 'height', value: number) => {
-    const area = getSelectedAreaObj();
-    if (!area) return;
+  // Atualização direta de coordenadas da área selecionada (ou múltiplas)
+  const handleDirectCoordinateUpdate = async (field: 'x' | 'y' | 'width' | 'height', value: number) => {
+    const selectedObjs = getSelectedAreasObjs();
+    if (selectedObjs.length === 0) return;
+    
     const snappedValue = snapToGrid ? snapValue(value) : value;
-    setAreas(prev => prev.map(a => a.id === area.id ? { ...a, [field]: snappedValue } : a));
-    handleUpdateArea(area.id!, { [field]: snappedValue });
+    
+    for (const area of selectedObjs) {
+      setAreas(prev => prev.map(a => a.id === area.id ? { ...a, [field]: snappedValue } : a));
+      await handleUpdateArea(area.id!, { [field]: snappedValue });
+    }
   };
 
   const handleDeleteArea = async (areaId: string) => {
     try {
       await (supabase as any).from("mockup_areas").delete().eq("id", areaId);
       toast.success("Área excluída");
+      setSelectedAreas(prev => prev.filter(id => id !== areaId));
       carregarAreas(activeCanvas);
     } catch (error) {
       toast.error("Erro ao excluir área");
     }
   };
 
+  // Deletar múltiplas áreas selecionadas
+  const handleDeleteSelectedAreas = async () => {
+    if (selectedAreas.length === 0) return;
+    
+    if (!confirm(`Tem certeza que deseja excluir ${selectedAreas.length} área(s)?`)) return;
+    
+    try {
+      for (const areaId of selectedAreas) {
+        await (supabase as any).from("mockup_areas").delete().eq("id", areaId);
+      }
+      toast.success(`${selectedAreas.length} área(s) excluída(s)`);
+      setSelectedAreas([]);
+      carregarAreas(activeCanvas);
+    } catch (error) {
+      toast.error("Erro ao excluir áreas");
+    }
+  };
+
   const handleEditArea = (area: Area) => {
     setEditingArea(area);
+    setEditingMultiple(false);
     setNewArea({
       kind: area.kind,
       field_key: area.field_key,
@@ -807,6 +917,47 @@ export function MockupEditor({ mockup, onClose, onSave }: MockupEditorProps) {
       text_align: area.text_align,
       letter_spacing: area.letter_spacing,
       line_height: area.line_height,
+    });
+    setShowNewAreaForm(true);
+  };
+
+  // Editar múltiplas áreas
+  const handleEditMultipleAreas = () => {
+    const selectedObjs = getSelectedAreasObjs();
+    if (selectedObjs.length === 0) return;
+    
+    setEditingMultiple(true);
+    setEditingArea(null);
+    
+    // Pegar valores comuns ou deixar vazio se diferentes
+    const firstArea = selectedObjs[0];
+    const allSameKind = selectedObjs.every(a => a.kind === firstArea.kind);
+    const allSameZIndex = selectedObjs.every(a => a.z_index === firstArea.z_index);
+    const allSameRotation = selectedObjs.every(a => a.rotation === firstArea.rotation);
+    const allSameFontFamily = selectedObjs.every(a => a.font_family === firstArea.font_family);
+    const allSameFontSize = selectedObjs.every(a => a.font_size === firstArea.font_size);
+    const allSameFontWeight = selectedObjs.every(a => a.font_weight === firstArea.font_weight);
+    const allSameColor = selectedObjs.every(a => a.color === firstArea.color);
+    const allSameTextAlign = selectedObjs.every(a => a.text_align === firstArea.text_align);
+    const allSameLetterSpacing = selectedObjs.every(a => a.letter_spacing === firstArea.letter_spacing);
+    const allSameLineHeight = selectedObjs.every(a => a.line_height === firstArea.line_height);
+    
+    setNewArea({
+      kind: allSameKind ? firstArea.kind : "image",
+      field_key: "",
+      x: undefined,
+      y: undefined,
+      width: undefined,
+      height: undefined,
+      z_index: allSameZIndex ? firstArea.z_index : undefined,
+      rotation: allSameRotation ? firstArea.rotation : undefined,
+      font_family: allSameFontFamily ? firstArea.font_family : undefined,
+      font_size: allSameFontSize ? firstArea.font_size : undefined,
+      font_weight: allSameFontWeight ? firstArea.font_weight : undefined,
+      color: allSameColor ? firstArea.color : undefined,
+      text_align: allSameTextAlign ? firstArea.text_align : undefined,
+      letter_spacing: allSameLetterSpacing ? firstArea.letter_spacing : undefined,
+      line_height: allSameLineHeight ? firstArea.line_height : undefined,
     });
     setShowNewAreaForm(true);
   };
@@ -866,6 +1017,49 @@ export function MockupEditor({ mockup, onClose, onSave }: MockupEditorProps) {
     }
   };
 
+  // Salvar edição de múltiplas áreas
+  const handleSaveMultipleAreas = async () => {
+    const selectedObjs = getSelectedAreasObjs();
+    if (selectedObjs.length === 0) return;
+
+    try {
+      for (const area of selectedObjs) {
+        const updates: any = {};
+        
+        // Só atualizar campos que foram preenchidos
+        if (newArea.z_index !== undefined) updates.z_index = newArea.z_index;
+        if (newArea.rotation !== undefined) updates.rotation = newArea.rotation;
+        if (newArea.font_family !== undefined) updates.font_family = newArea.font_family;
+        if (newArea.font_size !== undefined) updates.font_size = newArea.font_size;
+        if (newArea.font_weight !== undefined) updates.font_weight = newArea.font_weight;
+        if (newArea.color !== undefined) updates.color = newArea.color;
+        if (newArea.text_align !== undefined) updates.text_align = newArea.text_align;
+        if (newArea.letter_spacing !== undefined) updates.letter_spacing = newArea.letter_spacing;
+        if (newArea.line_height !== undefined) updates.line_height = newArea.line_height;
+        
+        // Coordenadas (converter para real se definidas)
+        if (newArea.x !== undefined) updates.x = toRealCoordinates(newArea.x);
+        if (newArea.y !== undefined) updates.y = toRealCoordinates(newArea.y);
+        if (newArea.width !== undefined) updates.width = toRealCoordinates(newArea.width);
+        if (newArea.height !== undefined) updates.height = toRealCoordinates(newArea.height);
+        
+        if (Object.keys(updates).length > 0) {
+          await supabase
+            .from("mockup_areas")
+            .update(updates)
+            .eq("id", area.id);
+        }
+      }
+      
+      toast.success(`${selectedObjs.length} área(s) atualizada(s)`);
+      handleCancelForm();
+      carregarAreas(activeCanvas!);
+    } catch (error) {
+      console.error("Erro ao atualizar áreas:", error);
+      toast.error("Erro ao atualizar áreas");
+    }
+  };
+
   const handleDuplicateArea = async (area: Area) => {
     if (!activeCanvas) return;
 
@@ -914,9 +1108,49 @@ export function MockupEditor({ mockup, onClose, onSave }: MockupEditorProps) {
     }
   };
 
+  // Duplicar múltiplas áreas
+  const handleDuplicateSelectedAreas = async () => {
+    if (!activeCanvas || selectedAreas.length === 0) return;
+
+    try {
+      const selectedObjs = getSelectedAreasObjs();
+      
+      for (const area of selectedObjs) {
+        const areaDuplicada = {
+          canvas_id: activeCanvas,
+          mockup_id: mockup.id,
+          kind: area.kind,
+          field_key: area.field_key,
+          x: toRealCoordinates(area.x + 20),
+          y: toRealCoordinates(area.y + 20),
+          width: toRealCoordinates(area.width),
+          height: toRealCoordinates(area.height),
+          z_index: area.z_index,
+          rotation: area.rotation || 0,
+          font_family: area.font_family,
+          font_size: area.font_size,
+          font_weight: area.font_weight,
+          color: area.color,
+          text_align: area.text_align,
+          letter_spacing: area.letter_spacing,
+          line_height: area.line_height,
+        };
+        
+        await (supabase as any).from("mockup_areas").insert([areaDuplicada]);
+      }
+      
+      toast.success(`${selectedObjs.length} área(s) duplicada(s)`);
+      carregarAreas(activeCanvas);
+    } catch (error) {
+      console.error("Erro ao duplicar áreas:", error);
+      toast.error("Erro ao duplicar áreas");
+    }
+  };
+
   const handleCancelForm = () => {
     setShowNewAreaForm(false);
     setEditingArea(null);
+    setEditingMultiple(false);
     setNewArea({
       kind: "image",
       field_key: "fotocliente[1]",
@@ -990,6 +1224,12 @@ export function MockupEditor({ mockup, onClose, onSave }: MockupEditorProps) {
       console.error('Erro ao aplicar template:', error);
       toast.error("Erro ao aplicar template");
     }
+  };
+
+  // Helper para verificar se todas as áreas selecionadas são texto
+  const allSelectedAreText = () => {
+    const selectedObjs = getSelectedAreasObjs();
+    return selectedObjs.length > 0 && selectedObjs.every(a => a.kind === "text");
   };
 
   return (
@@ -1221,7 +1461,7 @@ export function MockupEditor({ mockup, onClose, onSave }: MockupEditorProps) {
                         <span className="text-xs text-muted-foreground mr-1">Alinhar:</span>
                         <Tooltip>
                           <TooltipTrigger asChild>
-                            <Button variant="outline" size="sm" onClick={handleAlignLeft} disabled={!selectedArea}>
+                            <Button variant="outline" size="sm" onClick={handleAlignLeft} disabled={selectedAreas.length === 0}>
                               <AlignLeft className="w-4 h-4" />
                             </Button>
                           </TooltipTrigger>
@@ -1230,7 +1470,7 @@ export function MockupEditor({ mockup, onClose, onSave }: MockupEditorProps) {
                         
                         <Tooltip>
                           <TooltipTrigger asChild>
-                            <Button variant="outline" size="sm" onClick={handleAlignCenter} disabled={!selectedArea}>
+                            <Button variant="outline" size="sm" onClick={handleAlignCenter} disabled={selectedAreas.length === 0}>
                               <AlignCenter className="w-4 h-4" />
                             </Button>
                           </TooltipTrigger>
@@ -1239,7 +1479,7 @@ export function MockupEditor({ mockup, onClose, onSave }: MockupEditorProps) {
                         
                         <Tooltip>
                           <TooltipTrigger asChild>
-                            <Button variant="outline" size="sm" onClick={handleAlignRight} disabled={!selectedArea}>
+                            <Button variant="outline" size="sm" onClick={handleAlignRight} disabled={selectedAreas.length === 0}>
                               <AlignRight className="w-4 h-4" />
                             </Button>
                           </TooltipTrigger>
@@ -1250,7 +1490,7 @@ export function MockupEditor({ mockup, onClose, onSave }: MockupEditorProps) {
                         
                         <Tooltip>
                           <TooltipTrigger asChild>
-                            <Button variant="outline" size="sm" onClick={handleAlignTop} disabled={!selectedArea}>
+                            <Button variant="outline" size="sm" onClick={handleAlignTop} disabled={selectedAreas.length === 0}>
                               <AlignStartVertical className="w-4 h-4" />
                             </Button>
                           </TooltipTrigger>
@@ -1259,7 +1499,7 @@ export function MockupEditor({ mockup, onClose, onSave }: MockupEditorProps) {
                         
                         <Tooltip>
                           <TooltipTrigger asChild>
-                            <Button variant="outline" size="sm" onClick={handleAlignMiddle} disabled={!selectedArea}>
+                            <Button variant="outline" size="sm" onClick={handleAlignMiddle} disabled={selectedAreas.length === 0}>
                               <AlignCenterVertical className="w-4 h-4" />
                             </Button>
                           </TooltipTrigger>
@@ -1268,12 +1508,32 @@ export function MockupEditor({ mockup, onClose, onSave }: MockupEditorProps) {
                         
                         <Tooltip>
                           <TooltipTrigger asChild>
-                            <Button variant="outline" size="sm" onClick={handleAlignBottom} disabled={!selectedArea}>
+                            <Button variant="outline" size="sm" onClick={handleAlignBottom} disabled={selectedAreas.length === 0}>
                               <AlignEndVertical className="w-4 h-4" />
                             </Button>
                           </TooltipTrigger>
                           <TooltipContent><p>Alinhar Embaixo</p></TooltipContent>
                         </Tooltip>
+                      </div>
+                      
+                      <div className="w-px h-6 bg-border" />
+                      
+                      {/* Seleção */}
+                      <div className="flex items-center gap-1">
+                        <Tooltip>
+                          <TooltipTrigger asChild>
+                            <Button variant="outline" size="sm" onClick={handleSelectAll} disabled={areas.length === 0}>
+                              <CheckSquare className="w-4 h-4" />
+                            </Button>
+                          </TooltipTrigger>
+                          <TooltipContent><p>Selecionar Todas</p></TooltipContent>
+                        </Tooltip>
+                        
+                        {selectedAreas.length > 0 && (
+                          <Badge variant="secondary" className="ml-1">
+                            {selectedAreas.length} selecionada(s)
+                          </Badge>
+                        )}
                       </div>
                     </TooltipProvider>
                   </div>
@@ -1298,6 +1558,7 @@ export function MockupEditor({ mockup, onClose, onSave }: MockupEditorProps) {
                         onMouseMove={handleMouseMove}
                         onMouseUp={handleMouseUp}
                         onMouseLeave={handleMouseUp}
+                        onClick={handleCanvasClick}
                       >
                         <img 
                           ref={imageRef}
@@ -1314,8 +1575,8 @@ export function MockupEditor({ mockup, onClose, onSave }: MockupEditorProps) {
                             className="absolute inset-0 pointer-events-none"
                             style={{
                               backgroundImage: `
-                                linear-gradient(to right, rgba(255, 255, 0, 0.5) 1px, transparent 1px),
-                                linear-gradient(to bottom, rgba(255, 255, 0, 0.5) 1px, transparent 1px)
+                                linear-gradient(to right, rgba(59, 130, 246, 0.4) 1px, transparent 1px),
+                                linear-gradient(to bottom, rgba(59, 130, 246, 0.4) 1px, transparent 1px)
                               `,
                               backgroundSize: `${gridSize}px ${gridSize}px`
                             }}
@@ -1327,8 +1588,8 @@ export function MockupEditor({ mockup, onClose, onSave }: MockupEditorProps) {
                         <div
                           key={area.id}
                           className={`absolute border-2 ${
-                            selectedArea === area.id 
-                              ? 'border-primary bg-primary/10' 
+                            selectedAreas.includes(area.id!) 
+                              ? 'border-primary bg-primary/20 ring-2 ring-primary/50' 
                               : 'border-blue-500 bg-blue-500/20'
                           } cursor-move transition-all`}
                           style={{
@@ -1340,6 +1601,7 @@ export function MockupEditor({ mockup, onClose, onSave }: MockupEditorProps) {
                             transform: `rotate(${area.rotation || 0}deg)`,
                             transformOrigin: 'center',
                           }}
+                          onClick={(e) => handleAreaClick(e, area.id!)}
                           onMouseDown={(e) => handleMouseDown(e, area.id!, false)}
                         >
                           {/* Label da área - dentro da área */}
@@ -1373,123 +1635,160 @@ export function MockupEditor({ mockup, onClose, onSave }: MockupEditorProps) {
 
                           {/* Handle de redimensionamento */}
                           <div
-                            className="absolute bottom-0 right-0 w-4 h-4 bg-primary cursor-nwse-resize"
+                            className="absolute bottom-0 right-0 w-4 h-4 bg-primary cursor-se-resize"
                             onMouseDown={(e) => handleMouseDown(e, area.id!, true)}
                           />
-
-                          {/* Botão de deletar */}
-                          <Button
-                            variant="destructive"
-                            size="icon"
-                            className="absolute -top-2 -right-2 h-6 w-6 rounded-full"
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              handleDeleteArea(area.id!);
-                            }}
-                          >
-                            <Trash2 className="h-3 w-3" />
-                          </Button>
                         </div>
                       ))}
-                    </div>
-                  </>
+                      </div>
+                    </>
                   ) : (
-                    <div className="text-center text-muted-foreground py-12">
-                      Nenhum arquivo selecionado.
+                    <div className="border-2 border-dashed border-border rounded-lg p-12 text-center">
+                      <p className="text-muted-foreground mb-4">
+                        Nenhuma imagem definida para este canvas
+                      </p>
+                      <Input
+                        type="file"
+                        accept="image/*"
+                        onChange={(e) => {
+                          const file = e.target.files?.[0];
+                          if (file) handleUploadCanvasImage(canvas.id, file);
+                        }}
+                        disabled={uploading}
+                        className="max-w-xs mx-auto"
+                      />
                     </div>
                   )}
                 </CardContent>
               </Card>
 
-              {/* Sidebar de controle */}
+              {/* Sidebar com controles */}
               <div className="space-y-4">
-                {!showNewAreaForm ? (
-                  <Button 
-                    onClick={() => setShowNewAreaForm(true)} 
-                    className="w-full"
-                  >
-                    <Plus className="mr-2 h-4 w-4" />
-                    Nova Área
-                  </Button>
-                ) : (
-              <Card>
-                <CardHeader>
-                  <CardTitle className="text-base">
-                    {editingArea ? "Editar Área" : "Nova Área"}
-                  </CardTitle>
-                </CardHeader>
+                {/* Ações para múltiplas áreas selecionadas */}
+                {selectedAreas.length > 1 && (
+                  <Card className="border-primary">
+                    <CardHeader className="py-3">
+                      <CardTitle className="text-base flex items-center gap-2">
+                        <CheckSquare className="w-4 h-4" />
+                        {selectedAreas.length} áreas selecionadas
+                      </CardTitle>
+                    </CardHeader>
+                    <CardContent className="space-y-3">
+                      <p className="text-xs text-muted-foreground">
+                        Ctrl+Clique para adicionar/remover da seleção
+                      </p>
+                      <div className="flex flex-wrap gap-2">
+                        <Button size="sm" variant="outline" onClick={handleEditMultipleAreas}>
+                          <Edit className="w-4 h-4 mr-1" />
+                          Editar em Lote
+                        </Button>
+                        <Button size="sm" variant="outline" onClick={handleDuplicateSelectedAreas}>
+                          <Copy className="w-4 h-4 mr-1" />
+                          Duplicar
+                        </Button>
+                        <Button size="sm" variant="destructive" onClick={handleDeleteSelectedAreas}>
+                          <Trash2 className="w-4 h-4 mr-1" />
+                          Excluir
+                        </Button>
+                        <Button size="sm" variant="ghost" onClick={handleClearSelection}>
+                          Limpar Seleção
+                        </Button>
+                      </div>
+                    </CardContent>
+                  </Card>
+                )}
+
+                {/* Formulário Nova Área / Edição */}
+                {showNewAreaForm ? (
+                  <Card>
+                    <CardHeader>
+                      <CardTitle className="text-base">
+                        {editingMultiple 
+                          ? `Editar ${selectedAreas.length} Áreas` 
+                          : editingArea 
+                            ? "Editar Área" 
+                            : "Nova Área"
+                        }
+                      </CardTitle>
+                    </CardHeader>
                     <CardContent className="space-y-4">
-                      <div>
-                        <Label>Tipo</Label>
-                        <Select
-                          value={newArea.kind}
-                          onValueChange={(v: "image" | "text") => setNewArea({ ...newArea, kind: v })}
-                        >
-                          <SelectTrigger><SelectValue /></SelectTrigger>
-                          <SelectContent>
-                            <SelectItem value="image">Imagem</SelectItem>
-                            <SelectItem value="text">Texto</SelectItem>
-                          </SelectContent>
-                        </Select>
-                      </div>
-
-                      <div>
-                        {newArea.kind === "image" ? (
-                          <>
-                            <Label>Campo</Label>
+                      {!editingMultiple && (
+                        <>
+                          <div>
+                            <Label>Tipo</Label>
                             <Select
-                              value={newArea.field_key}
-                              onValueChange={(v) => setNewArea({ ...newArea, field_key: v })}
+                              value={newArea.kind}
+                              onValueChange={(v: "image" | "text") => setNewArea({ ...newArea, kind: v })}
                             >
                               <SelectTrigger><SelectValue /></SelectTrigger>
                               <SelectContent>
-                                {[1, 2, 3, 4, 5].map((i) => (
-                                  <SelectItem key={i} value={`fotocliente[${i}]`}>
-                                    Foto do Cliente {i}
-                                  </SelectItem>
-                                ))}
+                                <SelectItem value="image">Imagem</SelectItem>
+                                <SelectItem value="text">Texto</SelectItem>
                               </SelectContent>
                             </Select>
-                          </>
-                        ) : (
-                          <>
-                            <Label>Texto Variável</Label>
-                            <p className="text-xs text-muted-foreground mb-2">
-                              Escolha qual informação do pedido será exibida nesta área
-                            </p>
-                            <Select
-                              value={newArea.field_key}
-                              onValueChange={(v) => setNewArea({ ...newArea, field_key: v })}
-                            >
-                              <SelectTrigger><SelectValue /></SelectTrigger>
-                              <SelectContent>
-                                {TEXT_FIELDS.map((field) => (
-                                  <SelectItem key={field.value} value={field.value}>
-                                    {field.label}
-                                  </SelectItem>
-                                ))}
-                              </SelectContent>
-                            </Select>
-                          </>
-                        )}
+                          </div>
+
+                          {newArea.kind === "image" ? (
+                            <div>
+                              <Label>Campo (field_key)</Label>
+                              <Input
+                                value={newArea.field_key}
+                                onChange={(e) => setNewArea({ ...newArea, field_key: e.target.value })}
+                                placeholder="Ex: fotocliente[1]"
+                              />
+                              <p className="text-xs text-muted-foreground mt-1">
+                                Use fotocliente[1], fotocliente[2], etc. para fotos do cliente
+                              </p>
+                            </div>
+                          ) : (
+                            <div>
+                              <Label>Campo de Texto</Label>
+                              <Select
+                                value={newArea.field_key}
+                                onValueChange={(v) => setNewArea({ ...newArea, field_key: v })}
+                              >
+                                <SelectTrigger><SelectValue placeholder="Selecione o campo" /></SelectTrigger>
+                                <SelectContent>
+                                  {TEXT_FIELDS.map((field) => (
+                                    <SelectItem key={field.value} value={field.value}>
+                                      {field.label}
+                                    </SelectItem>
+                                  ))}
+                                </SelectContent>
+                              </Select>
+                            </div>
+                          )}
+                        </>
+                      )}
+
+                      <div>
+                        <Label className="text-xs">Z-Index</Label>
+                        <Input
+                          type="number"
+                          value={newArea.z_index ?? ""}
+                          onChange={(e) => setNewArea({ ...newArea, z_index: parseInt(e.target.value) || undefined })}
+                          placeholder={editingMultiple ? "Vários valores" : "1"}
+                        />
                       </div>
 
-                      {newArea.kind === "text" && (
+                      {/* Campos de texto (apenas se não for edição múltipla ou se todas forem texto) */}
+                      {(newArea.kind === "text" || (editingMultiple && allSelectedAreText())) && (
                         <>
                           <div className="grid grid-cols-2 gap-2">
                             <div>
                               <Label>Fonte</Label>
                               <Select
-                                value={newArea.font_family}
-                                onValueChange={(v) => setNewArea({ ...newArea, font_family: v })}
+                                value={newArea.font_family || ""}
+                                onValueChange={(v) => setNewArea({ ...newArea, font_family: v || undefined })}
                               >
-                                <SelectTrigger><SelectValue /></SelectTrigger>
+                                <SelectTrigger><SelectValue placeholder={editingMultiple ? "Vários" : "Selecione"} /></SelectTrigger>
                                 <SelectContent>
                                   <SelectItem value="Arial">Arial</SelectItem>
+                                  <SelectItem value="Helvetica">Helvetica</SelectItem>
                                   <SelectItem value="Times New Roman">Times New Roman</SelectItem>
-                                  <SelectItem value="Courier New">Courier New</SelectItem>
                                   <SelectItem value="Georgia">Georgia</SelectItem>
                                   <SelectItem value="Verdana">Verdana</SelectItem>
+                                  <SelectItem value="Courier New">Courier New</SelectItem>
                                 </SelectContent>
                               </Select>
                             </div>
@@ -1498,10 +1797,11 @@ export function MockupEditor({ mockup, onClose, onSave }: MockupEditorProps) {
                               <Label>Tamanho (px)</Label>
                               <Input
                                 type="number"
-                                value={newArea.font_size}
-                                onChange={(e) => setNewArea({ ...newArea, font_size: parseInt(e.target.value) })}
+                                value={newArea.font_size ?? ""}
+                                onChange={(e) => setNewArea({ ...newArea, font_size: parseInt(e.target.value) || undefined })}
                                 min="8"
                                 max="200"
+                                placeholder={editingMultiple ? "Vários" : "16"}
                               />
                             </div>
                           </div>
@@ -1510,10 +1810,10 @@ export function MockupEditor({ mockup, onClose, onSave }: MockupEditorProps) {
                             <div>
                               <Label>Peso</Label>
                               <Select
-                                value={newArea.font_weight}
-                                onValueChange={(v) => setNewArea({ ...newArea, font_weight: v })}
+                                value={newArea.font_weight || ""}
+                                onValueChange={(v) => setNewArea({ ...newArea, font_weight: v || undefined })}
                               >
-                                <SelectTrigger><SelectValue /></SelectTrigger>
+                                <SelectTrigger><SelectValue placeholder={editingMultiple ? "Vários" : "Normal"} /></SelectTrigger>
                                 <SelectContent>
                                   <SelectItem value="normal">Normal</SelectItem>
                                   <SelectItem value="bold">Negrito</SelectItem>
@@ -1524,10 +1824,10 @@ export function MockupEditor({ mockup, onClose, onSave }: MockupEditorProps) {
                             <div>
                               <Label>Alinhamento</Label>
                               <Select
-                                value={newArea.text_align}
-                                onValueChange={(v) => setNewArea({ ...newArea, text_align: v })}
+                                value={newArea.text_align || ""}
+                                onValueChange={(v) => setNewArea({ ...newArea, text_align: v || undefined })}
                               >
-                                <SelectTrigger><SelectValue /></SelectTrigger>
+                                <SelectTrigger><SelectValue placeholder={editingMultiple ? "Vários" : "Esquerda"} /></SelectTrigger>
                                 <SelectContent>
                                   <SelectItem value="left">Esquerda</SelectItem>
                                   <SelectItem value="center">Centro</SelectItem>
@@ -1542,15 +1842,15 @@ export function MockupEditor({ mockup, onClose, onSave }: MockupEditorProps) {
                             <div className="flex gap-2">
                               <Input
                                 type="color"
-                                value={newArea.color}
+                                value={newArea.color || "#000000"}
                                 onChange={(e) => setNewArea({ ...newArea, color: e.target.value })}
                                 className="w-20"
                               />
                               <Input
                                 type="text"
-                                value={newArea.color}
+                                value={newArea.color || ""}
                                 onChange={(e) => setNewArea({ ...newArea, color: e.target.value })}
-                                placeholder="#000000"
+                                placeholder={editingMultiple ? "Vários" : "#000000"}
                               />
                             </div>
                           </div>
@@ -1560,9 +1860,10 @@ export function MockupEditor({ mockup, onClose, onSave }: MockupEditorProps) {
                               <Label>Espaçamento</Label>
                               <Input
                                 type="number"
-                                value={newArea.letter_spacing}
-                                onChange={(e) => setNewArea({ ...newArea, letter_spacing: parseFloat(e.target.value) })}
+                                value={newArea.letter_spacing ?? ""}
+                                onChange={(e) => setNewArea({ ...newArea, letter_spacing: parseFloat(e.target.value) || undefined })}
                                 step="0.1"
+                                placeholder={editingMultiple ? "Vários" : "0"}
                               />
                             </div>
                             
@@ -1570,69 +1871,78 @@ export function MockupEditor({ mockup, onClose, onSave }: MockupEditorProps) {
                               <Label>Altura de Linha</Label>
                               <Input
                                 type="number"
-                                value={newArea.line_height}
-                                onChange={(e) => setNewArea({ ...newArea, line_height: parseFloat(e.target.value) })}
+                                value={newArea.line_height ?? ""}
+                                onChange={(e) => setNewArea({ ...newArea, line_height: parseFloat(e.target.value) || undefined })}
                                 step="0.1"
                                 min="0.5"
                                 max="3"
+                                placeholder={editingMultiple ? "Vários" : "1.2"}
                               />
                             </div>
                           </div>
                         </>
                       )}
 
-                      <div className="grid grid-cols-2 gap-2">
-                        <div>
-                          <Label className="text-xs">X</Label>
-                          <Input 
-                            type="number" 
-                            value={newArea.x} 
-                            onChange={(e) => setNewArea({ ...newArea, x: +e.target.value })} 
-                          />
+                      {!editingMultiple && (
+                        <div className="grid grid-cols-2 gap-2">
+                          <div>
+                            <Label className="text-xs">X</Label>
+                            <Input 
+                              type="number" 
+                              value={newArea.x ?? ""} 
+                              onChange={(e) => setNewArea({ ...newArea, x: +e.target.value })} 
+                            />
+                          </div>
+                          <div>
+                            <Label className="text-xs">Y</Label>
+                            <Input 
+                              type="number" 
+                              value={newArea.y ?? ""} 
+                              onChange={(e) => setNewArea({ ...newArea, y: +e.target.value })} 
+                            />
+                          </div>
+                          <div>
+                            <Label className="text-xs">Largura</Label>
+                            <Input 
+                              type="number" 
+                              value={newArea.width ?? ""} 
+                              onChange={(e) => setNewArea({ ...newArea, width: +e.target.value })} 
+                            />
+                          </div>
+                          <div>
+                            <Label className="text-xs">Altura</Label>
+                            <Input 
+                              type="number" 
+                              value={newArea.height ?? ""} 
+                              onChange={(e) => setNewArea({ ...newArea, height: +e.target.value })} 
+                            />
+                          </div>
                         </div>
-                        <div>
-                          <Label className="text-xs">Y</Label>
-                          <Input 
-                            type="number" 
-                            value={newArea.y} 
-                            onChange={(e) => setNewArea({ ...newArea, y: +e.target.value })} 
-                          />
-                        </div>
-                        <div>
-                          <Label className="text-xs">Largura</Label>
-                          <Input 
-                            type="number" 
-                            value={newArea.width} 
-                            onChange={(e) => setNewArea({ ...newArea, width: +e.target.value })} 
-                          />
-                        </div>
-                        <div>
-                          <Label className="text-xs">Altura</Label>
-                          <Input 
-                            type="number" 
-                            value={newArea.height} 
-                            onChange={(e) => setNewArea({ ...newArea, height: +e.target.value })} 
-                          />
-                        </div>
-                      </div>
+                      )}
 
                       <div>
                         <Label className="text-xs">Rotação (graus)</Label>
                         <div className="flex gap-2 items-center">
                           <Input 
                             type="number" 
-                            value={newArea.rotation || 0} 
-                            onChange={(e) => setNewArea({ ...newArea, rotation: +e.target.value })} 
+                            value={newArea.rotation ?? ""} 
+                            onChange={(e) => setNewArea({ ...newArea, rotation: +e.target.value || undefined })} 
                             min="0"
                             max="360"
                             step="1"
+                            placeholder={editingMultiple ? "Vários" : "0"}
                           />
                           <span className="text-xs text-muted-foreground">{newArea.rotation || 0}°</span>
                         </div>
                       </div>
 
                       <div className="flex gap-2">
-                        {editingArea ? (
+                        {editingMultiple ? (
+                          <Button onClick={handleSaveMultipleAreas} className="flex-1">
+                            <Plus className="mr-2 h-4 w-4" />
+                            Salvar {selectedAreas.length} Áreas
+                          </Button>
+                        ) : editingArea ? (
                           <Button onClick={handleSaveEditArea} className="flex-1">
                             <Plus className="mr-2 h-4 w-4" />
                             Salvar Alterações
@@ -1652,10 +1962,19 @@ export function MockupEditor({ mockup, onClose, onSave }: MockupEditorProps) {
                       </div>
                     </CardContent>
                   </Card>
+                ) : (
+                  <Button 
+                    onClick={() => setShowNewAreaForm(true)} 
+                    className="w-full"
+                    disabled={!scaleReady}
+                  >
+                    <Plus className="mr-2 h-4 w-4" />
+                    Nova Área
+                  </Button>
                 )}
 
-                {/* Coordenadas editáveis da área selecionada */}
-                {selectedArea && getSelectedAreaObj() && (
+                {/* Coordenadas editáveis da área selecionada (quando apenas 1 selecionada) */}
+                {selectedAreas.length === 1 && getSelectedAreasObjs()[0] && (
                   <Card className="border-primary">
                     <CardHeader className="py-3">
                       <CardTitle className="text-base">Posição da Área</CardTitle>
@@ -1666,7 +1985,7 @@ export function MockupEditor({ mockup, onClose, onSave }: MockupEditorProps) {
                           <Label className="text-xs">X</Label>
                           <Input
                             type="number"
-                            value={getSelectedAreaObj()?.x || 0}
+                            value={getSelectedAreasObjs()[0]?.x || 0}
                             onChange={(e) => handleDirectCoordinateUpdate('x', Number(e.target.value))}
                             step={snapToGrid ? gridSize : 1}
                           />
@@ -1675,7 +1994,7 @@ export function MockupEditor({ mockup, onClose, onSave }: MockupEditorProps) {
                           <Label className="text-xs">Y</Label>
                           <Input
                             type="number"
-                            value={getSelectedAreaObj()?.y || 0}
+                            value={getSelectedAreasObjs()[0]?.y || 0}
                             onChange={(e) => handleDirectCoordinateUpdate('y', Number(e.target.value))}
                             step={snapToGrid ? gridSize : 1}
                           />
@@ -1684,7 +2003,7 @@ export function MockupEditor({ mockup, onClose, onSave }: MockupEditorProps) {
                           <Label className="text-xs">Largura</Label>
                           <Input
                             type="number"
-                            value={getSelectedAreaObj()?.width || 0}
+                            value={getSelectedAreasObjs()[0]?.width || 0}
                             onChange={(e) => handleDirectCoordinateUpdate('width', Number(e.target.value))}
                             step={snapToGrid ? gridSize : 1}
                           />
@@ -1693,7 +2012,7 @@ export function MockupEditor({ mockup, onClose, onSave }: MockupEditorProps) {
                           <Label className="text-xs">Altura</Label>
                           <Input
                             type="number"
-                            value={getSelectedAreaObj()?.height || 0}
+                            value={getSelectedAreasObjs()[0]?.height || 0}
                             onChange={(e) => handleDirectCoordinateUpdate('height', Number(e.target.value))}
                             step={snapToGrid ? gridSize : 1}
                           />
@@ -1722,14 +2041,14 @@ export function MockupEditor({ mockup, onClose, onSave }: MockupEditorProps) {
                         <div 
                           key={area.id} 
                           className={`flex items-center justify-between p-3 rounded-lg border ${
-                            selectedArea === area.id 
+                            selectedAreas.includes(area.id!) 
                               ? 'border-primary bg-primary/5' 
                               : 'border-border hover:bg-accent'
                           }`}
                         >
                           <div 
                             className="flex items-center gap-2 flex-1 cursor-pointer"
-                            onClick={() => setSelectedArea(area.id!)}
+                            onClick={(e) => handleAreaClick(e, area.id!)}
                           >
                             <span className="text-lg">
                               {area.kind === "image" ? "📷" : "📝"}
