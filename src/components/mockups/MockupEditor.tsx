@@ -7,7 +7,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
-import { ArrowLeft, Plus, Trash2, GripVertical, Edit, Copy, Save, Download, RefreshCw, Grid3X3, Magnet, AlignLeft, AlignCenter, AlignRight, AlignStartVertical, AlignCenterVertical, AlignEndVertical, CheckSquare, Square } from "lucide-react";
+import { ArrowLeft, Plus, Trash2, GripVertical, Edit, Copy, Save, Download, RefreshCw, Grid3X3, Magnet, AlignLeft, AlignCenter, AlignRight, AlignStartVertical, AlignCenterVertical, AlignEndVertical, CheckSquare, Square, Check } from "lucide-react";
 import { SalvarTemplateDialog } from "@/components/templates/SalvarTemplateDialog";
 import { AplicarTemplateDialog } from "@/components/templates/AplicarTemplateDialog";
 import { Switch } from "@/components/ui/switch";
@@ -622,14 +622,27 @@ export function MockupEditor({ mockup, onClose, onSave }: MockupEditorProps) {
   // Seleção de área com suporte a multi-seleção
   const handleAreaClick = (e: React.MouseEvent, areaId: string) => {
     e.stopPropagation();
+    e.preventDefault();
     
+    // Ctrl/Cmd+Click: toggle na seleção
     if (e.ctrlKey || e.metaKey) {
-      // Ctrl+Click: toggle na seleção
       setSelectedAreas(prev => 
         prev.includes(areaId) 
           ? prev.filter(id => id !== areaId)
           : [...prev, areaId]
       );
+    } else if (e.shiftKey && selectedAreas.length > 0) {
+      // Shift+Click: seleciona range
+      const lastSelected = selectedAreas[selectedAreas.length - 1];
+      const lastIndex = areas.findIndex(a => a.id === lastSelected);
+      const currentIndex = areas.findIndex(a => a.id === areaId);
+      
+      if (lastIndex !== -1 && currentIndex !== -1) {
+        const start = Math.min(lastIndex, currentIndex);
+        const end = Math.max(lastIndex, currentIndex);
+        const rangeIds = areas.slice(start, end + 1).map(a => a.id!);
+        setSelectedAreas(prev => [...new Set([...prev, ...rangeIds])]);
+      }
     } else {
       // Click simples: seleciona apenas esta área
       setSelectedAreas([areaId]);
@@ -653,6 +666,12 @@ export function MockupEditor({ mockup, onClose, onSave }: MockupEditorProps) {
 
   const handleMouseDown = (e: React.MouseEvent, areaId: string, isResize = false) => {
     e.stopPropagation();
+    
+    // Se Ctrl/Cmd está pressionado, não inicia drag - deixa o onClick cuidar da seleção
+    if (e.ctrlKey || e.metaKey || e.shiftKey) {
+      return;
+    }
+    
     const area = areas.find(a => a.id === areaId);
     if (!area) return;
 
@@ -738,24 +757,14 @@ export function MockupEditor({ mockup, onClose, onSave }: MockupEditorProps) {
 
   const handleMouseUp = async () => {
     if (dragging) {
-      // Salvar posições de TODAS as áreas movidas
+      // Salvar posições de TODAS as áreas movidas (snap já foi aplicado durante o drag)
       const areasToSave = Object.keys(dragging.initialPositions);
       
       for (const areaId of areasToSave) {
         const area = areas.find(a => a.id === areaId);
         if (area) {
-          const finalX = snapValue(area.x);
-          const finalY = snapValue(area.y);
-          
-          // Atualizar estado local se houve snap
-          if (finalX !== area.x || finalY !== area.y) {
-            setAreas(prev => prev.map(a => 
-              a.id === areaId ? { ...a, x: finalX, y: finalY } : a
-            ));
-          }
-          
-          // Salvar no banco
-          await handleUpdateArea(areaId, { x: finalX, y: finalY });
+          // Salvar no banco com os valores atuais (já com snap aplicado durante o drag)
+          await handleUpdateArea(areaId, { x: area.x, y: area.y });
         }
       }
       
@@ -763,15 +772,8 @@ export function MockupEditor({ mockup, onClose, onSave }: MockupEditorProps) {
     } else if (resizing) {
       const area = areas.find(a => a.id === resizing.areaId);
       if (area) {
-        // Aplicar snap final
-        const finalWidth = snapValue(area.width);
-        const finalHeight = snapValue(area.height);
-        if (finalWidth !== area.width || finalHeight !== area.height) {
-          setAreas(prev => prev.map(a => 
-            a.id === area.id ? { ...a, width: finalWidth, height: finalHeight } : a
-          ));
-        }
-        handleUpdateArea(area.id!, { width: finalWidth, height: finalHeight });
+        // Salvar no banco com os valores atuais (já com snap aplicado durante o resize)
+        await handleUpdateArea(area.id!, { width: area.width, height: area.height });
       }
       setResizing(null);
     }
@@ -1584,62 +1586,72 @@ export function MockupEditor({ mockup, onClose, onSave }: MockupEditorProps) {
                         )}
                       
                       {/* Áreas sobrepostas */}
-                      {areas.map((area) => (
-                        <div
-                          key={area.id}
-                          className={`absolute border-2 ${
-                            selectedAreas.includes(area.id!) 
-                              ? 'border-primary bg-primary/20 ring-2 ring-primary/50' 
-                              : 'border-blue-500 bg-blue-500/20'
-                          } cursor-move transition-all`}
-                          style={{
-                            left: `${area.x}px`,
-                            top: `${area.y}px`,
-                            width: `${area.width}px`,
-                            height: `${area.height}px`,
-                            zIndex: area.z_index,
-                            transform: `rotate(${area.rotation || 0}deg)`,
-                            transformOrigin: 'center',
-                          }}
-                          onClick={(e) => handleAreaClick(e, area.id!)}
-                          onMouseDown={(e) => handleMouseDown(e, area.id!, false)}
-                        >
-                          {/* Label da área - dentro da área */}
-                          <div className="absolute inset-0 flex items-center justify-center pointer-events-none overflow-hidden">
-                            {area.kind === "text" ? (
-                              <div 
-                                className="w-full h-full flex items-center justify-center p-1"
-                                style={{
-                                  fontFamily: area.font_family,
-                                  fontSize: `${Math.min((area.font_size || 16) / scale, area.height * 0.4)}px`,
-                                  fontWeight: area.font_weight,
-                                  color: area.color,
-                                  textAlign: area.text_align as any,
-                                  letterSpacing: `${(area.letter_spacing || 0) / scale}px`,
-                                  lineHeight: area.line_height
-                                }}
-                              >
-                                <span className="opacity-50 truncate">
-                                  {TEXT_FIELDS.find(f => f.value === area.field_key)?.label}
-                                </span>
-                              </div>
-                            ) : (
-                              <div className="flex flex-col items-center gap-0.5">
-                                <GripVertical className="w-5 h-5 text-primary/70" />
-                                <span className="text-[10px] bg-primary/80 text-primary-foreground px-1.5 py-0.5 rounded truncate max-w-full">
-                                  {area.field_key}
-                                </span>
+                      {areas.map((area) => {
+                        const isSelected = selectedAreas.includes(area.id!);
+                        return (
+                          <div
+                            key={area.id}
+                            className={`absolute ${
+                              isSelected 
+                                ? 'border-4 border-primary bg-primary/30 shadow-lg' 
+                                : 'border-2 border-blue-500 bg-blue-500/20'
+                            } cursor-move transition-all`}
+                            style={{
+                              left: `${area.x}px`,
+                              top: `${area.y}px`,
+                              width: `${area.width}px`,
+                              height: `${area.height}px`,
+                              zIndex: area.z_index,
+                              transform: `rotate(${area.rotation || 0}deg)`,
+                              transformOrigin: 'center',
+                            }}
+                            onClick={(e) => handleAreaClick(e, area.id!)}
+                            onMouseDown={(e) => handleMouseDown(e, area.id!, false)}
+                          >
+                            {/* Indicador de seleção */}
+                            {isSelected && (
+                              <div className="absolute -top-3 -left-3 w-6 h-6 bg-primary rounded-full flex items-center justify-center shadow-md z-10">
+                                <Check className="w-4 h-4 text-primary-foreground" />
                               </div>
                             )}
-                          </div>
+                            
+                            {/* Label da área - dentro da área */}
+                            <div className="absolute inset-0 flex items-center justify-center pointer-events-none overflow-hidden">
+                              {area.kind === "text" ? (
+                                <div 
+                                  className="w-full h-full flex items-center justify-center p-1"
+                                  style={{
+                                    fontFamily: area.font_family,
+                                    fontSize: `${Math.min((area.font_size || 16) / scale, area.height * 0.4)}px`,
+                                    fontWeight: area.font_weight,
+                                    color: area.color,
+                                    textAlign: area.text_align as any,
+                                    letterSpacing: `${(area.letter_spacing || 0) / scale}px`,
+                                    lineHeight: area.line_height
+                                  }}
+                                >
+                                  <span className="opacity-50 truncate">
+                                    {TEXT_FIELDS.find(f => f.value === area.field_key)?.label}
+                                  </span>
+                                </div>
+                              ) : (
+                                <div className="flex flex-col items-center gap-0.5">
+                                  <GripVertical className="w-5 h-5 text-primary/70" />
+                                  <span className="text-[10px] bg-primary/80 text-primary-foreground px-1.5 py-0.5 rounded truncate max-w-full">
+                                    {area.field_key}
+                                  </span>
+                                </div>
+                              )}
+                            </div>
 
-                          {/* Handle de redimensionamento */}
-                          <div
-                            className="absolute bottom-0 right-0 w-4 h-4 bg-primary cursor-se-resize"
-                            onMouseDown={(e) => handleMouseDown(e, area.id!, true)}
-                          />
-                        </div>
-                      ))}
+                            {/* Handle de redimensionamento */}
+                            <div
+                              className="absolute bottom-0 right-0 w-4 h-4 bg-primary cursor-se-resize"
+                              onMouseDown={(e) => handleMouseDown(e, area.id!, true)}
+                            />
+                          </div>
+                        );
+                      })}
                       </div>
                     </>
                   ) : (
@@ -1883,42 +1895,44 @@ export function MockupEditor({ mockup, onClose, onSave }: MockupEditorProps) {
                         </>
                       )}
 
-                      {!editingMultiple && (
-                        <div className="grid grid-cols-2 gap-2">
-                          <div>
-                            <Label className="text-xs">X</Label>
-                            <Input 
-                              type="number" 
-                              value={newArea.x ?? ""} 
-                              onChange={(e) => setNewArea({ ...newArea, x: +e.target.value })} 
-                            />
-                          </div>
-                          <div>
-                            <Label className="text-xs">Y</Label>
-                            <Input 
-                              type="number" 
-                              value={newArea.y ?? ""} 
-                              onChange={(e) => setNewArea({ ...newArea, y: +e.target.value })} 
-                            />
-                          </div>
-                          <div>
-                            <Label className="text-xs">Largura</Label>
-                            <Input 
-                              type="number" 
-                              value={newArea.width ?? ""} 
-                              onChange={(e) => setNewArea({ ...newArea, width: +e.target.value })} 
-                            />
-                          </div>
-                          <div>
-                            <Label className="text-xs">Altura</Label>
-                            <Input 
-                              type="number" 
-                              value={newArea.height ?? ""} 
-                              onChange={(e) => setNewArea({ ...newArea, height: +e.target.value })} 
-                            />
-                          </div>
+                      <div className="grid grid-cols-2 gap-2">
+                        <div>
+                          <Label className="text-xs">X</Label>
+                          <Input 
+                            type="number" 
+                            value={newArea.x ?? ""} 
+                            onChange={(e) => setNewArea({ ...newArea, x: e.target.value ? +e.target.value : undefined })} 
+                            placeholder={editingMultiple ? "Vários" : "50"}
+                          />
                         </div>
-                      )}
+                        <div>
+                          <Label className="text-xs">Y</Label>
+                          <Input 
+                            type="number" 
+                            value={newArea.y ?? ""} 
+                            onChange={(e) => setNewArea({ ...newArea, y: e.target.value ? +e.target.value : undefined })} 
+                            placeholder={editingMultiple ? "Vários" : "50"}
+                          />
+                        </div>
+                        <div>
+                          <Label className="text-xs">Largura</Label>
+                          <Input 
+                            type="number" 
+                            value={newArea.width ?? ""} 
+                            onChange={(e) => setNewArea({ ...newArea, width: e.target.value ? +e.target.value : undefined })} 
+                            placeholder={editingMultiple ? "Vários" : "200"}
+                          />
+                        </div>
+                        <div>
+                          <Label className="text-xs">Altura</Label>
+                          <Input 
+                            type="number" 
+                            value={newArea.height ?? ""} 
+                            onChange={(e) => setNewArea({ ...newArea, height: e.target.value ? +e.target.value : undefined })} 
+                            placeholder={editingMultiple ? "Vários" : "200"}
+                          />
+                        </div>
+                      </div>
 
                       <div>
                         <Label className="text-xs">Rotação (graus)</Label>
@@ -2037,78 +2051,92 @@ export function MockupEditor({ mockup, onClose, onSave }: MockupEditorProps) {
                         Nenhuma área adicionada
                       </p>
                     ) : (
-                      areas.map((area) => (
-                        <div 
-                          key={area.id} 
-                          className={`flex items-center justify-between p-3 rounded-lg border ${
-                            selectedAreas.includes(area.id!) 
-                              ? 'border-primary bg-primary/5' 
-                              : 'border-border hover:bg-accent'
-                          }`}
-                        >
+                      areas.map((area) => {
+                        const isSelected = selectedAreas.includes(area.id!);
+                        return (
                           <div 
-                            className="flex items-center gap-2 flex-1 cursor-pointer"
-                            onClick={(e) => handleAreaClick(e, area.id!)}
+                            key={area.id} 
+                            className={`flex items-center justify-between p-3 rounded-lg border transition-all ${
+                              isSelected 
+                                ? 'border-primary bg-primary/10 shadow-sm' 
+                                : 'border-border hover:bg-accent'
+                            }`}
                           >
-                            <span className="text-lg">
-                              {area.kind === "image" ? "📷" : "📝"}
-                            </span>
-                            <div className="text-sm">
-                              <div className="font-medium">
-                                {area.kind === "text" 
-                                  ? TEXT_FIELDS.find(f => f.value === area.field_key)?.label 
-                                  : area.field_key
-                                }
+                            <div 
+                              className="flex items-center gap-2 flex-1 cursor-pointer"
+                              onClick={(e) => handleAreaClick(e, area.id!)}
+                            >
+                              {/* Checkbox visual */}
+                              <div className={`w-5 h-5 rounded border-2 flex items-center justify-center transition-colors ${
+                                isSelected 
+                                  ? 'bg-primary border-primary' 
+                                  : 'border-muted-foreground/30'
+                              }`}>
+                                {isSelected && <Check className="w-3 h-3 text-primary-foreground" />}
                               </div>
-                              <div className="text-xs text-muted-foreground">
-                                {Math.round(area.x)}x{Math.round(area.y)} • {Math.round(area.width)}x{Math.round(area.height)}
-                                {area.rotation ? ` • ${area.rotation}°` : ''}
+                              
+                              <span className="text-lg">
+                                {area.kind === "image" ? "📷" : "📝"}
+                              </span>
+                              <div className="text-sm">
+                                <div className="font-medium">
+                                  {area.kind === "text" 
+                                    ? TEXT_FIELDS.find(f => f.value === area.field_key)?.label 
+                                    : area.field_key
+                                  }
+                                </div>
+                                <div className="text-xs text-muted-foreground">
+                                  {Math.round(area.x)}x{Math.round(area.y)} • {Math.round(area.width)}x{Math.round(area.height)}
+                                  {area.rotation ? ` • ${area.rotation}°` : ''}
+                                </div>
                               </div>
                             </div>
-                          </div>
-                          
-                          <div className="flex gap-1">
-                            <Button
-                              variant="ghost"
-                              size="icon"
-                              className="h-8 w-8"
-                              onClick={(e) => {
-                                e.stopPropagation();
-                                handleEditArea(area);
-                              }}
-                              title="Editar área"
-                            >
-                              <Edit className="h-4 w-4" />
-                            </Button>
                             
-                            <Button
-                              variant="ghost"
-                              size="icon"
-                              className="h-8 w-8"
-                              onClick={(e) => {
-                                e.stopPropagation();
-                                handleDuplicateArea(area);
-                              }}
-                              title="Duplicar área"
-                            >
-                              <Copy className="h-4 w-4" />
-                            </Button>
-                            
-                            <Button
-                              variant="ghost"
-                              size="icon"
-                              className="h-8 w-8 text-destructive hover:text-destructive"
-                              onClick={(e) => {
-                                e.stopPropagation();
-                                handleDeleteArea(area.id!);
-                              }}
-                              title="Excluir área"
-                            >
-                              <Trash2 className="h-4 w-4" />
-                            </Button>
+                            <div className="flex gap-1">
+                              <Button
+                                variant="ghost"
+                                size="icon"
+                                className="h-8 w-8"
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  handleEditArea(area);
+                                }}
+                                title="Editar área"
+                              >
+                                <Edit className="h-4 w-4" />
+                              </Button>
+                              
+                              <Button
+                                variant="ghost"
+                                size="icon"
+                                className="h-8 w-8"
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  handleDuplicateArea(area);
+                                }}
+                                title="Duplicar área"
+                              >
+                                <Copy className="h-4 w-4" />
+                              </Button>
+                              
+                              <Button
+                                variant="ghost"
+                                size="icon"
+                                className="h-8 w-8 text-destructive hover:text-destructive hover:bg-destructive/10"
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  if (confirm(`Excluir área "${area.field_key}"?`)) {
+                                    handleDeleteArea(area.id!);
+                                  }
+                                }}
+                                title="Excluir área"
+                              >
+                                <Trash2 className="h-4 w-4" />
+                              </Button>
+                            </div>
                           </div>
-                        </div>
-                      ))
+                        );
+                      })
                     )}
                   </CardContent>
                 </Card>
