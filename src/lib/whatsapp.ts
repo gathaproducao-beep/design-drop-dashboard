@@ -206,13 +206,39 @@ export const processarEnvioPedido = async (pedidoId: string) => {
     // 5. Selecionar mensagem aleatoriamente
     const mensagemSelecionada = mensagens[Math.floor(Math.random() * mensagens.length)];
     
-    // 6. Substituir variáveis
+    // 6. Processar mensagens anteriores (se houver)
+    const mensagensAnterioresIds = (mensagemSelecionada as any).mensagens_anteriores as string[] || [];
+    
+    if (mensagensAnterioresIds.length > 0) {
+      // Buscar mensagens anteriores
+      const { data: mensagensAnteriores, error: anterioresError } = await supabase
+        .from('mensagens_whatsapp')
+        .select('id, mensagem')
+        .in('id', mensagensAnterioresIds);
+      
+      if (anterioresError) throw anterioresError;
+      
+      // Ordenar conforme a ordem original dos IDs
+      const mensagensOrdenadas = mensagensAnterioresIds
+        .map(id => mensagensAnteriores?.find(m => m.id === id))
+        .filter(Boolean);
+      
+      // Adicionar cada mensagem anterior à fila em ordem
+      for (const msgAnterior of mensagensOrdenadas) {
+        if (msgAnterior) {
+          const mensagemAnteriorFinal = replaceVariables(msgAnterior.mensagem, pedido);
+          await queueWhatsappMessage(telefoneNormalizado, mensagemAnteriorFinal, pedidoId);
+        }
+      }
+    }
+    
+    // 7. Substituir variáveis na mensagem principal
     const mensagemFinal = replaceVariables(mensagemSelecionada.mensagem, pedido);
     
-    // 7. Adicionar à fila COM pedidoId
+    // 8. Adicionar mensagem principal à fila COM pedidoId
     await queueWhatsappMessage(telefoneNormalizado, mensagemFinal, pedidoId);
     
-    // 8. Atualizar status do pedido para "enviando"
+    // 9. Atualizar status do pedido para "enviando"
     const { error: updateError } = await supabase
       .from('pedidos')
       .update({ mensagem_enviada: 'enviando' })
@@ -220,10 +246,13 @@ export const processarEnvioPedido = async (pedidoId: string) => {
     
     if (updateError) throw updateError;
     
+    const totalMensagens = mensagensAnterioresIds.length + 1;
+    
     return {
       success: true,
       mensagemUsada: mensagemSelecionada.nome,
-      telefone: telefoneNormalizado
+      telefone: telefoneNormalizado,
+      totalMensagens
     };
   } catch (error: any) {
     console.error('Erro ao processar envio:', error);
