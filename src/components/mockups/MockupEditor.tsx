@@ -1368,6 +1368,7 @@ export function MockupEditor({ mockup, onClose, onSave }: MockupEditorProps) {
 
     try {
       const selectedObjs = getSelectedAreasObjs();
+      const newAreaIds: string[] = [];
       
       for (const area of selectedObjs) {
         const areaDuplicada = {
@@ -1390,11 +1391,22 @@ export function MockupEditor({ mockup, onClose, onSave }: MockupEditorProps) {
           line_height: area.line_height,
         };
         
-        await (supabase as any).from("mockup_areas").insert([areaDuplicada]);
+        const { data } = await (supabase as any)
+          .from("mockup_areas")
+          .insert([areaDuplicada])
+          .select('id')
+          .single();
+        
+        if (data?.id) {
+          newAreaIds.push(data.id);
+        }
       }
       
       toast.success(`${selectedObjs.length} área(s) duplicada(s)`);
-      carregarAreas(activeCanvas);
+      await carregarAreas(activeCanvas);
+      
+      // Selecionar as áreas duplicadas para facilitar movimentação
+      setSelectedAreas(newAreaIds);
     } catch (error) {
       console.error("Erro ao duplicar áreas:", error);
       toast.error("Erro ao duplicar áreas");
