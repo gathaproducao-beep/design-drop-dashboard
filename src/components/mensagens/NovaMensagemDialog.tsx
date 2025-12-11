@@ -331,6 +331,7 @@ export const NovaMensagemDialog = ({
         onOpenChange={setTesteDialogOpen}
         mensagemTexto={formData.mensagem}
         nomeMensagem={formData.nome || "Nova Mensagem"}
+        mensagemId={editingMensagem?.id}
       />
     </Dialog>
   );
