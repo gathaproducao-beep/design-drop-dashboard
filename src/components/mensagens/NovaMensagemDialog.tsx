@@ -12,12 +12,18 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
-import { Loader2 } from "lucide-react";
+import { Loader2, Plus, X, ArrowUp, ArrowDown, GripVertical } from "lucide-react";
 import { toast } from "sonner";
 import { Badge } from "@/components/ui/badge";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Switch } from "@/components/ui/switch";
 import { TesteEnvioDialog } from "./TesteEnvioDialog";
+
+interface MensagemDisponivel {
+  id: string;
+  nome: string;
+  mensagem: string;
+}
 
 interface NovaMensagemDialogProps {
   open: boolean;
@@ -28,6 +34,7 @@ interface NovaMensagemDialogProps {
     mensagem: string;
     type?: string;
     is_active?: boolean;
+    mensagens_anteriores?: string[];
   } | null;
   onSuccess: () => void;
 }
@@ -49,6 +56,8 @@ export const NovaMensagemDialog = ({
 }: NovaMensagemDialogProps) => {
   const [loading, setLoading] = useState(false);
   const [testeDialogOpen, setTesteDialogOpen] = useState(false);
+  const [mensagensDisponiveis, setMensagensDisponiveis] = useState<MensagemDisponivel[]>([]);
+  const [mensagensAnteriores, setMensagensAnteriores] = useState<MensagemDisponivel[]>([]);
   const [formData, setFormData] = useState({
     nome: "",
     mensagem: "",
@@ -56,6 +65,14 @@ export const NovaMensagemDialog = ({
     is_active: true,
   });
 
+  // Carregar mensagens disponíveis
+  useEffect(() => {
+    if (open) {
+      carregarMensagensDisponiveis();
+    }
+  }, [open]);
+
+  // Inicializar dados do formulário
   useEffect(() => {
     if (editingMensagem) {
       setFormData({
@@ -64,6 +81,13 @@ export const NovaMensagemDialog = ({
         type: (editingMensagem.type as "aprovacao" | "conclusao") || "aprovacao",
         is_active: editingMensagem.is_active ?? true,
       });
+      
+      // Carregar mensagens anteriores se existirem
+      if (editingMensagem.mensagens_anteriores && editingMensagem.mensagens_anteriores.length > 0) {
+        carregarMensagensAnterioresSalvas(editingMensagem.mensagens_anteriores);
+      } else {
+        setMensagensAnteriores([]);
+      }
     } else {
       setFormData({
         nome: "",
@@ -71,18 +95,90 @@ export const NovaMensagemDialog = ({
         type: "aprovacao",
         is_active: true,
       });
+      setMensagensAnteriores([]);
     }
   }, [editingMensagem, open]);
+
+  const carregarMensagensDisponiveis = async () => {
+    try {
+      const { data, error } = await supabase
+        .from("mensagens_whatsapp")
+        .select("id, nome, mensagem")
+        .eq("is_active", true)
+        .order("nome");
+
+      if (error) throw error;
+      setMensagensDisponiveis(data || []);
+    } catch (error) {
+      console.error("Erro ao carregar mensagens:", error);
+    }
+  };
+
+  const carregarMensagensAnterioresSalvas = async (ids: string[]) => {
+    try {
+      const { data, error } = await supabase
+        .from("mensagens_whatsapp")
+        .select("id, nome, mensagem")
+        .in("id", ids);
+
+      if (error) throw error;
+      
+      // Manter a ordem original dos IDs
+      const mensagensOrdenadas = ids
+        .map(id => data?.find(m => m.id === id))
+        .filter(Boolean) as MensagemDisponivel[];
+      
+      setMensagensAnteriores(mensagensOrdenadas);
+    } catch (error) {
+      console.error("Erro ao carregar mensagens anteriores:", error);
+    }
+  };
+
+  const adicionarMensagemAnterior = (msg: MensagemDisponivel) => {
+    // Não permitir adicionar a própria mensagem
+    if (editingMensagem && msg.id === editingMensagem.id) {
+      toast.error("Não é possível adicionar a própria mensagem");
+      return;
+    }
+
+    // Verificar se já está na lista
+    if (mensagensAnteriores.some(m => m.id === msg.id)) {
+      toast.error("Esta mensagem já está na lista");
+      return;
+    }
+
+    setMensagensAnteriores(prev => [...prev, msg]);
+  };
+
+  const removerMensagemAnterior = (index: number) => {
+    setMensagensAnteriores(prev => prev.filter((_, i) => i !== index));
+  };
+
+  const moverMensagemAnterior = (index: number, direction: 'up' | 'down') => {
+    const newIndex = direction === 'up' ? index - 1 : index + 1;
+    if (newIndex < 0 || newIndex >= mensagensAnteriores.length) return;
+
+    setMensagensAnteriores(prev => {
+      const newList = [...prev];
+      [newList[index], newList[newIndex]] = [newList[newIndex], newList[index]];
+      return newList;
+    });
+  };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setLoading(true);
 
     try {
+      const dataToSave = {
+        ...formData,
+        mensagens_anteriores: mensagensAnteriores.map(m => m.id),
+      };
+
       if (editingMensagem) {
         const { error } = await supabase
           .from("mensagens_whatsapp")
-          .update(formData)
+          .update(dataToSave)
           .eq("id", editingMensagem.id);
 
         if (error) throw error;
@@ -90,7 +186,7 @@ export const NovaMensagemDialog = ({
       } else {
         const { error } = await supabase
           .from("mensagens_whatsapp")
-          .insert([formData]);
+          .insert([dataToSave]);
 
         if (error) throw error;
         toast.success("Mensagem criada com sucesso!");
@@ -186,6 +282,12 @@ export const NovaMensagemDialog = ({
     );
   };
 
+  // Filtrar mensagens disponíveis (excluir a própria e as já selecionadas)
+  const mensagensFiltradas = mensagensDisponiveis.filter(msg => 
+    (!editingMensagem || msg.id !== editingMensagem.id) &&
+    !mensagensAnteriores.some(m => m.id === msg.id)
+  );
+
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="max-w-5xl max-h-[90vh] overflow-y-auto">
@@ -239,14 +341,14 @@ export const NovaMensagemDialog = ({
                 value={formData.mensagem}
                 onChange={handleChange}
                 placeholder="Digite sua mensagem aqui. Use as variáveis acima para personalizar."
-                className="min-h-[200px]"
+                className="min-h-[150px]"
                 required
               />
             </div>
 
             <div className="space-y-2">
               <Label>Pré-visualização</Label>
-              <div className="min-h-[200px] p-4 rounded-md border bg-muted/50">
+              <div className="min-h-[150px] p-4 rounded-md border bg-muted/50">
                 {formData.mensagem ? (
                   renderPreviewMensagem()
                 ) : (
@@ -256,6 +358,91 @@ export const NovaMensagemDialog = ({
                 )}
               </div>
             </div>
+          </div>
+
+          {/* Mensagens anteriores - enviar antes desta */}
+          <div className="space-y-2 border rounded-lg p-4 bg-muted/20">
+            <Label className="text-base font-medium">Mensagens Anteriores (enviar antes desta)</Label>
+            <p className="text-sm text-muted-foreground">
+              Selecione mensagens que serão enviadas ANTES desta mensagem, em sequência.
+              Útil para enviar uma saudação ou introdução antes da mensagem principal.
+            </p>
+            
+            {/* Lista de mensagens anteriores selecionadas */}
+            {mensagensAnteriores.length > 0 && (
+              <div className="space-y-2 mt-3">
+                {mensagensAnteriores.map((msg, index) => (
+                  <div 
+                    key={msg.id}
+                    className="flex items-center gap-2 bg-background border rounded-lg p-2"
+                  >
+                    <GripVertical className="h-4 w-4 text-muted-foreground flex-shrink-0" />
+                    <span className="text-xs font-medium bg-primary/10 text-primary px-2 py-0.5 rounded">
+                      {index + 1}º
+                    </span>
+                    <div className="flex-1 min-w-0">
+                      <p className="text-sm font-medium truncate">{msg.nome}</p>
+                    </div>
+                    <div className="flex items-center gap-1 flex-shrink-0">
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        size="icon"
+                        className="h-7 w-7"
+                        onClick={() => moverMensagemAnterior(index, 'up')}
+                        disabled={index === 0}
+                      >
+                        <ArrowUp className="h-3 w-3" />
+                      </Button>
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        size="icon"
+                        className="h-7 w-7"
+                        onClick={() => moverMensagemAnterior(index, 'down')}
+                        disabled={index === mensagensAnteriores.length - 1}
+                      >
+                        <ArrowDown className="h-3 w-3" />
+                      </Button>
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        size="icon"
+                        className="h-7 w-7 text-destructive hover:text-destructive"
+                        onClick={() => removerMensagemAnterior(index)}
+                      >
+                        <X className="h-3 w-3" />
+                      </Button>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+
+            {/* Seletor para adicionar mensagens */}
+            {mensagensFiltradas.length > 0 && (
+              <div className="flex flex-wrap gap-2 mt-3">
+                {mensagensFiltradas.map((msg) => (
+                  <Button
+                    key={msg.id}
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    className="h-auto py-1.5 px-3"
+                    onClick={() => adicionarMensagemAnterior(msg)}
+                  >
+                    <Plus className="h-3 w-3 mr-1" />
+                    {msg.nome}
+                  </Button>
+                ))}
+              </div>
+            )}
+
+            {mensagensFiltradas.length === 0 && mensagensAnteriores.length === 0 && (
+              <p className="text-sm text-muted-foreground italic mt-2">
+                Nenhuma outra mensagem ativa disponível para adicionar.
+              </p>
+            )}
           </div>
 
           {/* Tipo da Mensagem */}

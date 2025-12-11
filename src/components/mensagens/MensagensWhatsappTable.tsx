@@ -11,7 +11,7 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
-import { Plus, Pencil, Trash2, Send } from "lucide-react";
+import { Plus, Pencil, Trash2, Send, MessageSquare } from "lucide-react";
 import { toast } from "sonner";
 import { NovaMensagemDialog } from "./NovaMensagemDialog";
 import { TesteEnvioDialog } from "./TesteEnvioDialog";
@@ -35,6 +35,7 @@ interface MensagemWhatsapp {
   is_active: boolean;
   created_at: string;
   updated_at: string;
+  mensagens_anteriores?: string[];
 }
 
 export const MensagensWhatsappTable = () => {
@@ -144,7 +145,17 @@ export const MensagensWhatsappTable = () => {
               ) : (
                 mensagens?.map((mensagem) => (
                   <TableRow key={mensagem.id}>
-                    <TableCell className="font-medium">{mensagem.nome}</TableCell>
+                    <TableCell className="font-medium">
+                      <div className="flex items-center gap-2">
+                        {mensagem.nome}
+                        {mensagem.mensagens_anteriores && mensagem.mensagens_anteriores.length > 0 && (
+                          <Badge variant="outline" className="text-xs" title="Mensagens anteriores vinculadas">
+                            <MessageSquare className="h-3 w-3 mr-1" />
+                            +{mensagem.mensagens_anteriores.length}
+                          </Badge>
+                        )}
+                      </div>
+                    </TableCell>
                     <TableCell>{getTypeBadge(mensagem.type)}</TableCell>
                     <TableCell className="max-w-md truncate">
                       {mensagem.mensagem}
@@ -231,6 +242,7 @@ export const MensagensWhatsappTable = () => {
           onOpenChange={setTesteDialogOpen}
           mensagemTexto={testingMensagem.mensagem}
           nomeMensagem={testingMensagem.nome}
+          mensagemId={testingMensagem.id}
         />
       )}
     </>

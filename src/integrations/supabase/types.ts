@@ -181,6 +181,7 @@ export type Database = {
           id: string
           is_active: boolean | null
           mensagem: string
+          mensagens_anteriores: string[] | null
           nome: string
           type: string | null
           updated_at: string | null
@@ -190,6 +191,7 @@ export type Database = {
           id?: string
           is_active?: boolean | null
           mensagem: string
+          mensagens_anteriores?: string[] | null
           nome: string
           type?: string | null
           updated_at?: string | null
@@ -199,6 +201,7 @@ export type Database = {
           id?: string
           is_active?: boolean | null
           mensagem?: string
+          mensagens_anteriores?: string[] | null
           nome?: string
           type?: string | null
           updated_at?: string | null
