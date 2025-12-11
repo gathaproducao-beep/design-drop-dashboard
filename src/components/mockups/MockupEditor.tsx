@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect, useRef, useCallback } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -7,7 +7,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
-import { ArrowLeft, Plus, Trash2, GripVertical, Edit, Copy, Save, Download, RefreshCw, Grid3X3, Magnet, AlignLeft, AlignCenter, AlignRight, AlignStartVertical, AlignCenterVertical, AlignEndVertical, CheckSquare, Square, Check } from "lucide-react";
+import { ArrowLeft, Plus, Trash2, GripVertical, Edit, Copy, Save, Download, RefreshCw, Grid3X3, Magnet, AlignLeft, AlignCenter, AlignRight, AlignStartVertical, AlignCenterVertical, AlignEndVertical, CheckSquare, Square, Check, Keyboard } from "lucide-react";
 import { SalvarTemplateDialog } from "@/components/templates/SalvarTemplateDialog";
 import { AplicarTemplateDialog } from "@/components/templates/AplicarTemplateDialog";
 import { Switch } from "@/components/ui/switch";
@@ -120,6 +120,96 @@ export function MockupEditor({ mockup, onClose, onSave }: MockupEditorProps) {
       carregarAreas(activeCanvas);
     }
   }, [activeCanvas, scaleReady]);
+
+  // Atalhos de teclado
+  const handleKeyDown = useCallback((e: KeyboardEvent) => {
+    // Ignorar se estiver em um input/textarea/select
+    const target = e.target as HTMLElement;
+    if (target.tagName === 'INPUT' || target.tagName === 'TEXTAREA' || target.tagName === 'SELECT') {
+      return;
+    }
+
+    // Ctrl+A: Selecionar todas as áreas do canvas atual
+    if (e.ctrlKey && e.key === 'a') {
+      e.preventDefault();
+      const canvasAreas = areas.filter(a => a.canvas_id === activeCanvas);
+      setSelectedAreas(canvasAreas.map(a => a.id!).filter(Boolean));
+      toast.success(`${canvasAreas.length} área(s) selecionada(s)`);
+      return;
+    }
+
+    // Delete ou Backspace: Excluir áreas selecionadas
+    if ((e.key === 'Delete' || e.key === 'Backspace') && selectedAreas.length > 0) {
+      e.preventDefault();
+      handleDeleteSelectedAreas();
+      return;
+    }
+
+    // Escape: Limpar seleção
+    if (e.key === 'Escape') {
+      e.preventDefault();
+      setSelectedAreas([]);
+      setShowNewAreaForm(false);
+      setEditingArea(null);
+      return;
+    }
+
+    // Setas: Mover áreas selecionadas
+    if (['ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight'].includes(e.key) && selectedAreas.length > 0) {
+      e.preventDefault();
+      
+      const step = e.shiftKey ? 10 : 1; // Shift = 10px, normal = 1px
+      let deltaX = 0;
+      let deltaY = 0;
+
+      switch (e.key) {
+        case 'ArrowUp': deltaY = -step; break;
+        case 'ArrowDown': deltaY = step; break;
+        case 'ArrowLeft': deltaX = -step; break;
+        case 'ArrowRight': deltaX = step; break;
+      }
+
+      moveSelectedAreasByDelta(deltaX, deltaY);
+      return;
+    }
+
+    // Ctrl+D: Duplicar áreas selecionadas
+    if (e.ctrlKey && e.key === 'd' && selectedAreas.length > 0) {
+      e.preventDefault();
+      handleDuplicateSelectedAreas();
+      return;
+    }
+  }, [areas, activeCanvas, selectedAreas]);
+
+  // Função para mover áreas selecionadas por delta
+  const moveSelectedAreasByDelta = async (deltaX: number, deltaY: number) => {
+    if (selectedAreas.length === 0) return;
+
+    const selectedObjs = areas.filter(a => selectedAreas.includes(a.id!));
+    
+    // 1. Calcular novas posições
+    const updates = selectedObjs.map(area => ({
+      id: area.id!,
+      x: Math.max(0, area.x + deltaX),
+      y: Math.max(0, area.y + deltaY)
+    }));
+    
+    // 2. Atualizar estado local
+    setAreas(prev => prev.map(a => {
+      const update = updates.find(u => u.id === a.id);
+      return update ? { ...a, x: update.x, y: update.y } : a;
+    }));
+    
+    // 3. Salvar no banco (sem await para não bloquear interação)
+    for (const update of updates) {
+      saveAreaPositionDirectly(update.id, { x: update.x, y: update.y });
+    }
+  };
+
+  useEffect(() => {
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [handleKeyDown]);
 
   // Calcular escala quando a imagem carregar OU usar escala salva no banco
   useEffect(() => {
@@ -1699,6 +1789,28 @@ export function MockupEditor({ mockup, onClose, onSave }: MockupEditorProps) {
                           </Badge>
                         )}
                       </div>
+                      
+                      <div className="w-px h-6 bg-border" />
+                      
+                      {/* Atalhos de teclado */}
+                      <Tooltip>
+                        <TooltipTrigger asChild>
+                          <Button variant="ghost" size="sm" className="text-muted-foreground">
+                            <Keyboard className="w-4 h-4 mr-1" />
+                            <span className="text-xs">Atalhos</span>
+                          </Button>
+                        </TooltipTrigger>
+                        <TooltipContent className="max-w-xs">
+                          <div className="space-y-1 text-xs">
+                            <p><kbd className="px-1 py-0.5 bg-muted rounded text-xs">Ctrl+A</kbd> Selecionar todas</p>
+                            <p><kbd className="px-1 py-0.5 bg-muted rounded text-xs">Delete</kbd> Excluir selecionadas</p>
+                            <p><kbd className="px-1 py-0.5 bg-muted rounded text-xs">Ctrl+D</kbd> Duplicar selecionadas</p>
+                            <p><kbd className="px-1 py-0.5 bg-muted rounded text-xs">Setas</kbd> Mover 1px</p>
+                            <p><kbd className="px-1 py-0.5 bg-muted rounded text-xs">Shift+Setas</kbd> Mover 10px</p>
+                            <p><kbd className="px-1 py-0.5 bg-muted rounded text-xs">Esc</kbd> Limpar seleção</p>
+                          </div>
+                        </TooltipContent>
+                      </Tooltip>
                     </TooltipProvider>
                   </div>
                 </CardHeader>
