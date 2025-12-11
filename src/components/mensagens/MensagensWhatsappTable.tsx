@@ -35,7 +35,7 @@ interface MensagemWhatsapp {
   is_active: boolean;
   created_at: string;
   updated_at: string;
-  mensagens_anteriores?: string[];
+  partes_mensagem?: string[];
 }
 
 export const MensagensWhatsappTable = () => {
@@ -148,10 +148,10 @@ export const MensagensWhatsappTable = () => {
                     <TableCell className="font-medium">
                       <div className="flex items-center gap-2">
                         {mensagem.nome}
-                        {mensagem.mensagens_anteriores && mensagem.mensagens_anteriores.length > 0 && (
-                          <Badge variant="outline" className="text-xs" title="Mensagens anteriores vinculadas">
+                        {mensagem.partes_mensagem && mensagem.partes_mensagem.length > 1 && (
+                          <Badge variant="outline" className="text-xs" title="Número de partes/mensagens">
                             <MessageSquare className="h-3 w-3 mr-1" />
-                            +{mensagem.mensagens_anteriores.length}
+                            {mensagem.partes_mensagem.length} partes
                           </Badge>
                         )}
                       </div>
