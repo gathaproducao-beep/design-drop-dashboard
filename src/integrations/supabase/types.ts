@@ -183,6 +183,7 @@ export type Database = {
           mensagem: string
           mensagens_anteriores: string[] | null
           nome: string
+          partes_mensagem: string[] | null
           type: string | null
           updated_at: string | null
         }
@@ -193,6 +194,7 @@ export type Database = {
           mensagem: string
           mensagens_anteriores?: string[] | null
           nome: string
+          partes_mensagem?: string[] | null
           type?: string | null
           updated_at?: string | null
         }
@@ -203,6 +205,7 @@ export type Database = {
           mensagem?: string
           mensagens_anteriores?: string[] | null
           nome?: string
+          partes_mensagem?: string[] | null
           type?: string | null
           updated_at?: string | null
         }

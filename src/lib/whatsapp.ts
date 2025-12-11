@@ -206,39 +206,19 @@ export const processarEnvioPedido = async (pedidoId: string) => {
     // 5. Selecionar mensagem aleatoriamente
     const mensagemSelecionada = mensagens[Math.floor(Math.random() * mensagens.length)];
     
-    // 6. Processar mensagens anteriores (se houver)
-    const mensagensAnterioresIds = (mensagemSelecionada as any).mensagens_anteriores as string[] || [];
+    // 6. Obter partes da mensagem (usar partes_mensagem se existir, senão usar mensagem)
+    const partesMensagem = (mensagemSelecionada as any).partes_mensagem as string[] || [];
+    const partesParaEnviar = partesMensagem.length > 0 
+      ? partesMensagem.filter((p: string) => p && p.trim().length > 0)
+      : [mensagemSelecionada.mensagem];
     
-    if (mensagensAnterioresIds.length > 0) {
-      // Buscar mensagens anteriores
-      const { data: mensagensAnteriores, error: anterioresError } = await supabase
-        .from('mensagens_whatsapp')
-        .select('id, mensagem')
-        .in('id', mensagensAnterioresIds);
-      
-      if (anterioresError) throw anterioresError;
-      
-      // Ordenar conforme a ordem original dos IDs
-      const mensagensOrdenadas = mensagensAnterioresIds
-        .map(id => mensagensAnteriores?.find(m => m.id === id))
-        .filter(Boolean);
-      
-      // Adicionar cada mensagem anterior à fila em ordem
-      for (const msgAnterior of mensagensOrdenadas) {
-        if (msgAnterior) {
-          const mensagemAnteriorFinal = replaceVariables(msgAnterior.mensagem, pedido);
-          await queueWhatsappMessage(telefoneNormalizado, mensagemAnteriorFinal, pedidoId);
-        }
-      }
+    // 7. Adicionar cada parte à fila em ordem
+    for (const parte of partesParaEnviar) {
+      const mensagemFinal = replaceVariables(parte, pedido);
+      await queueWhatsappMessage(telefoneNormalizado, mensagemFinal, pedidoId);
     }
     
-    // 7. Substituir variáveis na mensagem principal
-    const mensagemFinal = replaceVariables(mensagemSelecionada.mensagem, pedido);
-    
-    // 8. Adicionar mensagem principal à fila COM pedidoId
-    await queueWhatsappMessage(telefoneNormalizado, mensagemFinal, pedidoId);
-    
-    // 9. Atualizar status do pedido para "enviando"
+    // 8. Atualizar status do pedido para "enviando"
     const { error: updateError } = await supabase
       .from('pedidos')
       .update({ mensagem_enviada: 'enviando' })
@@ -246,13 +226,11 @@ export const processarEnvioPedido = async (pedidoId: string) => {
     
     if (updateError) throw updateError;
     
-    const totalMensagens = mensagensAnterioresIds.length + 1;
-    
     return {
       success: true,
       mensagemUsada: mensagemSelecionada.nome,
       telefone: telefoneNormalizado,
-      totalMensagens
+      totalMensagens: partesParaEnviar.length
     };
   } catch (error: any) {
     console.error('Erro ao processar envio:', error);
