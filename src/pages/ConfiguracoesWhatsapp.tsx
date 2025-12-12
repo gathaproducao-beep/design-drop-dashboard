@@ -12,6 +12,7 @@ import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { Loader2, Settings, MessageSquare, AlertCircle, Plus, Edit, Trash2, Copy, Wifi, WifiOff, RefreshCw } from "lucide-react";
 import { TesteEnvioDialog } from "@/components/mensagens/TesteEnvioDialog";
 import { InstanciaDialog } from "@/components/mensagens/InstanciaDialog";
+import { TemplatesList } from "@/components/whatsapp/TemplatesList";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -620,6 +621,9 @@ const ConfiguracoesWhatsapp = () => {
               )}
             </CardContent>
           </Card>
+
+          {/* Templates Meta (API Oficial) */}
+          <TemplatesList />
 
           {/* Configurações Antigas (mantidas para compatibilidade) */}
           <Card>

@@ -100,7 +100,11 @@ export const queueWhatsappMessage = async (
   phone: string, 
   message: string,
   pedidoId?: string,
-  scheduledAt?: Date
+  scheduledAt?: Date,
+  templateData?: {
+    template_name: string;
+    template_params?: string[];
+  }
 ) => {
   try {
     // Extrair URL de imagem se houver
@@ -132,6 +136,38 @@ export const queueWhatsappMessage = async (
     console.error('Error queueing WhatsApp message:', error);
     throw error;
   }
+};
+
+/**
+ * Busca templates ativos do WhatsApp (API Oficial)
+ */
+export const getActiveTemplates = async () => {
+  const { data, error } = await supabase
+    .from('whatsapp_templates')
+    .select('*')
+    .eq('is_active', true)
+    .order('nome');
+  
+  if (error) throw error;
+  return data;
+};
+
+/**
+ * Substitui variáveis em parâmetros do template com dados do pedido
+ */
+export const replaceTemplateVariables = (variaveis: string[], pedido: any): string[] => {
+  return variaveis.map(variavel => {
+    // Mapear nomes de variáveis para campos do pedido
+    const mapping: Record<string, string> = {
+      'nome_cliente': pedido.nome_cliente || '',
+      'numero_pedido': pedido.numero_pedido || '',
+      'codigo_produto': pedido.codigo_produto || '',
+      'data_pedido': pedido.data_pedido ? new Date(pedido.data_pedido).toLocaleDateString('pt-BR') : '',
+      'observacao': pedido.observacao || '',
+    };
+    
+    return mapping[variavel] || variavel;
+  });
 };
 
 /**
