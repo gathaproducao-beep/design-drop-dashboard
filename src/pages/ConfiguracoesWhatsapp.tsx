@@ -9,10 +9,9 @@ import { Badge } from "@/components/ui/badge";
 import { toast } from "@/hooks/use-toast";
 import { supabase } from "@/integrations/supabase/client";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { Loader2, Settings, MessageSquare, AlertCircle, Plus, Edit, Trash2, Copy, Wifi, WifiOff, RefreshCw } from "lucide-react";
+import { Loader2, Settings, MessageSquare, AlertCircle, Plus, Edit, Trash2, Copy, Wifi, WifiOff, RefreshCw, Webhook } from "lucide-react";
 import { TesteEnvioDialog } from "@/components/mensagens/TesteEnvioDialog";
 import { InstanciaDialog } from "@/components/mensagens/InstanciaDialog";
-import { TemplatesList } from "@/components/whatsapp/TemplatesList";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -47,13 +46,12 @@ interface MensagemWhatsapp {
 interface WhatsappInstance {
   id: string;
   nome: string;
-  api_type: 'evolution' | 'oficial';
+  api_type: 'evolution' | 'webhook';
   evolution_api_url: string;
   evolution_api_key: string;
   evolution_instance: string;
-  phone_number_id?: string;
-  waba_id?: string;
-  access_token?: string;
+  webhook_url?: string;
+  webhook_headers?: Record<string, string>;
   is_active: boolean;
   ordem: number;
 }
@@ -425,7 +423,7 @@ const ConfiguracoesWhatsapp = () => {
                     Instâncias WhatsApp
                   </CardTitle>
                   <CardDescription>
-                    Configure múltiplas instâncias (Evolution API ou API Oficial Meta) para envio com fallback automático
+                    Configure múltiplas instâncias (Evolution API ou Webhook) para envio com fallback automático
                   </CardDescription>
                 </div>
                 <div className="flex gap-2">
@@ -569,20 +567,25 @@ const ConfiguracoesWhatsapp = () => {
                             <div className="flex items-center gap-2 flex-wrap">
                               <p className="font-medium">{inst.nome}</p>
                               <Badge 
-                                variant={inst.api_type === 'oficial' ? 'default' : 'secondary'}
-                                className={inst.api_type === 'oficial' ? 'bg-blue-600 hover:bg-blue-700' : ''}
+                                variant={inst.api_type === 'webhook' ? 'default' : 'secondary'}
+                                className={inst.api_type === 'webhook' ? 'bg-purple-600 hover:bg-purple-700' : ''}
                               >
-                                {inst.api_type === 'oficial' ? 'API Oficial' : 'Evolution'}
+                                {inst.api_type === 'webhook' ? (
+                                  <span className="flex items-center gap-1">
+                                    <Webhook className="h-3 w-3" />
+                                    Webhook
+                                  </span>
+                                ) : 'Evolution'}
                               </Badge>
                               <Badge variant={inst.is_active ? "outline" : "secondary"}>
                                 {inst.is_active ? "Ativa" : "Inativa"}
                               </Badge>
-                              {getConnectionBadge()}
+                              {inst.api_type !== 'webhook' && getConnectionBadge()}
                               <Badge variant="outline">Ordem: {inst.ordem}</Badge>
                             </div>
                             <p className="text-sm text-muted-foreground mt-1">
-                              {inst.api_type === 'oficial' 
-                                ? `Phone ID: ${inst.phone_number_id || '-'}`
+                              {inst.api_type === 'webhook' 
+                                ? `URL: ${inst.webhook_url?.substring(0, 50) || '-'}...`
                                 : inst.evolution_instance
                               }
                             </p>
@@ -621,9 +624,6 @@ const ConfiguracoesWhatsapp = () => {
               )}
             </CardContent>
           </Card>
-
-          {/* Templates Meta (API Oficial) */}
-          <TemplatesList />
 
           {/* Configurações Antigas (mantidas para compatibilidade) */}
           <Card>

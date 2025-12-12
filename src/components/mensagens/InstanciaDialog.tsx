@@ -4,10 +4,11 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
+import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
-import { AlertCircle } from "lucide-react";
+import { AlertCircle, Webhook } from "lucide-react";
 
 interface InstanciaDialogProps {
   open: boolean;
@@ -16,7 +17,7 @@ interface InstanciaDialogProps {
   onSuccess: () => void;
 }
 
-type ApiType = 'evolution' | 'oficial';
+type ApiType = 'evolution' | 'webhook';
 
 export const InstanciaDialog = ({ open, onOpenChange, instancia, onSuccess }: InstanciaDialogProps) => {
   const [nome, setNome] = useState(instancia?.nome || "");
@@ -27,10 +28,11 @@ export const InstanciaDialog = ({ open, onOpenChange, instancia, onSuccess }: In
   const [evolutionApiKey, setEvolutionApiKey] = useState(instancia?.evolution_api_key || "");
   const [evolutionInstance, setEvolutionInstance] = useState(instancia?.evolution_instance || "");
   
-  // Campos API Oficial
-  const [phoneNumberId, setPhoneNumberId] = useState(instancia?.phone_number_id || "");
-  const [wabaId, setWabaId] = useState(instancia?.waba_id || "");
-  const [accessToken, setAccessToken] = useState(instancia?.access_token || "");
+  // Campos Webhook
+  const [webhookUrl, setWebhookUrl] = useState(instancia?.webhook_url || "");
+  const [webhookHeaders, setWebhookHeaders] = useState(
+    instancia?.webhook_headers ? JSON.stringify(instancia.webhook_headers, null, 2) : ""
+  );
   
   const [isActive, setIsActive] = useState(instancia?.is_active ?? true);
   const [ordem, setOrdem] = useState(instancia?.ordem || 0);
@@ -40,13 +42,16 @@ export const InstanciaDialog = ({ open, onOpenChange, instancia, onSuccess }: In
     if (open) {
       if (instancia) {
         setNome(instancia.nome || "");
-        setApiType(instancia.api_type || "evolution");
+        // Migrar instâncias antigas do tipo "oficial" para "evolution"
+        const currentApiType = instancia.api_type === 'oficial' ? 'evolution' : (instancia.api_type || "evolution");
+        setApiType(currentApiType as ApiType);
         setEvolutionApiUrl(instancia.evolution_api_url || "");
         setEvolutionApiKey(instancia.evolution_api_key || "");
         setEvolutionInstance(instancia.evolution_instance || "");
-        setPhoneNumberId(instancia.phone_number_id || "");
-        setWabaId(instancia.waba_id || "");
-        setAccessToken(instancia.access_token || "");
+        setWebhookUrl(instancia.webhook_url || "");
+        setWebhookHeaders(
+          instancia.webhook_headers ? JSON.stringify(instancia.webhook_headers, null, 2) : ""
+        );
         setIsActive(instancia.is_active ?? true);
         setOrdem(instancia.ordem || 0);
       } else {
@@ -55,9 +60,8 @@ export const InstanciaDialog = ({ open, onOpenChange, instancia, onSuccess }: In
         setEvolutionApiUrl("");
         setEvolutionApiKey("");
         setEvolutionInstance("");
-        setPhoneNumberId("");
-        setWabaId("");
-        setAccessToken("");
+        setWebhookUrl("");
+        setWebhookHeaders("");
         setIsActive(true);
         setOrdem(0);
       }
@@ -76,10 +80,20 @@ export const InstanciaDialog = ({ open, onOpenChange, instancia, onSuccess }: In
         toast.error("Preencha todos os campos da Evolution API");
         return;
       }
-    } else {
-      if (!phoneNumberId || !accessToken) {
-        toast.error("Phone Number ID e Access Token são obrigatórios para API Oficial");
+    } else if (apiType === 'webhook') {
+      if (!webhookUrl) {
+        toast.error("URL do Webhook é obrigatória");
         return;
+      }
+      
+      // Validar headers JSON se preenchido
+      if (webhookHeaders.trim()) {
+        try {
+          JSON.parse(webhookHeaders);
+        } catch (e) {
+          toast.error("Headers customizados devem ser um JSON válido");
+          return;
+        }
       }
     }
 
@@ -98,22 +112,18 @@ export const InstanciaDialog = ({ open, onOpenChange, instancia, onSuccess }: In
         data.evolution_api_url = evolutionApiUrl.trim();
         data.evolution_api_key = evolutionApiKey.trim();
         data.evolution_instance = evolutionInstance.trim();
-        // Limpar campos da API Oficial
-        data.phone_number_id = null;
-        data.waba_id = null;
-        data.access_token = null;
-      } else {
-        data.phone_number_id = phoneNumberId.trim();
-        data.waba_id = wabaId.trim() || null;
-        data.access_token = accessToken.trim();
-        // Manter campos Evolution vazios mas não nulos (por causa do constraint NOT NULL)
-        data.evolution_api_url = evolutionApiUrl.trim() || '-';
-        data.evolution_api_key = evolutionApiKey.trim() || '-';
-        data.evolution_instance = evolutionInstance.trim() || '-';
+        data.webhook_url = null;
+        data.webhook_headers = null;
+      } else if (apiType === 'webhook') {
+        data.webhook_url = webhookUrl.trim();
+        data.webhook_headers = webhookHeaders.trim() ? JSON.parse(webhookHeaders) : {};
+        // Manter campos Evolution com valores placeholder (constraint NOT NULL)
+        data.evolution_api_url = '-';
+        data.evolution_api_key = '-';
+        data.evolution_instance = '-';
       }
 
       if (instancia?.id) {
-        // Atualizar
         const { error } = await supabase
           .from("whatsapp_instances")
           .update(data)
@@ -122,7 +132,6 @@ export const InstanciaDialog = ({ open, onOpenChange, instancia, onSuccess }: In
         if (error) throw error;
         toast.success("Instância atualizada com sucesso!");
       } else {
-        // Criar
         const { error } = await supabase
           .from("whatsapp_instances")
           .insert([data]);
@@ -174,13 +183,14 @@ export const InstanciaDialog = ({ open, onOpenChange, instancia, onSuccess }: In
                 <SelectItem value="evolution">
                   <div className="flex items-center gap-2">
                     <span>Evolution API</span>
-                    <span className="text-xs text-muted-foreground">(não-oficial)</span>
+                    <span className="text-xs text-muted-foreground">(WhatsApp não-oficial)</span>
                   </div>
                 </SelectItem>
-                <SelectItem value="oficial">
+                <SelectItem value="webhook">
                   <div className="flex items-center gap-2">
-                    <span>API Oficial Meta</span>
-                    <span className="text-xs text-muted-foreground">(Coexistence)</span>
+                    <Webhook className="h-4 w-4" />
+                    <span>Webhook</span>
+                    <span className="text-xs text-muted-foreground">(Ferramenta externa)</span>
                   </div>
                 </SelectItem>
               </SelectContent>
@@ -222,60 +232,66 @@ export const InstanciaDialog = ({ open, onOpenChange, instancia, onSuccess }: In
             </>
           )}
 
-          {/* Campos API Oficial */}
-          {apiType === 'oficial' && (
+          {/* Campos Webhook */}
+          {apiType === 'webhook' && (
             <>
               <div className="bg-blue-50 dark:bg-blue-950/30 border border-blue-200 dark:border-blue-800 rounded-lg p-4 mb-4">
                 <div className="flex gap-2">
                   <AlertCircle className="h-5 w-5 text-blue-600 dark:text-blue-400 flex-shrink-0 mt-0.5" />
                   <div className="text-sm text-blue-800 dark:text-blue-200">
-                    <p className="font-medium mb-1">API Oficial do WhatsApp (Coexistence)</p>
+                    <p className="font-medium mb-1">Envio via Webhook</p>
                     <p className="text-blue-700 dark:text-blue-300">
-                      Com Coexistence, você pode enviar mensagens pela API Oficial e ainda usar o WhatsApp Web para responder.
-                      Obtenha as credenciais no Meta Business Suite.
+                      Os dados da mensagem serão enviados para a URL configurada. 
+                      Use ferramentas como n8n, Zapier ou Make para processar e enviar via WhatsApp.
                     </p>
                   </div>
                 </div>
               </div>
 
               <div className="space-y-2">
-                <Label htmlFor="phone-number-id">Phone Number ID *</Label>
+                <Label htmlFor="webhook-url">URL do Webhook *</Label>
                 <Input
-                  id="phone-number-id"
-                  placeholder="Ex: 123456789012345"
-                  value={phoneNumberId}
-                  onChange={(e) => setPhoneNumberId(e.target.value)}
+                  id="webhook-url"
+                  placeholder="https://seu-webhook.com/endpoint"
+                  value={webhookUrl}
+                  onChange={(e) => setWebhookUrl(e.target.value)}
                 />
                 <p className="text-xs text-muted-foreground">
-                  Encontrado em Meta Business Suite → WhatsApp → Configurações da API
+                  URL que receberá os dados via POST
                 </p>
               </div>
 
               <div className="space-y-2">
-                <Label htmlFor="waba-id">WABA ID (opcional)</Label>
-                <Input
-                  id="waba-id"
-                  placeholder="Ex: 123456789012345"
-                  value={wabaId}
-                  onChange={(e) => setWabaId(e.target.value)}
+                <Label htmlFor="webhook-headers">Headers Customizados (opcional)</Label>
+                <Textarea
+                  id="webhook-headers"
+                  placeholder={'{\n  "Authorization": "Bearer seu_token",\n  "X-Custom-Header": "valor"\n}'}
+                  value={webhookHeaders}
+                  onChange={(e) => setWebhookHeaders(e.target.value)}
+                  rows={4}
+                  className="font-mono text-sm"
                 />
                 <p className="text-xs text-muted-foreground">
-                  ID da conta WhatsApp Business API
+                  JSON com headers adicionais para autenticação
                 </p>
               </div>
 
-              <div className="space-y-2">
-                <Label htmlFor="access-token">Access Token *</Label>
-                <Input
-                  id="access-token"
-                  type="password"
-                  placeholder="Token permanente do System User"
-                  value={accessToken}
-                  onChange={(e) => setAccessToken(e.target.value)}
-                />
-                <p className="text-xs text-muted-foreground">
-                  Token de acesso permanente gerado no Meta Business Suite
-                </p>
+              <div className="bg-muted/50 rounded-lg p-3 text-sm">
+                <p className="font-medium mb-2">Dados enviados no webhook:</p>
+                <pre className="text-xs bg-background p-2 rounded overflow-x-auto">
+{`{
+  "phone": "5511999999999",
+  "message": "Texto da mensagem",
+  "image_url": "https://...",
+  "pedido": {
+    "numero_pedido": "12345",
+    "nome_cliente": "João Silva",
+    "codigo_produto": "CANECA-001",
+    "data_pedido": "2024-12-12"
+  },
+  "instance_name": "Nome da instância"
+}`}
+                </pre>
               </div>
             </>
           )}

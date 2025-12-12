@@ -13,8 +13,7 @@ interface SendWhatsappRequest {
   media_url?: string;
   media_type?: 'image' | 'video' | 'document' | 'audio';
   caption?: string;
-  template_name?: string;
-  template_params?: string[];
+  pedido_id?: string;
 }
 
 /**
@@ -49,7 +48,7 @@ const sendViaEvolution = async (
   const apiKey = instance.evolution_api_key?.trim();
   const instanceName = instance.evolution_instance?.trim();
 
-  if (!apiUrl || !apiKey || !instanceName) {
+  if (!apiUrl || !apiKey || !instanceName || apiUrl === '-') {
     return { 
       success: false, 
       error: `Instância "${instance.nome}" está com dados incompletos. Verifique URL, API Key e nome da instância.`
@@ -123,141 +122,99 @@ const sendViaEvolution = async (
 };
 
 /**
- * Envia mensagem via API Oficial do WhatsApp (Meta)
+ * Envia dados via Webhook para ferramenta externa
  */
-const sendViaOficial = async (
+const sendViaWebhook = async (
   instance: any,
   normalizedPhone: string,
   message: string,
   media_url?: string,
   media_type?: string,
   caption?: string,
-  template_name?: string,
-  template_params?: string[]
+  supabase?: any,
+  pedido_id?: string
 ): Promise<{ success: boolean; data?: any; error?: string }> => {
-  const phoneNumberId = instance.phone_number_id?.trim();
-  const accessToken = instance.access_token?.trim();
+  const webhookUrl = instance.webhook_url?.trim();
+  const webhookHeaders = instance.webhook_headers || {};
 
-  if (!phoneNumberId || !accessToken) {
+  if (!webhookUrl) {
     return { 
       success: false, 
-      error: `Instância "${instance.nome}" está com dados incompletos. Verifique Phone Number ID e Access Token.`
+      error: `Instância "${instance.nome}" não tem URL de webhook configurada.`
     };
   }
 
-  const apiUrl = `https://graph.facebook.com/v18.0/${phoneNumberId}/messages`;
-
-  let requestBody: any;
-
-  // Se tem template, usar template
-  if (template_name) {
-    console.log(`[Oficial] Enviando template: ${template_name}`);
+  // Buscar dados do pedido se tiver pedido_id
+  let pedidoData = null;
+  if (pedido_id && supabase) {
+    const { data: pedido } = await supabase
+      .from('pedidos')
+      .select('numero_pedido, nome_cliente, codigo_produto, data_pedido, telefone')
+      .eq('id', pedido_id)
+      .maybeSingle();
     
-    requestBody = {
-      messaging_product: "whatsapp",
-      recipient_type: "individual",
-      to: normalizedPhone,
-      type: "template",
-      template: {
-        name: template_name,
-        language: {
-          code: "pt_BR"
-        },
-        components: template_params && template_params.length > 0 ? [
-          {
-            type: "body",
-            parameters: template_params.map(param => ({
-              type: "text",
-              text: param
-            }))
-          }
-        ] : undefined
-      }
-    };
-  }
-  // Se tem mídia, enviar como mídia
-  else if (media_url && media_type) {
-    console.log(`[Oficial] Enviando mídia: ${media_type} - ${media_url}`);
-    
-    const mediaTypeMap: Record<string, string> = {
-      'image': 'image',
-      'video': 'video',
-      'document': 'document'
-    };
-
-    requestBody = {
-      messaging_product: "whatsapp",
-      recipient_type: "individual",
-      to: normalizedPhone,
-      type: mediaTypeMap[media_type] || 'image',
-      [mediaTypeMap[media_type] || 'image']: {
-        link: media_url,
-        caption: caption || message
-      }
-    };
-  } else {
-    // Enviar como texto
-    console.log(`[Oficial] Enviando texto: ${message?.substring(0, 50)}...`);
-    
-    requestBody = {
-      messaging_product: "whatsapp",
-      recipient_type: "individual",
-      to: normalizedPhone,
-      type: "text",
-      text: {
-        preview_url: true,
-        body: message
-      }
-    };
-  }
-
-  const response = await fetch(apiUrl, {
-    method: 'POST',
-    headers: {
-      'Authorization': `Bearer ${accessToken}`,
-      'Content-Type': 'application/json',
-    },
-    body: JSON.stringify(requestBody),
-  });
-
-  const data = await response.json();
-
-  if (!response.ok) {
-    console.error(`[Oficial] Erro na instância ${instance.nome}:`, data);
-    
-    // Traduzir erros comuns da API Oficial
-    let errorMessage = 'Erro ao enviar mensagem';
-    
-    if (data.error) {
-      const errorCode = data.error.code;
-      
-      switch (errorCode) {
-        case 190:
-          errorMessage = `Token de acesso inválido ou expirado na instância "${instance.nome}".`;
-          break;
-        case 100:
-          errorMessage = `Parâmetro inválido: ${data.error.message}`;
-          break;
-        case 131026:
-          errorMessage = 'Número não registrado no WhatsApp.';
-          break;
-        case 131047:
-          errorMessage = 'Limite de mensagens atingido. Aguarde antes de enviar novamente.';
-          break;
-        default:
-          errorMessage = `Erro na instância "${instance.nome}": ${data.error.message || 'Erro desconhecido'}`;
-      }
+    if (pedido) {
+      pedidoData = {
+        numero_pedido: pedido.numero_pedido,
+        nome_cliente: pedido.nome_cliente,
+        codigo_produto: pedido.codigo_produto,
+        data_pedido: pedido.data_pedido,
+        telefone: pedido.telefone
+      };
     }
-    
-    return { success: false, error: errorMessage };
   }
 
-  // Verificar se a mensagem foi realmente enviada
-  if (data.messages && data.messages.length > 0) {
-    return { success: true, data };
-  }
+  const payload = {
+    phone: normalizedPhone,
+    message: message,
+    image_url: media_url || null,
+    media_type: media_type || null,
+    caption: caption || null,
+    pedido: pedidoData,
+    instance_name: instance.nome,
+    timestamp: new Date().toISOString()
+  };
 
-  return { success: false, error: 'Resposta inesperada da API Oficial' };
+  console.log(`[Webhook] Enviando para: ${webhookUrl}`);
+  console.log(`[Webhook] Payload:`, JSON.stringify(payload, null, 2));
+
+  try {
+    const response = await fetch(webhookUrl, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        ...webhookHeaders
+      },
+      body: JSON.stringify(payload),
+    });
+
+    const responseText = await response.text();
+    let responseData;
+    try {
+      responseData = JSON.parse(responseText);
+    } catch {
+      responseData = { raw: responseText };
+    }
+
+    if (!response.ok) {
+      console.error(`[Webhook] Erro HTTP ${response.status}:`, responseData);
+      return { 
+        success: false, 
+        error: `Webhook retornou erro ${response.status}: ${responseText.substring(0, 100)}`
+      };
+    }
+
+    console.log(`[Webhook] Sucesso:`, responseData);
+    return { success: true, data: responseData };
+
+  } catch (error) {
+    console.error(`[Webhook] Erro de conexão:`, error);
+    const errorMsg = error instanceof Error ? error.message : String(error);
+    return { 
+      success: false, 
+      error: `Erro ao conectar com webhook: ${errorMsg}`
+    };
+  }
 };
 
 serve(async (req) => {
@@ -274,7 +231,7 @@ serve(async (req) => {
       );
     }
 
-    const { phone, message, instance_id, media_url, media_type, caption, template_name, template_params }: SendWhatsappRequest = await req.json();
+    const { phone, message, instance_id, media_url, media_type, caption, pedido_id }: SendWhatsappRequest = await req.json();
 
     // Normalizar telefone (adicionar 55 se necessário)
     const normalizedPhone = normalizePhone(phone);
@@ -329,18 +286,19 @@ serve(async (req) => {
 
         let result;
 
-        if (apiType === 'oficial') {
-          result = await sendViaOficial(
+        if (apiType === 'webhook') {
+          result = await sendViaWebhook(
             instance,
             normalizedPhone,
             message,
             media_url,
             media_type,
             caption,
-            template_name,
-            template_params
+            supabase,
+            pedido_id
           );
         } else {
+          // Evolution API (padrão)
           result = await sendViaEvolution(
             instance,
             normalizedPhone,
