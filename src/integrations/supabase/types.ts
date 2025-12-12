@@ -744,10 +744,13 @@ export type Database = {
           categoria: string
           created_at: string | null
           descricao: string | null
+          has_header_media: boolean | null
+          header_media_field: string | null
           id: string
           idioma: string
           is_active: boolean | null
           nome: string
+          status: string | null
           template_name: string
           updated_at: string | null
           variaveis: string[] | null
@@ -756,10 +759,13 @@ export type Database = {
           categoria?: string
           created_at?: string | null
           descricao?: string | null
+          has_header_media?: boolean | null
+          header_media_field?: string | null
           id?: string
           idioma?: string
           is_active?: boolean | null
           nome: string
+          status?: string | null
           template_name: string
           updated_at?: string | null
           variaveis?: string[] | null
@@ -768,10 +774,13 @@ export type Database = {
           categoria?: string
           created_at?: string | null
           descricao?: string | null
+          has_header_media?: boolean | null
+          header_media_field?: string | null
           id?: string
           idioma?: string
           is_active?: boolean | null
           nome?: string
+          status?: string | null
           template_name?: string
           updated_at?: string | null
           variaveis?: string[] | null
