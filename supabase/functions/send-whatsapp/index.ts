@@ -13,6 +13,8 @@ interface SendWhatsappRequest {
   media_url?: string;
   media_type?: 'image' | 'video' | 'document' | 'audio';
   caption?: string;
+  template_name?: string;
+  template_params?: string[];
 }
 
 /**
@@ -129,7 +131,9 @@ const sendViaOficial = async (
   message: string,
   media_url?: string,
   media_type?: string,
-  caption?: string
+  caption?: string,
+  template_name?: string,
+  template_params?: string[]
 ): Promise<{ success: boolean; data?: any; error?: string }> => {
   const phoneNumberId = instance.phone_number_id?.trim();
   const accessToken = instance.access_token?.trim();
@@ -145,8 +149,34 @@ const sendViaOficial = async (
 
   let requestBody: any;
 
+  // Se tem template, usar template
+  if (template_name) {
+    console.log(`[Oficial] Enviando template: ${template_name}`);
+    
+    requestBody = {
+      messaging_product: "whatsapp",
+      recipient_type: "individual",
+      to: normalizedPhone,
+      type: "template",
+      template: {
+        name: template_name,
+        language: {
+          code: "pt_BR"
+        },
+        components: template_params && template_params.length > 0 ? [
+          {
+            type: "body",
+            parameters: template_params.map(param => ({
+              type: "text",
+              text: param
+            }))
+          }
+        ] : undefined
+      }
+    };
+  }
   // Se tem mídia, enviar como mídia
-  if (media_url && media_type) {
+  else if (media_url && media_type) {
     console.log(`[Oficial] Enviando mídia: ${media_type} - ${media_url}`);
     
     const mediaTypeMap: Record<string, string> = {
@@ -244,7 +274,7 @@ serve(async (req) => {
       );
     }
 
-    const { phone, message, instance_id, media_url, media_type, caption }: SendWhatsappRequest = await req.json();
+    const { phone, message, instance_id, media_url, media_type, caption, template_name, template_params }: SendWhatsappRequest = await req.json();
 
     // Normalizar telefone (adicionar 55 se necessário)
     const normalizedPhone = normalizePhone(phone);
@@ -306,7 +336,9 @@ serve(async (req) => {
             message,
             media_url,
             media_type,
-            caption
+            caption,
+            template_name,
+            template_params
           );
         } else {
           result = await sendViaEvolution(
