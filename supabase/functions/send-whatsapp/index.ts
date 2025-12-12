@@ -32,6 +32,204 @@ const normalizePhone = (phone: string): string => {
   return `55${cleanPhone}`;
 };
 
+/**
+ * Envia mensagem via Evolution API
+ */
+const sendViaEvolution = async (
+  instance: any,
+  normalizedPhone: string,
+  message: string,
+  media_url?: string,
+  media_type?: string,
+  caption?: string
+): Promise<{ success: boolean; data?: any; error?: string }> => {
+  const apiUrl = instance.evolution_api_url?.trim();
+  const apiKey = instance.evolution_api_key?.trim();
+  const instanceName = instance.evolution_instance?.trim();
+
+  if (!apiUrl || !apiKey || !instanceName) {
+    return { 
+      success: false, 
+      error: `Instância "${instance.nome}" está com dados incompletos. Verifique URL, API Key e nome da instância.`
+    };
+  }
+
+  let response;
+  let data;
+
+  // Se tem mídia, enviar como mídia
+  if (media_url && media_type) {
+    console.log(`[Evolution] Enviando mídia: ${media_type} - ${media_url}`);
+    const mediaUrl = `${apiUrl}/message/sendMedia/${instanceName}`;
+    
+    response = await fetch(mediaUrl, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'apikey': apiKey,
+      },
+      body: JSON.stringify({
+        number: normalizedPhone,
+        mediatype: media_type,
+        media: media_url,
+        caption: caption || message,
+      }),
+    });
+
+    data = await response.json();
+  } else {
+    // Enviar como texto
+    console.log(`[Evolution] Enviando texto: ${message?.substring(0, 50)}...`);
+    const textUrl = `${apiUrl}/message/sendText/${instanceName}`;
+    
+    response = await fetch(textUrl, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'apikey': apiKey,
+      },
+      body: JSON.stringify({
+        number: normalizedPhone,
+        text: message,
+      }),
+    });
+
+    data = await response.json();
+  }
+
+  if (!response.ok) {
+    console.error(`[Evolution] Erro na instância ${instance.nome}:`, data);
+    
+    // Traduzir erros comuns
+    let errorMessage;
+    if (response.status === 401 || response.status === 403) {
+      errorMessage = `API Key inválida na instância "${instance.nome}". Verifique a chave de autenticação.`;
+    } else if (response.status === 404) {
+      errorMessage = `Instância "${instanceName}" não encontrada no servidor Evolution. Verifique se o nome está correto.`;
+    } else if (data?.message?.includes('not connected') || data?.message?.includes('disconnected')) {
+      errorMessage = `WhatsApp não conectado na instância "${instance.nome}". Escaneie o QR Code novamente.`;
+    } else if (data?.message?.includes('number') || data?.message?.includes('phone')) {
+      errorMessage = `Número de telefone inválido: ${normalizedPhone}. Verifique se está no formato correto (com DDD).`;
+    } else {
+      errorMessage = `Erro na instância "${instance.nome}": ${data?.message || 'Erro desconhecido'}`;
+    }
+    
+    return { success: false, error: errorMessage };
+  }
+
+  return { success: true, data };
+};
+
+/**
+ * Envia mensagem via API Oficial do WhatsApp (Meta)
+ */
+const sendViaOficial = async (
+  instance: any,
+  normalizedPhone: string,
+  message: string,
+  media_url?: string,
+  media_type?: string,
+  caption?: string
+): Promise<{ success: boolean; data?: any; error?: string }> => {
+  const phoneNumberId = instance.phone_number_id?.trim();
+  const accessToken = instance.access_token?.trim();
+
+  if (!phoneNumberId || !accessToken) {
+    return { 
+      success: false, 
+      error: `Instância "${instance.nome}" está com dados incompletos. Verifique Phone Number ID e Access Token.`
+    };
+  }
+
+  const apiUrl = `https://graph.facebook.com/v18.0/${phoneNumberId}/messages`;
+
+  let requestBody: any;
+
+  // Se tem mídia, enviar como mídia
+  if (media_url && media_type) {
+    console.log(`[Oficial] Enviando mídia: ${media_type} - ${media_url}`);
+    
+    const mediaTypeMap: Record<string, string> = {
+      'image': 'image',
+      'video': 'video',
+      'document': 'document'
+    };
+
+    requestBody = {
+      messaging_product: "whatsapp",
+      recipient_type: "individual",
+      to: normalizedPhone,
+      type: mediaTypeMap[media_type] || 'image',
+      [mediaTypeMap[media_type] || 'image']: {
+        link: media_url,
+        caption: caption || message
+      }
+    };
+  } else {
+    // Enviar como texto
+    console.log(`[Oficial] Enviando texto: ${message?.substring(0, 50)}...`);
+    
+    requestBody = {
+      messaging_product: "whatsapp",
+      recipient_type: "individual",
+      to: normalizedPhone,
+      type: "text",
+      text: {
+        preview_url: true,
+        body: message
+      }
+    };
+  }
+
+  const response = await fetch(apiUrl, {
+    method: 'POST',
+    headers: {
+      'Authorization': `Bearer ${accessToken}`,
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify(requestBody),
+  });
+
+  const data = await response.json();
+
+  if (!response.ok) {
+    console.error(`[Oficial] Erro na instância ${instance.nome}:`, data);
+    
+    // Traduzir erros comuns da API Oficial
+    let errorMessage = 'Erro ao enviar mensagem';
+    
+    if (data.error) {
+      const errorCode = data.error.code;
+      
+      switch (errorCode) {
+        case 190:
+          errorMessage = `Token de acesso inválido ou expirado na instância "${instance.nome}".`;
+          break;
+        case 100:
+          errorMessage = `Parâmetro inválido: ${data.error.message}`;
+          break;
+        case 131026:
+          errorMessage = 'Número não registrado no WhatsApp.';
+          break;
+        case 131047:
+          errorMessage = 'Limite de mensagens atingido. Aguarde antes de enviar novamente.';
+          break;
+        default:
+          errorMessage = `Erro na instância "${instance.nome}": ${data.error.message || 'Erro desconhecido'}`;
+      }
+    }
+    
+    return { success: false, error: errorMessage };
+  }
+
+  // Verificar se a mensagem foi realmente enviada
+  if (data.messages && data.messages.length > 0) {
+    return { success: true, data };
+  }
+
+  return { success: false, error: 'Resposta inesperada da API Oficial' };
+};
+
 serve(async (req) => {
   // Handle CORS preflight requests
   if (req.method === 'OPTIONS') {
@@ -93,119 +291,71 @@ serve(async (req) => {
     console.log(`Encontradas ${instances.length} instâncias ativas`);
 
     // Tentar enviar por cada instância até conseguir
-    let lastError: any = null;
-    let lastErrorMessage = '';
+    let lastError = '';
     for (const instance of instances) {
       try {
-        console.log(`Tentando enviar pela instância: ${instance.nome} (${instance.evolution_instance})`);
+        const apiType = instance.api_type || 'evolution';
+        console.log(`Tentando enviar pela instância: ${instance.nome} (tipo: ${apiType})`);
 
-        // Limpar espaços da URL e dados da instância
-        const apiUrl = instance.evolution_api_url?.trim();
-        const apiKey = instance.evolution_api_key?.trim();
-        const instanceName = instance.evolution_instance?.trim();
+        let result;
 
-        if (!apiUrl || !apiKey || !instanceName) {
-          console.error(`Instância ${instance.nome} com dados incompletos`);
-          lastErrorMessage = `Instância "${instance.nome}" está com dados incompletos. Verifique URL, API Key e nome da instância.`;
-          continue;
-        }
-
-        let response;
-        let data;
-
-        // Se tem mídia, enviar como mídia
-        if (media_url && media_type) {
-          console.log(`Enviando mídia: ${media_type} - ${media_url}`);
-          const mediaUrl = `${apiUrl}/message/sendMedia/${instanceName}`;
-          
-          response = await fetch(mediaUrl, {
-            method: 'POST',
-            headers: {
-              'Content-Type': 'application/json',
-              'apikey': apiKey,
-            },
-            body: JSON.stringify({
-              number: normalizedPhone,
-              mediatype: media_type,
-              media: media_url,
-              caption: caption || message,
-            }),
-          });
-
-          data = await response.json();
+        if (apiType === 'oficial') {
+          result = await sendViaOficial(
+            instance,
+            normalizedPhone,
+            message,
+            media_url,
+            media_type,
+            caption
+          );
         } else {
-          // Enviar como texto
-          console.log(`Enviando texto: ${message}`);
-          const textUrl = `${apiUrl}/message/sendText/${instanceName}`;
+          result = await sendViaEvolution(
+            instance,
+            normalizedPhone,
+            message,
+            media_url,
+            media_type,
+            caption
+          );
+        }
+
+        if (result.success) {
+          console.log(`Mensagem enviada com sucesso pela instância: ${instance.nome} (${apiType})`);
           
-          response = await fetch(textUrl, {
-            method: 'POST',
-            headers: {
-              'Content-Type': 'application/json',
-              'apikey': apiKey,
-            },
-            body: JSON.stringify({
-              number: normalizedPhone,
-              text: message,
+          return new Response(
+            JSON.stringify({ 
+              success: true, 
+              data: result.data,
+              instance_used: instance.nome,
+              api_type: apiType
             }),
-          });
-
-          data = await response.json();
+            { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+          );
         }
 
-        if (!response.ok) {
-          console.error(`Erro na instância ${instance.nome}:`, data);
-          lastError = data;
-          
-          // Traduzir erros comuns para mensagens mais claras
-          if (response.status === 401 || response.status === 403) {
-            lastErrorMessage = `API Key inválida na instância "${instance.nome}". Verifique a chave de autenticação.`;
-          } else if (response.status === 404) {
-            lastErrorMessage = `Instância "${instanceName}" não encontrada no servidor Evolution. Verifique se o nome está correto.`;
-          } else if (data?.message?.includes('not connected') || data?.message?.includes('disconnected')) {
-            lastErrorMessage = `WhatsApp não conectado na instância "${instance.nome}". Escaneie o QR Code novamente.`;
-          } else if (data?.message?.includes('number') || data?.message?.includes('phone')) {
-            lastErrorMessage = `Número de telefone inválido: ${normalizedPhone}. Verifique se está no formato correto (com DDD).`;
-          } else {
-            lastErrorMessage = `Erro na instância "${instance.nome}": ${data?.message || 'Erro desconhecido'}`;
-          }
-          continue;
-        }
-
-        console.log(`Mensagem enviada com sucesso pela instância: ${instance.nome}`);
-        
-        return new Response(
-          JSON.stringify({ 
-            success: true, 
-            data,
-            instance_used: instance.nome 
-          }),
-          { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-        );
+        lastError = result.error || 'Erro desconhecido';
+        console.log(`Falha na instância ${instance.nome}: ${lastError}`);
 
       } catch (error) {
         console.error(`Erro ao enviar pela instância ${instance.nome}:`, error);
-        lastError = error;
-        
-        // Traduzir erros de conexão
         const errorMsg = error instanceof Error ? error.message : String(error);
+        
         if (errorMsg.includes('Invalid URL')) {
-          lastErrorMessage = `URL inválida na instância "${instance.nome}". Verifique se a URL está correta e sem espaços.`;
+          lastError = `URL inválida na instância "${instance.nome}". Verifique se a URL está correta e sem espaços.`;
         } else if (errorMsg.includes('fetch') || errorMsg.includes('network') || errorMsg.includes('ECONNREFUSED')) {
-          lastErrorMessage = `Não foi possível conectar ao servidor Evolution da instância "${instance.nome}". Verifique se o servidor está online.`;
+          lastError = `Não foi possível conectar ao servidor da instância "${instance.nome}". Verifique se o servidor está online.`;
         } else {
-          lastErrorMessage = `Erro ao conectar com "${instance.nome}": ${errorMsg}`;
+          lastError = `Erro ao conectar com "${instance.nome}": ${errorMsg}`;
         }
-        continue;
       }
     }
 
     // Se chegou aqui, nenhuma instância conseguiu enviar
     return new Response(
       JSON.stringify({ 
-        error: lastErrorMessage || 'Não foi possível enviar a mensagem. Verifique as configurações das instâncias.',
-        message: lastErrorMessage || 'Falha ao enviar mensagem por todas as instâncias',
-        details: lastError 
+        error: lastError || 'Não foi possível enviar a mensagem. Verifique as configurações das instâncias.',
+        message: lastError || 'Falha ao enviar mensagem por todas as instâncias',
+        success: false
       }),
       { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
     );

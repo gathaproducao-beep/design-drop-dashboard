@@ -46,9 +46,13 @@ interface MensagemWhatsapp {
 interface WhatsappInstance {
   id: string;
   nome: string;
+  api_type: 'evolution' | 'oficial';
   evolution_api_url: string;
   evolution_api_key: string;
   evolution_instance: string;
+  phone_number_id?: string;
+  waba_id?: string;
+  access_token?: string;
   is_active: boolean;
   ordem: number;
 }
@@ -415,12 +419,12 @@ const ConfiguracoesWhatsapp = () => {
             <CardHeader>
               <div className="flex items-center justify-between">
                 <div>
-                  <CardTitle className="flex items-center gap-2">
+                <CardTitle className="flex items-center gap-2">
                     <Settings className="h-5 w-5" />
-                    Instâncias Evolution API
+                    Instâncias WhatsApp
                   </CardTitle>
                   <CardDescription>
-                    Configure múltiplas instâncias para envio com fallback automático
+                    Configure múltiplas instâncias (Evolution API ou API Oficial Meta) para envio com fallback automático
                   </CardDescription>
                 </div>
                 <div className="flex gap-2">
@@ -563,14 +567,23 @@ const ConfiguracoesWhatsapp = () => {
                           <div>
                             <div className="flex items-center gap-2 flex-wrap">
                               <p className="font-medium">{inst.nome}</p>
-                              <Badge variant={inst.is_active ? "default" : "secondary"}>
+                              <Badge 
+                                variant={inst.api_type === 'oficial' ? 'default' : 'secondary'}
+                                className={inst.api_type === 'oficial' ? 'bg-blue-600 hover:bg-blue-700' : ''}
+                              >
+                                {inst.api_type === 'oficial' ? 'API Oficial' : 'Evolution'}
+                              </Badge>
+                              <Badge variant={inst.is_active ? "outline" : "secondary"}>
                                 {inst.is_active ? "Ativa" : "Inativa"}
                               </Badge>
                               {getConnectionBadge()}
                               <Badge variant="outline">Ordem: {inst.ordem}</Badge>
                             </div>
                             <p className="text-sm text-muted-foreground mt-1">
-                              {inst.evolution_instance}
+                              {inst.api_type === 'oficial' 
+                                ? `Phone ID: ${inst.phone_number_id || '-'}`
+                                : inst.evolution_instance
+                              }
                             </p>
                           </div>
                         </div>

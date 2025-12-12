@@ -54,63 +54,125 @@ serve(async (req) => {
 
     for (const instance of instances) {
       try {
-        const apiUrl = instance.evolution_api_url?.trim();
-        const apiKey = instance.evolution_api_key?.trim();
-        const instanceName = instance.evolution_instance?.trim();
+        const apiType = instance.api_type || 'evolution';
 
-        if (!apiUrl || !apiKey || !instanceName) {
+        // Verificar API Oficial
+        if (apiType === 'oficial') {
+          const phoneNumberId = instance.phone_number_id?.trim();
+          const accessToken = instance.access_token?.trim();
+
+          if (!phoneNumberId || !accessToken) {
+            statuses.push({
+              id: instance.id,
+              nome: instance.nome,
+              status: 'error',
+              message: 'Dados incompletos (Phone ID ou Token)',
+            });
+            continue;
+          }
+
+          // Para API Oficial, verificamos fazendo uma chamada simples para obter informações do número
+          const statusUrl = `https://graph.facebook.com/v18.0/${phoneNumberId}`;
+          console.log(`Verificando ${instance.nome} (Oficial): ${statusUrl}`);
+
+          const response = await fetch(statusUrl, {
+            method: 'GET',
+            headers: {
+              'Authorization': `Bearer ${accessToken}`,
+            },
+          });
+
+          if (!response.ok) {
+            const errorData = await response.json();
+            console.error(`Erro ao verificar ${instance.nome}:`, errorData);
+            
+            let errorMessage = `HTTP ${response.status}`;
+            if (errorData?.error?.code === 190) {
+              errorMessage = 'Token inválido ou expirado';
+            } else if (errorData?.error?.message) {
+              errorMessage = errorData.error.message;
+            }
+            
+            statuses.push({
+              id: instance.id,
+              nome: instance.nome,
+              status: 'error',
+              message: errorMessage,
+            });
+            continue;
+          }
+
+          const data = await response.json();
+          console.log(`Status ${instance.nome} (Oficial):`, data);
+
+          // Se conseguiu obter informações, está conectado
           statuses.push({
             id: instance.id,
             nome: instance.nome,
-            status: 'error',
-            message: 'Dados incompletos',
+            status: 'connected',
+            message: data?.verified_name || 'API Oficial',
           });
-          continue;
-        }
 
-        // Consultar status de conexão na Evolution API
-        const statusUrl = `${apiUrl}/instance/connectionState/${instanceName}`;
-        console.log(`Verificando ${instance.nome}: ${statusUrl}`);
+        } else {
+          // Verificar Evolution API
+          const apiUrl = instance.evolution_api_url?.trim();
+          const apiKey = instance.evolution_api_key?.trim();
+          const instanceName = instance.evolution_instance?.trim();
 
-        const response = await fetch(statusUrl, {
-          method: 'GET',
-          headers: {
-            'apikey': apiKey,
-          },
-        });
+          if (!apiUrl || !apiKey || !instanceName) {
+            statuses.push({
+              id: instance.id,
+              nome: instance.nome,
+              status: 'error',
+              message: 'Dados incompletos',
+            });
+            continue;
+          }
 
-        if (!response.ok) {
-          const errorData = await response.text();
-          console.error(`Erro ao verificar ${instance.nome}:`, errorData);
+          // Consultar status de conexão na Evolution API
+          const statusUrl = `${apiUrl}/instance/connectionState/${instanceName}`;
+          console.log(`Verificando ${instance.nome} (Evolution): ${statusUrl}`);
+
+          const response = await fetch(statusUrl, {
+            method: 'GET',
+            headers: {
+              'apikey': apiKey,
+            },
+          });
+
+          if (!response.ok) {
+            const errorData = await response.text();
+            console.error(`Erro ao verificar ${instance.nome}:`, errorData);
+            statuses.push({
+              id: instance.id,
+              nome: instance.nome,
+              status: 'error',
+              message: `HTTP ${response.status}`,
+            });
+            continue;
+          }
+
+          const data = await response.json();
+          console.log(`Status ${instance.nome}:`, data);
+
+          // A Evolution API retorna { instance: "xxx", state: "open" | "close" | "connecting" }
+          let status: 'connected' | 'disconnected' | 'connecting' | 'error' = 'disconnected';
+          
+          if (data?.state === 'open' || data?.instance?.state === 'open') {
+            status = 'connected';
+          } else if (data?.state === 'connecting' || data?.instance?.state === 'connecting') {
+            status = 'connecting';
+          } else if (data?.state === 'close' || data?.instance?.state === 'close') {
+            status = 'disconnected';
+          }
+
           statuses.push({
             id: instance.id,
             nome: instance.nome,
-            status: 'error',
-            message: `HTTP ${response.status}`,
+            status,
+            message: data?.state || data?.instance?.state,
           });
-          continue;
         }
-
-        const data = await response.json();
-        console.log(`Status ${instance.nome}:`, data);
-
-        // A Evolution API retorna { instance: "xxx", state: "open" | "close" | "connecting" }
-        let status: 'connected' | 'disconnected' | 'connecting' | 'error' = 'disconnected';
-        
-        if (data?.state === 'open' || data?.instance?.state === 'open') {
-          status = 'connected';
-        } else if (data?.state === 'connecting' || data?.instance?.state === 'connecting') {
-          status = 'connecting';
-        } else if (data?.state === 'close' || data?.instance?.state === 'close') {
-          status = 'disconnected';
-        }
-
-        statuses.push({
-          id: instance.id,
-          nome: instance.nome,
-          status,
-          message: data?.state || data?.instance?.state,
-        });
 
       } catch (error) {
         console.error(`Erro ao verificar instância ${instance.nome}:`, error);
