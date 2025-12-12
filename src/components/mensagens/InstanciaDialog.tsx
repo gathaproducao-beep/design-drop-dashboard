@@ -8,7 +8,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
-import { AlertCircle, Webhook } from "lucide-react";
+import { AlertCircle, Webhook, Send, Loader2 } from "lucide-react";
 
 interface InstanciaDialogProps {
   open: boolean;
@@ -37,6 +37,7 @@ export const InstanciaDialog = ({ open, onOpenChange, instancia, onSuccess }: In
   const [isActive, setIsActive] = useState(instancia?.is_active ?? true);
   const [ordem, setOrdem] = useState(instancia?.ordem || 0);
   const [isLoading, setIsLoading] = useState(false);
+  const [isTesting, setIsTesting] = useState(false);
 
   useEffect(() => {
     if (open) {
@@ -147,6 +148,67 @@ export const InstanciaDialog = ({ open, onOpenChange, instancia, onSuccess }: In
       toast.error("Erro ao salvar instância: " + error.message);
     } finally {
       setIsLoading(false);
+    }
+  };
+
+  const handleTestWebhook = async () => {
+    if (!webhookUrl.trim()) {
+      toast.error("URL do Webhook é obrigatória para teste");
+      return;
+    }
+
+    setIsTesting(true);
+    
+    try {
+      const testPayload = {
+        phone: "5511999999999",
+        message: "Mensagem de teste do sistema",
+        image_url: "https://exemplo.com/imagem-teste.jpg",
+        media_type: "image",
+        caption: "Legenda da imagem de teste",
+        pedido: {
+          numero_pedido: "TESTE-001",
+          nome_cliente: "Cliente Teste",
+          codigo_produto: "PRODUTO-TESTE",
+          data_pedido: new Date().toISOString().split('T')[0]
+        },
+        instance_name: nome || "Instância Teste",
+        timestamp: new Date().toISOString(),
+        is_test: true
+      };
+
+      let headers: Record<string, string> = {
+        'Content-Type': 'application/json'
+      };
+
+      if (webhookHeaders.trim()) {
+        try {
+          const customHeaders = JSON.parse(webhookHeaders);
+          headers = { ...headers, ...customHeaders };
+        } catch (e) {
+          toast.error("Headers customizados inválidos");
+          setIsTesting(false);
+          return;
+        }
+      }
+
+      const response = await fetch(webhookUrl.trim(), {
+        method: 'POST',
+        headers,
+        body: JSON.stringify(testPayload)
+      });
+
+      if (response.ok) {
+        toast.success("Webhook testado com sucesso! Verifique sua ferramenta externa.");
+      } else {
+        const errorText = await response.text();
+        toast.error(`Erro no webhook: ${response.status} - ${errorText.substring(0, 100)}`);
+      }
+    } catch (error: any) {
+      console.error("Erro ao testar webhook:", error);
+      toast.error("Erro ao testar webhook: " + (error.message || "Verifique a URL"));
+    } finally {
+      setIsTesting(false);
     }
   };
 
@@ -293,6 +355,25 @@ export const InstanciaDialog = ({ open, onOpenChange, instancia, onSuccess }: In
 }`}
                 </pre>
               </div>
+
+              <Button 
+                variant="outline" 
+                onClick={handleTestWebhook} 
+                disabled={isTesting || !webhookUrl.trim()}
+                className="w-full"
+              >
+                {isTesting ? (
+                  <>
+                    <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                    Testando...
+                  </>
+                ) : (
+                  <>
+                    <Send className="h-4 w-4 mr-2" />
+                    Testar Webhook
+                  </>
+                )}
+              </Button>
             </>
           )}
 
