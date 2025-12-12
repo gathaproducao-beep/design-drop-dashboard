@@ -16,9 +16,13 @@ const getRandomDelay = (min: number, max: number): number => {
 interface WhatsappInstance {
   id: string;
   nome: string;
+  api_type: 'evolution' | 'oficial';
   evolution_api_url: string;
   evolution_api_key: string;
   evolution_instance: string;
+  phone_number_id?: string;
+  waba_id?: string;
+  access_token?: string;
   is_active: boolean;
   ordem: number;
 }

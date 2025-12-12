@@ -570,6 +570,8 @@ export type Database = {
       }
       whatsapp_instances: {
         Row: {
+          access_token: string | null
+          api_type: string
           created_at: string | null
           evolution_api_key: string
           evolution_api_url: string
@@ -578,9 +580,13 @@ export type Database = {
           is_active: boolean | null
           nome: string
           ordem: number | null
+          phone_number_id: string | null
           updated_at: string | null
+          waba_id: string | null
         }
         Insert: {
+          access_token?: string | null
+          api_type?: string
           created_at?: string | null
           evolution_api_key: string
           evolution_api_url: string
@@ -589,9 +595,13 @@ export type Database = {
           is_active?: boolean | null
           nome: string
           ordem?: number | null
+          phone_number_id?: string | null
           updated_at?: string | null
+          waba_id?: string | null
         }
         Update: {
+          access_token?: string | null
+          api_type?: string
           created_at?: string | null
           evolution_api_key?: string
           evolution_api_url?: string
@@ -600,7 +610,9 @@ export type Database = {
           is_active?: boolean | null
           nome?: string
           ordem?: number | null
+          phone_number_id?: string | null
           updated_at?: string | null
+          waba_id?: string | null
         }
         Relationships: []
       }
