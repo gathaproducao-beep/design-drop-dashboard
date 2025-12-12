@@ -9,6 +9,8 @@ import { Plus, Pencil, Trash2, Loader2 } from "lucide-react";
 import { toast } from "sonner";
 import NovoUsuarioDialog from "./NovoUsuarioDialog";
 import EditarUsuarioDialog from "./EditarUsuarioDialog";
+import { PermissionGate } from "@/components/PermissionGate";
+import { usePermissions } from "@/hooks/usePermissions";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -26,6 +28,10 @@ const UsuariosTable = () => {
   const [editarDialogOpen, setEditarDialogOpen] = useState(false);
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
   const [selectedUser, setSelectedUser] = useState<any>(null);
+  const { permissions, isAdmin } = usePermissions();
+
+  const canEdit = isAdmin || permissions.includes("editar_usuario");
+  const canDelete = isAdmin || permissions.includes("deletar_usuario");
 
   // Buscar usuários com seus perfis
   const { data: usuarios, isLoading } = useQuery({
@@ -110,6 +116,10 @@ const UsuariosTable = () => {
   });
 
   const handleToggleStatus = (userId: string, currentStatus: boolean) => {
+    if (!canEdit) {
+      toast.error("Você não tem permissão para editar usuários");
+      return;
+    }
     toggleStatusMutation.mutate({ userId, isActive: !currentStatus });
   };
 
@@ -143,10 +153,12 @@ const UsuariosTable = () => {
         <p className="text-sm text-muted-foreground">
           {usuarios?.length || 0} usuário(s) cadastrado(s)
         </p>
-        <Button onClick={() => setNovoDialogOpen(true)} className="gap-2">
-          <Plus className="h-4 w-4" />
-          Novo Usuário
-        </Button>
+        <PermissionGate permission="criar_usuario">
+          <Button onClick={() => setNovoDialogOpen(true)} className="gap-2">
+            <Plus className="h-4 w-4" />
+            Novo Usuário
+          </Button>
+        </PermissionGate>
       </div>
 
       <div className="border rounded-lg">
@@ -158,7 +170,7 @@ const UsuariosTable = () => {
               <TableHead>WhatsApp</TableHead>
               <TableHead>Perfis</TableHead>
               <TableHead>Status</TableHead>
-              <TableHead className="text-right">Ações</TableHead>
+              {(canEdit || canDelete) && <TableHead className="text-right">Ações</TableHead>}
             </TableRow>
           </TableHeader>
           <TableBody>
@@ -180,26 +192,33 @@ const UsuariosTable = () => {
                   <Switch
                     checked={user.is_active}
                     onCheckedChange={() => handleToggleStatus(user.id, user.is_active)}
+                    disabled={!canEdit}
                   />
                 </TableCell>
-                <TableCell className="text-right">
-                  <div className="flex justify-end gap-2">
-                    <Button
-                      variant="ghost"
-                      size="icon"
-                      onClick={() => handleEdit(user)}
-                    >
-                      <Pencil className="h-4 w-4" />
-                    </Button>
-                    <Button
-                      variant="ghost"
-                      size="icon"
-                      onClick={() => handleDelete(user)}
-                    >
-                      <Trash2 className="h-4 w-4 text-destructive" />
-                    </Button>
-                  </div>
-                </TableCell>
+                {(canEdit || canDelete) && (
+                  <TableCell className="text-right">
+                    <div className="flex justify-end gap-2">
+                      {canEdit && (
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          onClick={() => handleEdit(user)}
+                        >
+                          <Pencil className="h-4 w-4" />
+                        </Button>
+                      )}
+                      {canDelete && (
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          onClick={() => handleDelete(user)}
+                        >
+                          <Trash2 className="h-4 w-4 text-destructive" />
+                        </Button>
+                      )}
+                    </div>
+                  </TableCell>
+                )}
               </TableRow>
             ))}
           </TableBody>

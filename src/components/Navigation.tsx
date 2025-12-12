@@ -1,26 +1,43 @@
 import { Link, useLocation, useNavigate } from "react-router-dom";
-import { LayoutDashboard, Image, MessageSquare, Settings, Users, LogOut, Layers, Cloud } from "lucide-react";
+import { LayoutDashboard, Image, MessageSquare, Settings, Users, LogOut, Layers, Cloud, Loader2 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import { logout } from "@/lib/auth";
 import { toast } from "sonner";
 import { useState } from "react";
+import { usePermissions } from "@/hooks/usePermissions";
+
+interface NavLink {
+  to: string;
+  icon: typeof LayoutDashboard;
+  label: string;
+  permission?: string;
+}
 
 export function Navigation() {
   const location = useLocation();
   const navigate = useNavigate();
   const [isLoggingOut, setIsLoggingOut] = useState(false);
+  const { permissions, isAdmin, isLoading } = usePermissions();
 
-  const links = [
-    { to: "/", icon: LayoutDashboard, label: "Pedidos" },
-    { to: "/mockups", icon: Image, label: "Mockups" },
-    { to: "/templates", icon: Layers, label: "Templates" },
-    { to: "/mensagens", icon: MessageSquare, label: "Mensagens" },
-    { to: "/fila-whatsapp", icon: MessageSquare, label: "Fila de Envios" },
-    { to: "/configuracoes-whatsapp", icon: Settings, label: "Configurações" },
-    { to: "/configuracoes-drive", icon: Cloud, label: "Google Drive" },
-    { to: "/gestao-usuarios", icon: Users, label: "Usuários" },
+  const allLinks: NavLink[] = [
+    { to: "/", icon: LayoutDashboard, label: "Pedidos", permission: "visualizar_pedidos" },
+    { to: "/mockups", icon: Image, label: "Mockups", permission: "visualizar_mockups" },
+    { to: "/templates", icon: Layers, label: "Templates", permission: "visualizar_mockups" },
+    { to: "/mensagens", icon: MessageSquare, label: "Mensagens", permission: "visualizar_mensagens" },
+    { to: "/fila-whatsapp", icon: MessageSquare, label: "Fila de Envios", permission: "visualizar_fila" },
+    { to: "/configuracoes-whatsapp", icon: Settings, label: "Configurações", permission: "visualizar_configuracoes" },
+    { to: "/configuracoes-drive", icon: Cloud, label: "Google Drive", permission: "editar_configuracoes" },
+    { to: "/gestao-usuarios", icon: Users, label: "Usuários", permission: "visualizar_usuarios" },
   ];
+
+  const hasPermission = (permissionCode?: string): boolean => {
+    if (!permissionCode) return true;
+    if (isAdmin) return true;
+    return permissions.includes(permissionCode);
+  };
+
+  const visibleLinks = allLinks.filter(link => hasPermission(link.permission));
 
   const handleLogout = async () => {
     setIsLoggingOut(true);
@@ -47,25 +64,32 @@ export function Navigation() {
               <span className="font-bold text-xl">Mockup Manager</span>
             </Link>
             <div className="flex gap-1">
-              {links.map((link) => {
-                const Icon = link.icon;
-                const isActive = location.pathname === link.to;
-                return (
-                  <Link
-                    key={link.to}
-                    to={link.to}
-                    className={cn(
-                      "flex items-center gap-2 px-4 py-2 rounded-lg transition-all",
-                      isActive
-                        ? "bg-primary text-primary-foreground shadow-sm"
-                        : "text-muted-foreground hover:bg-muted hover:text-foreground"
-                    )}
-                  >
-                    <Icon className="h-4 w-4" />
-                    {link.label}
-                  </Link>
-                );
-              })}
+              {isLoading ? (
+                <div className="flex items-center gap-2 px-4 py-2 text-muted-foreground">
+                  <Loader2 className="h-4 w-4 animate-spin" />
+                  Carregando...
+                </div>
+              ) : (
+                visibleLinks.map((link) => {
+                  const Icon = link.icon;
+                  const isActive = location.pathname === link.to;
+                  return (
+                    <Link
+                      key={link.to}
+                      to={link.to}
+                      className={cn(
+                        "flex items-center gap-2 px-4 py-2 rounded-lg transition-all",
+                        isActive
+                          ? "bg-primary text-primary-foreground shadow-sm"
+                          : "text-muted-foreground hover:bg-muted hover:text-foreground"
+                      )}
+                    >
+                      <Icon className="h-4 w-4" />
+                      {link.label}
+                    </Link>
+                  );
+                })
+              )}
             </div>
           </div>
           

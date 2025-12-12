@@ -8,6 +8,8 @@ import { Plus, Pencil, Trash2, Loader2, Shield } from "lucide-react";
 import { toast } from "sonner";
 import NovoPerfilDialog from "./NovoPerfilDialog";
 import EditarPerfilDialog from "./EditarPerfilDialog";
+import { PermissionGate } from "@/components/PermissionGate";
+import { usePermissions } from "@/hooks/usePermissions";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -26,6 +28,10 @@ const PerfisTable = () => {
   const [selectedPerfil, setSelectedPerfil] = useState<any>(null);
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
   const [perfilToDelete, setPerfilToDelete] = useState<any>(null);
+  const { permissions, isAdmin } = usePermissions();
+
+  const canEdit = isAdmin || permissions.includes("editar_perfil");
+  const canDelete = isAdmin || permissions.includes("deletar_perfil");
 
   // Buscar perfis com contagem de permissões
   const { data: perfis, isLoading } = useQuery({
@@ -111,10 +117,12 @@ const PerfisTable = () => {
         <p className="text-sm text-muted-foreground">
           {perfis?.length || 0} perfil(is) cadastrado(s)
         </p>
-        <Button onClick={() => setNovoDialogOpen(true)} className="gap-2">
-          <Plus className="h-4 w-4" />
-          Novo Perfil
-        </Button>
+        <PermissionGate permission="criar_perfil">
+          <Button onClick={() => setNovoDialogOpen(true)} className="gap-2">
+            <Plus className="h-4 w-4" />
+            Novo Perfil
+          </Button>
+        </PermissionGate>
       </div>
 
       <div className="border rounded-lg">
@@ -125,7 +133,7 @@ const PerfisTable = () => {
               <TableHead>Código</TableHead>
               <TableHead>Descrição</TableHead>
               <TableHead>Permissões</TableHead>
-              <TableHead className="text-right">Ações</TableHead>
+              {(canEdit || canDelete) && <TableHead className="text-right">Ações</TableHead>}
             </TableRow>
           </TableHeader>
           <TableBody>
@@ -153,26 +161,32 @@ const PerfisTable = () => {
                     {perfil.profile_permissions?.length || 0} permissões
                   </Badge>
                 </TableCell>
-                <TableCell className="text-right">
-                  <div className="flex justify-end gap-2">
-                    <Button
-                      variant="ghost"
-                      size="icon"
-                      onClick={() => handleEdit(perfil)}
-                      disabled={perfil.is_system}
-                    >
-                      <Pencil className="h-4 w-4" />
-                    </Button>
-                    <Button
-                      variant="ghost"
-                      size="icon"
-                      onClick={() => handleDelete(perfil)}
-                      disabled={perfil.is_system}
-                    >
-                      <Trash2 className="h-4 w-4 text-destructive" />
-                    </Button>
-                  </div>
-                </TableCell>
+                {(canEdit || canDelete) && (
+                  <TableCell className="text-right">
+                    <div className="flex justify-end gap-2">
+                      {canEdit && (
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          onClick={() => handleEdit(perfil)}
+                          disabled={perfil.is_system}
+                        >
+                          <Pencil className="h-4 w-4" />
+                        </Button>
+                      )}
+                      {canDelete && (
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          onClick={() => handleDelete(perfil)}
+                          disabled={perfil.is_system}
+                        >
+                          <Trash2 className="h-4 w-4 text-destructive" />
+                        </Button>
+                      )}
+                    </div>
+                  </TableCell>
+                )}
               </TableRow>
             ))}
           </TableBody>
