@@ -48,6 +48,7 @@ const VALORES_LAYOUT = [
   { value: "pendente", label: "Pendente" },
   { value: "aprovado", label: "Aprovado" },
   { value: "reprovado", label: "Reprovado" },
+  { value: "fazer_manual", label: "Fazer Manual" },
 ];
 
 export function AtualizarLoteDialog({

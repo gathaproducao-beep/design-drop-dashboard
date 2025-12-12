@@ -563,6 +563,7 @@ export function PedidosTable({
     if (value === "enviada" || value === "aprovado") return "default";
     if (value === "erro" || value === "reprovado") return "destructive";
     if (value === "enviando") return "outline";
+    if (value === "fazer_manual") return "outline";
     return "secondary";
   };
 
@@ -703,7 +704,7 @@ export function PedidosTable({
                   <EditableCell
                     value={pedido.layout_aprovado}
                     type="select"
-                    options={["aprovado", "reprovado", "pendente"]}
+                    options={["aprovado", "reprovado", "pendente", "fazer_manual"]}
                     onSave={(value) => handleUpdateField(pedido.id, "layout_aprovado", value)}
                     renderValue={(value) => (
                       <Badge variant={getBadgeVariant(value)}>{value}</Badge>
