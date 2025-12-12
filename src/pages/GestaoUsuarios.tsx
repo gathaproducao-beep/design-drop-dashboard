@@ -5,9 +5,13 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Users, Shield } from "lucide-react";
 import UsuariosTable from "@/components/usuarios/UsuariosTable";
 import PerfisTable from "@/components/perfis/PerfisTable";
+import { usePermissions } from "@/hooks/usePermissions";
 
 const GestaoUsuarios = () => {
   const [activeTab, setActiveTab] = useState("usuarios");
+  const { permissions, isAdmin } = usePermissions();
+
+  const canViewPerfis = isAdmin || permissions.includes("visualizar_perfis");
 
   return (
     <div className="min-h-screen bg-background">
@@ -23,15 +27,17 @@ const GestaoUsuarios = () => {
         </div>
 
         <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
-          <TabsList className="grid w-full max-w-md grid-cols-2 mb-8">
+          <TabsList className={`grid w-full max-w-md mb-8 ${canViewPerfis ? 'grid-cols-2' : 'grid-cols-1'}`}>
             <TabsTrigger value="usuarios" className="gap-2">
               <Users className="h-4 w-4" />
               Usuários
             </TabsTrigger>
-            <TabsTrigger value="perfis" className="gap-2">
-              <Shield className="h-4 w-4" />
-              Perfis de Acesso
-            </TabsTrigger>
+            {canViewPerfis && (
+              <TabsTrigger value="perfis" className="gap-2">
+                <Shield className="h-4 w-4" />
+                Perfis de Acesso
+              </TabsTrigger>
+            )}
           </TabsList>
 
           <TabsContent value="usuarios">
@@ -48,19 +54,21 @@ const GestaoUsuarios = () => {
             </Card>
           </TabsContent>
 
-          <TabsContent value="perfis">
-            <Card>
-              <CardHeader>
-                <CardTitle>Perfis de Acesso</CardTitle>
-                <CardDescription>
-                  Configure os perfis e suas permissões no sistema
-                </CardDescription>
-              </CardHeader>
-              <CardContent>
-                <PerfisTable />
-              </CardContent>
-            </Card>
-          </TabsContent>
+          {canViewPerfis && (
+            <TabsContent value="perfis">
+              <Card>
+                <CardHeader>
+                  <CardTitle>Perfis de Acesso</CardTitle>
+                  <CardDescription>
+                    Configure os perfis e suas permissões no sistema
+                  </CardDescription>
+                </CardHeader>
+                <CardContent>
+                  <PerfisTable />
+                </CardContent>
+              </Card>
+            </TabsContent>
+          )}
         </Tabs>
       </main>
     </div>

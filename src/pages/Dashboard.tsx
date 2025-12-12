@@ -12,6 +12,7 @@ import { ImportarFotosDialog } from "@/components/pedidos/ImportarFotosDialog";
 import { Navigation } from "@/components/Navigation";
 import { StorageCleanupDialog } from "@/components/drive/StorageCleanupDialog";
 import { Checkbox } from "@/components/ui/checkbox";
+import { PermissionGate } from "@/components/PermissionGate";
 import { getDataBrasilia } from "@/lib/utils";
 import { useMockupQueue } from "@/hooks/useMockupQueue";
 import { Badge } from "@/components/ui/badge";
@@ -435,22 +436,26 @@ export default function Dashboard() {
                       Arquivar ({selectedIds.size})
                     </Button>
                   )}
-                  <Button
-                    variant="destructive"
-                    onClick={handleExcluirSelecionados}
-                  >
-                    <Trash2 className="mr-2 h-4 w-4" />
-                    Excluir selecionados ({selectedIds.size})
-                  </Button>
+                  <PermissionGate permission="deletar_pedido">
+                    <Button
+                      variant="destructive"
+                      onClick={handleExcluirSelecionados}
+                    >
+                      <Trash2 className="mr-2 h-4 w-4" />
+                      Excluir selecionados ({selectedIds.size})
+                    </Button>
+                  </PermissionGate>
                 </>
               )}
-              <Button
-                onClick={() => setNovoPedidoOpen(true)}
-                className="bg-gradient-to-r from-primary to-primary/80 hover:shadow-lg transition-all"
-              >
-                <Plus className="mr-2 h-4 w-4" />
-                Novo Pedido
-              </Button>
+              <PermissionGate permission="criar_pedido">
+                <Button
+                  onClick={() => setNovoPedidoOpen(true)}
+                  className="bg-gradient-to-r from-primary to-primary/80 hover:shadow-lg transition-all"
+                >
+                  <Plus className="mr-2 h-4 w-4" />
+                  Novo Pedido
+                </Button>
+              </PermissionGate>
             </div>
           </div>
 
@@ -496,22 +501,26 @@ export default function Dashboard() {
             </div>
             <div className="flex gap-2">
               <StorageCleanupDialog />
-              <Button
-                onClick={handleImportarFotos}
-                variant="outline"
-                size="sm"
-              >
-                <Upload className="mr-2 h-4 w-4" />
-                Importar Fotos
-              </Button>
-              <Button
-                onClick={handleImportarPedidos}
-                variant="outline"
-                size="sm"
-              >
-                <FileSpreadsheet className="mr-2 h-4 w-4" />
-                Importar Pedidos
-              </Button>
+              <PermissionGate permission="importar_fotos">
+                <Button
+                  onClick={handleImportarFotos}
+                  variant="outline"
+                  size="sm"
+                >
+                  <Upload className="mr-2 h-4 w-4" />
+                  Importar Fotos
+                </Button>
+              </PermissionGate>
+              <PermissionGate permission="importar_pedidos">
+                <Button
+                  onClick={handleImportarPedidos}
+                  variant="outline"
+                  size="sm"
+                >
+                  <FileSpreadsheet className="mr-2 h-4 w-4" />
+                  Importar Pedidos
+                </Button>
+              </PermissionGate>
             </div>
           </div>
 
