@@ -15,28 +15,22 @@ interface SendWhatsappOficialRequest {
   media_url?: string;
   media_type?: 'image' | 'video' | 'document';
   caption?: string;
+  header_image_url?: string; // Nova: imagem de cabeçalho do template
 }
 
 /**
  * Normaliza número de telefone para formato internacional
- * Remove caracteres não numéricos e garante formato correto
  */
 const normalizePhone = (phone: string): string => {
   if (!phone) return '';
-  
   const cleanPhone = phone.replace(/\D/g, '');
-  
-  // Se já começa com 55, retornar
   if (cleanPhone.startsWith('55')) {
     return cleanPhone;
   }
-  
-  // Adicionar código do país 55
   return `55${cleanPhone}`;
 };
 
 serve(async (req) => {
-  // Handle CORS preflight requests
   if (req.method === 'OPTIONS') {
     return new Response(null, { headers: corsHeaders });
   }
@@ -58,17 +52,18 @@ serve(async (req) => {
       template_params,
       media_url,
       media_type,
-      caption
+      caption,
+      header_image_url
     }: SendWhatsappOficialRequest = await req.json();
 
-    // Normalizar telefone
     const normalizedPhone = normalizePhone(phone);
 
     console.log('Enviando via API Oficial do WhatsApp:', { 
       phone: normalizedPhone,
       phone_number_id,
       hasTemplate: !!template_name,
-      hasMedia: !!media_url
+      hasMedia: !!media_url,
+      hasHeaderImage: !!header_image_url
     });
 
     if (!phone || !phone_number_id || !access_token) {
@@ -84,6 +79,34 @@ serve(async (req) => {
 
     // Se tem template, usar template
     if (template_name) {
+      const components: any[] = [];
+
+      // Se tem imagem de cabeçalho, adicionar componente header
+      if (header_image_url) {
+        components.push({
+          type: "header",
+          parameters: [
+            {
+              type: "image",
+              image: {
+                link: header_image_url
+              }
+            }
+          ]
+        });
+      }
+
+      // Se tem parâmetros de texto, adicionar componente body
+      if (template_params && template_params.length > 0) {
+        components.push({
+          type: "body",
+          parameters: template_params.map(param => ({
+            type: "text",
+            text: param
+          }))
+        });
+      }
+
       requestBody = {
         messaging_product: "whatsapp",
         recipient_type: "individual",
@@ -94,19 +117,11 @@ serve(async (req) => {
           language: {
             code: "pt_BR"
           },
-          components: template_params && template_params.length > 0 ? [
-            {
-              type: "body",
-              parameters: template_params.map(param => ({
-                type: "text",
-                text: param
-              }))
-            }
-          ] : undefined
+          components: components.length > 0 ? components : undefined
         }
       };
     } 
-    // Se tem mídia, enviar como mídia
+    // Se tem mídia (sem template), enviar como mídia
     else if (media_url && media_type) {
       const mediaTypeMap: Record<string, string> = {
         'image': 'image',
@@ -162,7 +177,6 @@ serve(async (req) => {
     if (!response.ok) {
       console.error('Erro na API Oficial:', data);
       
-      // Traduzir erros comuns
       let errorMessage = 'Erro ao enviar mensagem';
       
       if (data.error) {
@@ -198,6 +212,15 @@ serve(async (req) => {
           case 132000:
             errorMessage = 'Número de parâmetros do template incorreto.';
             break;
+          case 132001:
+            errorMessage = 'Parâmetro de template com formato inválido.';
+            break;
+          case 132005:
+            errorMessage = 'Tipo de parâmetro de template incorreto (ex: falta imagem no header).';
+            break;
+          case 132012:
+            errorMessage = 'Número de componentes do template incorreto.';
+            break;
           case 132015:
             errorMessage = 'Template não encontrado.';
             break;
@@ -218,7 +241,6 @@ serve(async (req) => {
 
     console.log('Mensagem enviada com sucesso via API Oficial:', data);
 
-    // Verificar se a mensagem foi realmente enviada
     if (data.messages && data.messages.length > 0) {
       return new Response(
         JSON.stringify({ 
