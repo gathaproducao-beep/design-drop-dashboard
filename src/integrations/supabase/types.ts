@@ -583,6 +583,8 @@ export type Database = {
           phone_number_id: string | null
           updated_at: string | null
           waba_id: string | null
+          webhook_headers: Json | null
+          webhook_url: string | null
         }
         Insert: {
           access_token?: string | null
@@ -598,6 +600,8 @@ export type Database = {
           phone_number_id?: string | null
           updated_at?: string | null
           waba_id?: string | null
+          webhook_headers?: Json | null
+          webhook_url?: string | null
         }
         Update: {
           access_token?: string | null
@@ -613,6 +617,8 @@ export type Database = {
           phone_number_id?: string | null
           updated_at?: string | null
           waba_id?: string | null
+          webhook_headers?: Json | null
+          webhook_url?: string | null
         }
         Relationships: []
       }
