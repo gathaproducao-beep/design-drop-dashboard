@@ -428,8 +428,18 @@ export async function generateMockupsForPedido(
     
     if (results.aprovacao) {
       updateData.foto_aprovacao = results.aprovacao;
-      // Só define layout_aprovado como pendente se ainda não tiver valor
-      if (!pedido.layout_aprovado) {
+      
+      // Buscar valor atual do layout_aprovado no BANCO para evitar sobrescrever
+      const { data: pedidoAtual } = await supabase
+        .from('pedidos')
+        .select('layout_aprovado')
+        .eq('id', pedido.id)
+        .single();
+      
+      const layoutAtual = pedidoAtual?.layout_aprovado;
+      
+      // Só define como pendente se o valor atual no banco for nulo/vazio
+      if (!layoutAtual) {
         updateData.layout_aprovado = 'pendente';
       }
     }
