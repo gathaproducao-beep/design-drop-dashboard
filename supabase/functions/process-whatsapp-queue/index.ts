@@ -103,6 +103,25 @@ Deno.serve(async (req) => {
       );
     }
 
+    // Verificar se há instâncias ativas ANTES de buscar mensagens (economia de recursos)
+    const { data: activeInstancesCheck } = await supabase
+      .from('whatsapp_instances')
+      .select('id')
+      .eq('is_active', true)
+      .limit(1);
+
+    if (!activeInstancesCheck || activeInstancesCheck.length === 0) {
+      console.log('⚠️ Nenhuma instância WhatsApp ativa - processamento cancelado');
+      return new Response(
+        JSON.stringify({ 
+          success: true, 
+          message: 'Nenhuma instância ativa configurada',
+          processed: 0 
+        }),
+        { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      );
+    }
+
     const settingsId = settings?.id;
     const delayMinimo = settings?.delay_minimo || 5;
     const delayMaximo = settings?.delay_maximo || 15;

@@ -2,7 +2,7 @@ import { useState, useEffect } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Plus, Search, Filter, Trash2, Upload, FileSpreadsheet, Download, Archive, Edit, Loader2 } from "lucide-react";
+import { Plus, Search, Filter, Trash2, Upload, FileSpreadsheet, Download, Archive, Edit, Loader2, Cloud, MessageSquare } from "lucide-react";
 import { AtualizarLoteDialog } from "@/components/pedidos/AtualizarLoteDialog";
 import { toast } from "sonner";
 import { PedidosTable } from "@/components/pedidos/PedidosTable";
@@ -56,7 +56,6 @@ export default function Dashboard() {
   const [importarPedidosOpen, setImportarPedidosOpen] = useState(false);
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [gerarFotoAuto, setGerarFotoAuto] = useState(true);
-  const [salvarDriveAuto, setSalvarDriveAuto] = useState(false);
   const [importarFotosOpen, setImportarFotosOpen] = useState(false);
   const [downloadDialogOpen, setDownloadDialogOpen] = useState(false);
   const [tipoDownload, setTipoDownload] = useState<'aprovacao' | 'molde'>('molde');
@@ -65,6 +64,8 @@ export default function Dashboard() {
   const [filterArquivado, setFilterArquivado] = useState<string>("ativos");
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
   const [atualizarLoteOpen, setAtualizarLoteOpen] = useState(false);
+  const [salvandoDrive, setSalvandoDrive] = useState(false);
+  const [enviandoMensagens, setEnviandoMensagens] = useState(false);
 
   // Hook para fila de geração de mockups
   const mockupQueue = useMockupQueue(() => carregarPedidos());
@@ -357,6 +358,124 @@ export default function Dashboard() {
     }
   };
 
+  // Verificar se há instâncias WhatsApp ativas
+  const verificarInstanciasAtivas = async (): Promise<boolean> => {
+    const { data } = await supabase
+      .from('whatsapp_instances')
+      .select('id')
+      .eq('is_active', true)
+      .limit(1);
+    return data && data.length > 0;
+  };
+
+  // Enviar mensagens em lote para os pedidos selecionados
+  const handleEnviarMensagens = async () => {
+    if (selectedIds.size === 0) {
+      toast.error("Selecione pelo menos um pedido");
+      return;
+    }
+
+    setEnviandoMensagens(true);
+    const toastId = toast.loading("Verificando configurações...");
+
+    try {
+      // Verificar se há instâncias ativas
+      const temInstancia = await verificarInstanciasAtivas();
+      if (!temInstancia) {
+        toast.error("Configure ao menos uma instância WhatsApp ativa antes de enviar mensagens", { id: toastId });
+        setEnviandoMensagens(false);
+        return;
+      }
+
+      const { processarEnvioPedido } = await import("@/lib/whatsapp");
+      const pedidoIds = Array.from(selectedIds);
+      let enviados = 0;
+      let erros = 0;
+
+      toast.loading(`Adicionando ${pedidoIds.length} mensagem(ns) à fila...`, { id: toastId });
+
+      for (const id of pedidoIds) {
+        try {
+          await processarEnvioPedido(id);
+          enviados++;
+        } catch (error) {
+          console.error(`Erro ao processar pedido ${id}:`, error);
+          erros++;
+        }
+      }
+
+      if (erros > 0) {
+        toast.warning(`${enviados} mensagem(ns) adicionada(s) à fila. ${erros} erro(s).`, { id: toastId });
+      } else {
+        toast.success(`${enviados} mensagem(ns) adicionada(s) à fila de envio`, { id: toastId });
+      }
+
+      setSelectedIds(new Set());
+      carregarPedidos();
+    } catch (error) {
+      console.error("Erro ao enviar mensagens:", error);
+      toast.error("Erro ao enviar mensagens", { id: toastId });
+    } finally {
+      setEnviandoMensagens(false);
+    }
+  };
+
+  // Salvar no Drive em lote para os pedidos selecionados
+  const handleSalvarDriveLote = async () => {
+    if (selectedIds.size === 0) {
+      toast.error("Selecione pelo menos um pedido");
+      return;
+    }
+
+    const pedidosParaSalvar = pedidos.filter(p => 
+      selectedIds.has(p.id) && 
+      p.layout_aprovado === 'aprovado' &&
+      p.foto_aprovacao?.length > 0
+    );
+
+    if (pedidosParaSalvar.length === 0) {
+      toast.error("Nenhum pedido selecionado com layout aprovado e fotos de aprovação");
+      return;
+    }
+
+    setSalvandoDrive(true);
+    const toastId = toast.loading(`Salvando ${pedidosParaSalvar.length} pedido(s) no Drive...`);
+
+    try {
+      const { uploadPedidoToDriveByDate } = await import("@/lib/google-drive");
+      let salvos = 0;
+      let erros = 0;
+
+      for (const pedido of pedidosParaSalvar) {
+        try {
+          const result = await uploadPedidoToDriveByDate(pedido, (msg) => console.log(msg));
+          if (result.success) {
+            salvos++;
+          } else {
+            erros++;
+          }
+        } catch (error) {
+          console.error(`Erro ao salvar pedido ${pedido.numero_pedido}:`, error);
+          erros++;
+        }
+      }
+
+      if (erros > 0) {
+        toast.warning(`${salvos} pedido(s) salvo(s) no Drive. ${erros} erro(s).`, { id: toastId });
+      } else {
+        toast.success(`${salvos} pedido(s) salvo(s) no Google Drive`, { id: toastId });
+      }
+
+      setSelectedIds(new Set());
+      carregarPedidos();
+    } catch (error) {
+      console.error("Erro ao salvar no Drive:", error);
+      toast.error("Erro ao salvar no Drive", { id: toastId });
+    } finally {
+      setSalvandoDrive(false);
+    }
+  };
+
   const pedidosFiltrados = pedidos.filter((pedido) => {
     const matchSearch =
       !searchTerm ||
@@ -445,6 +564,32 @@ export default function Dashboard() {
                       Excluir selecionados ({selectedIds.size})
                     </Button>
                   </PermissionGate>
+                  <Button
+                    variant="outline"
+                    onClick={handleEnviarMensagens}
+                    disabled={enviandoMensagens}
+                    className="bg-blue-50 hover:bg-blue-100 border-blue-200 dark:bg-blue-950/30 dark:hover:bg-blue-900/40 dark:border-blue-800"
+                  >
+                    {enviandoMensagens ? (
+                      <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                    ) : (
+                      <MessageSquare className="mr-2 h-4 w-4" />
+                    )}
+                    Enviar Mensagens ({selectedIds.size})
+                  </Button>
+                  <Button
+                    variant="outline"
+                    onClick={handleSalvarDriveLote}
+                    disabled={salvandoDrive}
+                    className="bg-green-50 hover:bg-green-100 border-green-200 dark:bg-green-950/30 dark:hover:bg-green-900/40 dark:border-green-800"
+                  >
+                    {salvandoDrive ? (
+                      <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                    ) : (
+                      <Cloud className="mr-2 h-4 w-4" />
+                    )}
+                    Salvar no Drive ({selectedIds.size})
+                  </Button>
                 </>
               )}
               <PermissionGate permission="criar_pedido">
@@ -472,19 +617,6 @@ export default function Dashboard() {
                   className="text-sm font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70 cursor-pointer"
                 >
                   Gerar foto aprovação automaticamente
-                </label>
-              </div>
-              <div className="flex items-center gap-2">
-                <Checkbox
-                  id="salvar-drive-auto"
-                  checked={salvarDriveAuto}
-                  onCheckedChange={(checked) => setSalvarDriveAuto(checked as boolean)}
-                />
-                <label
-                  htmlFor="salvar-drive-auto"
-                  className="text-sm font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70 cursor-pointer"
-                >
-                  Salvar no Drive automaticamente
                 </label>
               </div>
               {/* Indicador de fila de mockups */}
@@ -645,7 +777,6 @@ export default function Dashboard() {
           selectedIds={selectedIds}
           onSelectionChange={setSelectedIds}
           gerarFotoAuto={gerarFotoAuto}
-          salvarDriveAuto={salvarDriveAuto}
           mockupQueue={mockupQueue}
         />
 
