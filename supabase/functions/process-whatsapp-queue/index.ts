@@ -154,7 +154,17 @@ Deno.serve(async (req) => {
       );
     }
 
-    console.log(`Processando ${messages.length} mensagens`);
+    // Ordenar mensagens por telefone para agrupar do mesmo cliente
+    // Isso permite enviar mensagens do mesmo cliente em sequência rápida
+    const sortedMessages = [...messages].sort((a, b) => {
+      // Primeiro por telefone, depois por data de criação
+      if (a.phone !== b.phone) {
+        return a.phone.localeCompare(b.phone);
+      }
+      return new Date(a.created_at || 0).getTime() - new Date(b.created_at || 0).getTime();
+    });
+
+    console.log(`Processando ${sortedMessages.length} mensagens (ordenadas por telefone)`);
 
     let processedCount = 0;
     let successCount = 0;
@@ -198,8 +208,12 @@ Deno.serve(async (req) => {
       }
     };
 
-    // 5. Processar cada mensagem
-    for (const msg of messages) {
+    // Delay mínimo entre mensagens do mesmo cliente (sequência rápida)
+    const DELAY_MESMO_CLIENTE = 3; // segundos
+
+    // 5. Processar cada mensagem (usando lista ordenada por telefone)
+    for (let i = 0; i < sortedMessages.length; i++) {
+      const msg = sortedMessages[i];
       try {
         // Verificação dupla: confirmar que a mensagem ainda está pendente
         const { data: currentMsg } = await supabase
@@ -336,10 +350,20 @@ Deno.serve(async (req) => {
         processedCount++;
 
         // Aplicar delay antes da próxima mensagem (exceto na última)
-        if (processedCount < messages.length) {
-          const delaySeconds = getRandomDelay(delayMinimo, delayMaximo);
-          console.log(`⏳ Aguardando ${delaySeconds}s antes da próxima mensagem...`);
-          await sleep(delaySeconds * 1000);
+        if (i < sortedMessages.length - 1) {
+          const nextMsg = sortedMessages[i + 1];
+          const isSamePhone = nextMsg?.phone === msg.phone;
+          
+          if (isSamePhone) {
+            // Mesmo cliente: delay mínimo (sequência rápida)
+            console.log(`⚡ Próxima mensagem é do mesmo cliente (${msg.phone}), delay rápido: ${DELAY_MESMO_CLIENTE}s`);
+            await sleep(DELAY_MESMO_CLIENTE * 1000);
+          } else {
+            // Cliente diferente: delay normal configurado
+            const delaySeconds = getRandomDelay(delayMinimo, delayMaximo);
+            console.log(`⏳ Próximo cliente diferente, delay normal: ${delaySeconds}s`);
+            await sleep(delaySeconds * 1000);
+          }
         }
 
       } catch (error) {
