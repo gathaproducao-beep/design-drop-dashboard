@@ -211,6 +211,10 @@ Deno.serve(async (req) => {
     // Delay mínimo entre mensagens do mesmo cliente (sequência rápida)
     const DELAY_MESMO_CLIENTE = 3; // segundos
 
+    // Rastrear telefone anterior para manter mesma instância por cliente
+    let lastPhone: string | null = null;
+    let clientInstance: WhatsappInstance | null = null;
+
     // 5. Processar cada mensagem (usando lista ordenada por telefone)
     for (let i = 0; i < sortedMessages.length; i++) {
       const msg = sortedMessages[i];
@@ -231,14 +235,27 @@ Deno.serve(async (req) => {
         // Determinar qual instância usar
         let activeInstance: WhatsappInstance;
         
-        if (usarTodasInstancias && instances.length > 1) {
-          // Modo rotação: usar próxima instância baseado no estado persistido
+        // Verificar se é o mesmo cliente (telefone)
+        const isSameClient = lastPhone === msg.phone;
+        
+        if (isSameClient && clientInstance) {
+          // Mesmo cliente: manter a mesma instância
+          activeInstance = clientInstance;
+          console.log(`📱 Mesmo cliente (${msg.phone}), mantendo instância ${activeInstance.nome}`);
+        } else if (usarTodasInstancias && instances.length > 1) {
+          // Novo cliente + rotação ativa: usar próxima instância baseado no estado
           const rotation = getNextInstance(instances, rotationState, mensagensPorInstancia);
           activeInstance = rotation.instance;
           rotationState = rotation.newState;
+          // Salvar como instância do cliente atual
+          clientInstance = activeInstance;
+          lastPhone = msg.phone;
+          console.log(`🔄 Novo cliente (${msg.phone}), usando instância ${activeInstance.nome}`);
         } else {
           // Modo padrão: usar primeira instância
           activeInstance = instances[0];
+          clientInstance = activeInstance;
+          lastPhone = msg.phone;
         }
 
         // Marcar como processando
@@ -312,9 +329,7 @@ Deno.serve(async (req) => {
             console.log(`🔄 Mensagem ${msg.id} reagendada (tentativa ${newAttempts})`);
           }
         } else {
-          // Sucesso - incrementar contador de rotação
-          rotationState.messageCount++;
-          
+          // Sucesso
           await supabase
             .from('whatsapp_queue')
             .update({ 
@@ -336,15 +351,21 @@ Deno.serve(async (req) => {
           console.log(`✅ Mensagem ${msg.id} enviada via ${activeInstance.nome}`);
           successCount++;
           
-          // Verificar se precisa rotacionar após sucesso
-          if (usarTodasInstancias && rotationState.messageCount >= mensagensPorInstancia) {
-            const nextRotation = getNextInstance(instances, rotationState, mensagensPorInstancia);
-            rotationState = nextRotation.newState;
-            console.log(`🔄 Rotacionando para: ${nextRotation.instance.nome}`);
+          // Só incrementar contador de rotação se for NOVO cliente (não mesmo telefone)
+          // A rotação só deve acontecer quando mudar de cliente
+          if (!isSameClient && usarTodasInstancias) {
+            rotationState.messageCount++;
+            
+            // Verificar se precisa rotacionar para o PRÓXIMO cliente
+            if (rotationState.messageCount >= mensagensPorInstancia) {
+              const nextRotation = getNextInstance(instances, rotationState, mensagensPorInstancia);
+              rotationState = nextRotation.newState;
+              console.log(`🔄 Limite atingido, próximo cliente usará: ${nextRotation.instance.nome}`);
+            }
+            
+            // Persistir estado após envio para novo cliente
+            await saveRotationState(rotationState);
           }
-          
-          // Persistir estado após cada envio com sucesso
-          await saveRotationState(rotationState);
         }
 
         processedCount++;
