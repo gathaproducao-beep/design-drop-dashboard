@@ -196,7 +196,6 @@ interface PedidosTableProps {
   selectedIds: Set<string>;
   onSelectionChange: (ids: Set<string>) => void;
   gerarFotoAuto?: boolean;
-  salvarDriveAuto?: boolean;
   mockupQueue?: {
     addToQueue: (pedido: any, tipoGerar: 'all' | 'aprovacao' | 'molde') => void;
     isProcessing: boolean;
@@ -213,7 +212,6 @@ export function PedidosTable({
   selectedIds, 
   onSelectionChange,
   gerarFotoAuto = false,
-  salvarDriveAuto = false,
   mockupQueue
 }: PedidosTableProps) {
   const [uploadDialogOpen, setUploadDialogOpen] = useState(false);
@@ -283,15 +281,6 @@ export function PedidosTable({
         }
       }
       
-      // Upload para Google Drive quando layout for aprovado e opção automática ativa
-      if (salvarDriveAuto && field === "layout_aprovado" && value === "aprovado") {
-        const pedidoAtualizado = pedidos.find(p => p.id === pedidoId);
-        if (pedidoAtualizado) {
-          setTimeout(() => {
-            handleSalvarNoDrive(pedidoAtualizado);
-          }, 500);
-        }
-      }
       
       toast.success("Campo atualizado");
       onRefresh();
