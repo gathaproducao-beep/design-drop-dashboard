@@ -222,7 +222,10 @@ export async function generateMockupsForPedido(
         
         await new Promise<void>((resolve, reject) => {
           baseImg.onload = () => resolve();
-          baseImg.onerror = reject;
+          baseImg.onerror = (e) => {
+            console.error(`[Mockup] Erro ao carregar imagem base do canvas ${canvasData.nome}:`, canvasData.imagem_base);
+            reject(new Error(`Falha ao carregar imagem base do canvas "${canvasData.nome}". Verifique se a URL está acessível: ${canvasData.imagem_base}`));
+          };
           baseImg.src = canvasData.imagem_base;
         });
 
@@ -245,7 +248,10 @@ export async function generateMockupsForPedido(
             
             await new Promise<void>((resolve, reject) => {
               clientImg.onload = () => resolve();
-              clientImg.onerror = reject;
+              clientImg.onerror = (e) => {
+                console.error(`[Mockup] Erro ao carregar foto do cliente ${photoIndex + 1}:`, photoUrl);
+                reject(new Error(`Falha ao carregar foto do cliente [${photoIndex + 1}]. Verifique se a imagem está acessível.`));
+              };
               clientImg.src = photoUrl;
             });
 
