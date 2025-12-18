@@ -147,6 +147,7 @@ export type Database = {
           created_at: string | null
           folder_structure: string
           id: string
+          integration_enabled: boolean
           refresh_token: string
           root_folder_id: string | null
           updated_at: string | null
@@ -158,6 +159,7 @@ export type Database = {
           created_at?: string | null
           folder_structure?: string
           id?: string
+          integration_enabled?: boolean
           refresh_token: string
           root_folder_id?: string | null
           updated_at?: string | null
@@ -169,6 +171,7 @@ export type Database = {
           created_at?: string | null
           folder_structure?: string
           id?: string
+          integration_enabled?: boolean
           refresh_token?: string
           root_folder_id?: string | null
           updated_at?: string | null
