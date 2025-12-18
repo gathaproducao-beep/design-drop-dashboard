@@ -14,12 +14,18 @@ export async function uploadImagesToDrive(
   onProgress?: (message: string) => void
 ): Promise<DriveUploadResult | null> {
   try {
-    // Verificar se auto-upload está habilitado
+    // Verificar se a integração está habilitada E auto-upload está habilitado
     const { data: settings } = await supabase
       .from("google_drive_settings")
-      .select("auto_upload_enabled, root_folder_id, folder_structure")
+      .select("auto_upload_enabled, root_folder_id, folder_structure, integration_enabled")
       .limit(1)
       .maybeSingle();
+
+    // Verificar primeiro se a integração está habilitada
+    if (!(settings as any)?.integration_enabled) {
+      console.log("Integração com Google Drive desabilitada");
+      return null;
+    }
 
     if (!settings?.auto_upload_enabled) {
       console.log("Auto-upload do Drive desabilitado");
@@ -176,6 +182,17 @@ export async function uploadPedidoToDriveByDate(
 
     if (!pedido.foto_aprovacao || pedido.foto_aprovacao.length === 0) {
       throw new Error("Nenhuma foto de aprovação para enviar");
+    }
+
+    // Verificar se a integração está habilitada
+    const { data: integrationCheck } = await supabase
+      .from("google_drive_settings")
+      .select("integration_enabled")
+      .limit(1)
+      .maybeSingle();
+
+    if (!(integrationCheck as any)?.integration_enabled) {
+      throw new Error("Integração com Google Drive está desabilitada. Habilite nas configurações.");
     }
 
     // 2. Obter configurações

@@ -24,6 +24,7 @@ export default function ConfiguracoesDrive() {
   const [rootFolderId, setRootFolderId] = useState("");
   const [autoUploadEnabled, setAutoUploadEnabled] = useState(false);
   const [folderStructure, setFolderStructure] = useState("pedido");
+  const [integrationEnabled, setIntegrationEnabled] = useState(false);
 
   useEffect(() => {
     carregarConfiguracoes();
@@ -49,6 +50,7 @@ export default function ConfiguracoesDrive() {
         setRootFolderId(data.root_folder_id || "");
         setAutoUploadEnabled(data.auto_upload_enabled);
         setFolderStructure(data.folder_structure);
+        setIntegrationEnabled((data as any).integration_enabled ?? false);
         setConnected(true);
       }
     } catch (error: any) {
@@ -82,12 +84,13 @@ export default function ConfiguracoesDrive() {
         const { error: updateError } = await supabase
           .from("google_drive_settings")
           .update({
-            client_id: clientId,
+          client_id: clientId,
             client_secret: clientSecret,
             refresh_token: refreshToken,
             root_folder_id: rootFolderId || null,
             auto_upload_enabled: autoUploadEnabled,
             folder_structure: folderStructure,
+            integration_enabled: integrationEnabled,
           })
           .eq("id", existing.id);
 
@@ -103,6 +106,7 @@ export default function ConfiguracoesDrive() {
             root_folder_id: rootFolderId || null,
             auto_upload_enabled: autoUploadEnabled,
             folder_structure: folderStructure,
+            integration_enabled: integrationEnabled,
           });
 
         if (insertError) throw insertError;
@@ -164,6 +168,7 @@ export default function ConfiguracoesDrive() {
             root_folder_id: rootFolderId || null,
             auto_upload_enabled: autoUploadEnabled,
             folder_structure: folderStructure,
+            integration_enabled: integrationEnabled,
           })
           .eq("id", existing.id);
 
@@ -173,12 +178,13 @@ export default function ConfiguracoesDrive() {
         const { error } = await supabase
           .from("google_drive_settings")
           .insert({
-            client_id: clientId,
+          client_id: clientId,
             client_secret: clientSecret,
             refresh_token: refreshToken,
             root_folder_id: rootFolderId || null,
             auto_upload_enabled: autoUploadEnabled,
             folder_structure: folderStructure,
+            integration_enabled: integrationEnabled,
           });
 
         if (error) throw error;
@@ -294,8 +300,32 @@ export default function ConfiguracoesDrive() {
             </CardContent>
           </Card>
 
+          {/* Card de Ativação da Integração */}
+          <Card className="border-primary/50">
+            <CardHeader>
+              <CardTitle>Ativação da Integração</CardTitle>
+              <CardDescription>
+                Habilite ou desabilite a integração com Google Drive para economizar recursos
+              </CardDescription>
+            </CardHeader>
+            <CardContent>
+              <div className="flex items-center justify-between">
+                <div className="space-y-0.5">
+                  <Label className="text-base font-semibold">Integração Habilitada</Label>
+                  <p className="text-sm text-muted-foreground">
+                    Quando desabilitada, nenhuma operação será feita no Google Drive
+                  </p>
+                </div>
+                <Switch
+                  checked={integrationEnabled}
+                  onCheckedChange={setIntegrationEnabled}
+                />
+              </div>
+            </CardContent>
+          </Card>
+
           {/* Card de Configurações de Upload */}
-          <Card>
+          <Card className={!integrationEnabled ? "opacity-50 pointer-events-none" : ""}>
             <CardHeader>
               <CardTitle>Configurações de Upload</CardTitle>
               <CardDescription>
@@ -313,6 +343,7 @@ export default function ConfiguracoesDrive() {
                 <Switch
                   checked={autoUploadEnabled}
                   onCheckedChange={setAutoUploadEnabled}
+                  disabled={!integrationEnabled}
                 />
               </div>
 

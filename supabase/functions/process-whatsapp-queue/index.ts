@@ -77,12 +77,33 @@ Deno.serve(async (req) => {
     // Detectar origem da chamada (trigger, cron ou manual)
     const body = await req.json().catch(() => ({}));
     const source = body.source || 'manual';
-    console.log(`Iniciando processamento da fila WhatsApp (origem: ${source})`);
-
+    
     // Inicializar cliente Supabase
     const supabaseUrl = Deno.env.get('SUPABASE_URL')!;
     const supabaseServiceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
     const supabase = createClient(supabaseUrl, supabaseServiceKey);
+
+    // OTIMIZAÇÃO: Verificar se há mensagens pendentes PRIMEIRO (antes de qualquer outra coisa)
+    // Isso evita consultas desnecessárias quando não há nada para processar
+    const { count: pendingCount } = await supabase
+      .from('whatsapp_queue')
+      .select('id', { count: 'exact', head: true })
+      .eq('status', 'pending')
+      .lte('scheduled_at', new Date().toISOString());
+
+    if (!pendingCount || pendingCount === 0) {
+      console.log('📭 Nenhuma mensagem pendente na fila - encerrando rapidamente');
+      return new Response(
+        JSON.stringify({ 
+          success: true, 
+          message: 'Nenhuma mensagem pendente',
+          processed: 0 
+        }),
+        { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      );
+    }
+
+    console.log(`📨 ${pendingCount} mensagens pendentes encontradas (origem: ${source})`);
 
     // 1. Buscar configurações de delay, rotação e estado persistido
     const { data: settings } = await supabase
