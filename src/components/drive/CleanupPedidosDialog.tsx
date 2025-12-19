@@ -35,6 +35,7 @@ export default function CleanupPedidosDialog({
 
   const loadPreview = async () => {
     setLoading(true);
+    console.log("[CleanupDialog] Loading preview with config:", config);
     try {
       const { data, error } = await supabase.functions.invoke("cleanup-old-pedido-files", {
         body: {
@@ -45,20 +46,34 @@ export default function CleanupPedidosDialog({
         },
       });
 
+      console.log("[CleanupDialog] Response:", { data, error });
+
       if (error) throw error;
 
+      if (!data || !data.summary) {
+        console.error("[CleanupDialog] Invalid response format:", data);
+        throw new Error("Resposta inválida da função");
+      }
+
       setPreview({
-        pedidosCount: data.summary.pedidosCount,
-        filesCount: data.summary.filesCount,
-        cutoffDate: data.summary.cutoffDate,
+        pedidosCount: data.summary.pedidosCount || 0,
+        filesCount: data.summary.filesCount || 0,
+        cutoffDate: data.summary.cutoffDate || "",
         pedidos: data.pedidos || [],
       });
     } catch (error: any) {
-      console.error("Erro ao carregar preview:", error);
+      console.error("[CleanupDialog] Error loading preview:", error);
       toast({
         title: "Erro ao carregar preview",
-        description: error.message,
+        description: error.message || "Erro desconhecido",
         variant: "destructive",
+      });
+      // Set empty preview to show "no files" message instead of infinite loading
+      setPreview({
+        pedidosCount: 0,
+        filesCount: 0,
+        cutoffDate: "",
+        pedidos: [],
       });
     } finally {
       setLoading(false);
