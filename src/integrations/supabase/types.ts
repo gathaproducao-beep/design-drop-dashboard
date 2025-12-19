@@ -142,6 +142,8 @@ export type Database = {
       google_drive_settings: {
         Row: {
           auto_upload_enabled: boolean
+          cleanup_foto_aprovacao: boolean | null
+          cleanup_molde_producao: boolean | null
           client_id: string
           client_secret: string
           created_at: string | null
@@ -150,10 +152,14 @@ export type Database = {
           integration_enabled: boolean
           refresh_token: string
           root_folder_id: string | null
+          storage_cleanup_days: number | null
+          storage_cleanup_enabled: boolean | null
           updated_at: string | null
         }
         Insert: {
           auto_upload_enabled?: boolean
+          cleanup_foto_aprovacao?: boolean | null
+          cleanup_molde_producao?: boolean | null
           client_id: string
           client_secret: string
           created_at?: string | null
@@ -162,10 +168,14 @@ export type Database = {
           integration_enabled?: boolean
           refresh_token: string
           root_folder_id?: string | null
+          storage_cleanup_days?: number | null
+          storage_cleanup_enabled?: boolean | null
           updated_at?: string | null
         }
         Update: {
           auto_upload_enabled?: boolean
+          cleanup_foto_aprovacao?: boolean | null
+          cleanup_molde_producao?: boolean | null
           client_id?: string
           client_secret?: string
           created_at?: string | null
@@ -174,6 +184,8 @@ export type Database = {
           integration_enabled?: boolean
           refresh_token?: string
           root_folder_id?: string | null
+          storage_cleanup_days?: number | null
+          storage_cleanup_enabled?: boolean | null
           updated_at?: string | null
         }
         Relationships: []

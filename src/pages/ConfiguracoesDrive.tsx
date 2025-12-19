@@ -7,16 +7,19 @@ import { Button } from "@/components/ui/button";
 import { Switch } from "@/components/ui/switch";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Badge } from "@/components/ui/badge";
+import { Checkbox } from "@/components/ui/checkbox";
+import { Slider } from "@/components/ui/slider";
 import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
-import { Cloud, Check, X, Loader2 } from "lucide-react";
+import { Cloud, Check, X, Loader2, Trash2 } from "lucide-react";
 import TesteDriveDialog from "@/components/drive/TesteDriveDialog";
-
+import CleanupPedidosDialog from "@/components/drive/CleanupPedidosDialog";
 export default function ConfiguracoesDrive() {
   const { toast } = useToast();
   const [loading, setLoading] = useState(false);
   const [connected, setConnected] = useState(false);
   const [showTestDialog, setShowTestDialog] = useState(false);
+  const [showCleanupDialog, setShowCleanupDialog] = useState(false);
 
   const [clientId, setClientId] = useState("");
   const [clientSecret, setClientSecret] = useState("");
@@ -25,6 +28,11 @@ export default function ConfiguracoesDrive() {
   const [autoUploadEnabled, setAutoUploadEnabled] = useState(false);
   const [folderStructure, setFolderStructure] = useState("pedido");
   const [integrationEnabled, setIntegrationEnabled] = useState(false);
+
+  // Configurações de limpeza automática
+  const [storageCleanupDays, setStorageCleanupDays] = useState(15);
+  const [cleanupFotoAprovacao, setCleanupFotoAprovacao] = useState(true);
+  const [cleanupMoldeProducao, setCleanupMoldeProducao] = useState(true);
 
   useEffect(() => {
     carregarConfiguracoes();
@@ -51,6 +59,10 @@ export default function ConfiguracoesDrive() {
         setAutoUploadEnabled(data.auto_upload_enabled);
         setFolderStructure(data.folder_structure);
         setIntegrationEnabled((data as any).integration_enabled ?? false);
+        // Carregar configurações de limpeza
+        setStorageCleanupDays((data as any).storage_cleanup_days ?? 15);
+        setCleanupFotoAprovacao((data as any).cleanup_foto_aprovacao ?? true);
+        setCleanupMoldeProducao((data as any).cleanup_molde_producao ?? true);
         setConnected(true);
       }
     } catch (error: any) {
@@ -169,6 +181,9 @@ export default function ConfiguracoesDrive() {
             auto_upload_enabled: autoUploadEnabled,
             folder_structure: folderStructure,
             integration_enabled: integrationEnabled,
+            storage_cleanup_days: storageCleanupDays,
+            cleanup_foto_aprovacao: cleanupFotoAprovacao,
+            cleanup_molde_producao: cleanupMoldeProducao,
           })
           .eq("id", existing.id);
 
@@ -178,13 +193,16 @@ export default function ConfiguracoesDrive() {
         const { error } = await supabase
           .from("google_drive_settings")
           .insert({
-          client_id: clientId,
+            client_id: clientId,
             client_secret: clientSecret,
             refresh_token: refreshToken,
             root_folder_id: rootFolderId || null,
             auto_upload_enabled: autoUploadEnabled,
             folder_structure: folderStructure,
             integration_enabled: integrationEnabled,
+            storage_cleanup_days: storageCleanupDays,
+            cleanup_foto_aprovacao: cleanupFotoAprovacao,
+            cleanup_molde_producao: cleanupMoldeProducao,
           });
 
         if (error) throw error;
@@ -396,6 +414,96 @@ export default function ConfiguracoesDrive() {
               </CardContent>
             </Card>
           )}
+
+          {/* Card de Limpeza de Arquivos */}
+          <Card className="border-orange-500/50">
+            <CardHeader>
+              <div className="flex items-center gap-2">
+                <Trash2 className="h-5 w-5 text-orange-500" />
+                <div>
+                  <CardTitle>Limpeza de Arquivos de Pedidos Antigos</CardTitle>
+                  <CardDescription>
+                    Remova fotos de aprovação e moldes de pedidos antigos para liberar espaço
+                  </CardDescription>
+                </div>
+              </div>
+            </CardHeader>
+            <CardContent className="space-y-6">
+              <div className="space-y-3">
+                <Label>Dias de retenção: {storageCleanupDays} dias</Label>
+                <Slider
+                  value={[storageCleanupDays]}
+                  onValueChange={(value) => setStorageCleanupDays(value[0])}
+                  min={7}
+                  max={90}
+                  step={1}
+                  className="w-full"
+                />
+                <p className="text-xs text-muted-foreground">
+                  Pedidos com mais de {storageCleanupDays} dias terão os arquivos selecionados removidos
+                </p>
+              </div>
+
+              <div className="space-y-3">
+                <Label>Arquivos a limpar</Label>
+                <div className="space-y-2">
+                  <div className="flex items-center space-x-2">
+                    <Checkbox
+                      id="cleanup-foto-aprovacao"
+                      checked={cleanupFotoAprovacao}
+                      onCheckedChange={(checked) => setCleanupFotoAprovacao(checked as boolean)}
+                    />
+                    <label
+                      htmlFor="cleanup-foto-aprovacao"
+                      className="text-sm font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70"
+                    >
+                      Fotos de Aprovação
+                    </label>
+                  </div>
+                  <div className="flex items-center space-x-2">
+                    <Checkbox
+                      id="cleanup-molde"
+                      checked={cleanupMoldeProducao}
+                      onCheckedChange={(checked) => setCleanupMoldeProducao(checked as boolean)}
+                    />
+                    <label
+                      htmlFor="cleanup-molde"
+                      className="text-sm font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70"
+                    >
+                      Moldes de Produção
+                    </label>
+                  </div>
+                  <div className="flex items-center space-x-2 opacity-50">
+                    <Checkbox id="cleanup-foto-cliente" disabled checked={false} />
+                    <label
+                      htmlFor="cleanup-foto-cliente"
+                      className="text-sm font-medium leading-none text-muted-foreground"
+                    >
+                      Fotos do Cliente (sempre mantidas)
+                    </label>
+                  </div>
+                </div>
+              </div>
+
+              <div className="flex gap-2">
+                <Button
+                  variant="outline"
+                  onClick={salvarConfiguracoes}
+                  disabled={loading}
+                >
+                  Salvar Preferências
+                </Button>
+                <Button
+                  variant="destructive"
+                  onClick={() => setShowCleanupDialog(true)}
+                  disabled={!cleanupFotoAprovacao && !cleanupMoldeProducao}
+                >
+                  <Trash2 className="h-4 w-4 mr-2" />
+                  Limpar Agora
+                </Button>
+              </div>
+            </CardContent>
+          </Card>
         </div>
       </div>
 
@@ -405,6 +513,16 @@ export default function ConfiguracoesDrive() {
           onOpenChange={setShowTestDialog}
         />
       )}
+
+      <CleanupPedidosDialog
+        open={showCleanupDialog}
+        onOpenChange={setShowCleanupDialog}
+        config={{
+          days: storageCleanupDays,
+          cleanupFotoAprovacao,
+          cleanupMoldeProducao,
+        }}
+      />
     </div>
   );
 }
