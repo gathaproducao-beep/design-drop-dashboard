@@ -12,25 +12,52 @@ interface OrphanFile {
 }
 
 // Normaliza o path para comparação consistente
+// Apenas lowercase e trim, sem decodificação que pode causar problemas
 const normalizePath = (path: string): string => {
-  try {
-    return decodeURIComponent(path).toLowerCase().trim();
-  } catch {
-    return path.toLowerCase().trim();
-  }
+  return path.toLowerCase().trim();
 };
 
 // Extrai o path do storage de uma URL
 const extractPath = (url: string): string | null => {
+  if (!url) return null;
+  
   const parts = url.split("/mockup-images/");
   if (parts.length === 2) {
-    try {
-      return decodeURIComponent(parts[1]);
-    } catch {
-      return parts[1];
-    }
+    // Retornar sem decodificar - manter consistência com o storage
+    return parts[1];
   }
   return null;
+};
+
+// Extrai múltiplas variações possíveis de path para comparação
+const extractPathVariations = (url: string): string[] => {
+  if (!url) return [];
+  
+  const variations: string[] = [];
+  
+  const parts = url.split("/mockup-images/");
+  if (parts.length === 2) {
+    const rawPath = parts[1];
+    variations.push(normalizePath(rawPath));
+    
+    // Tentar decodificar e adicionar variação
+    try {
+      const decoded = decodeURIComponent(rawPath);
+      if (decoded !== rawPath) {
+        variations.push(normalizePath(decoded));
+      }
+    } catch {
+      // Ignorar erros de decodificação
+    }
+    
+    // Variação com espaços substituídos por %20
+    const encoded = rawPath.replace(/ /g, '%20');
+    if (encoded !== rawPath) {
+      variations.push(normalizePath(encoded));
+    }
+  }
+  
+  return variations;
 };
 
 Deno.serve(async (req) => {
@@ -43,7 +70,7 @@ Deno.serve(async (req) => {
     const supabaseServiceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
     const supabase = createClient(supabaseUrl, supabaseServiceKey);
 
-    console.log("[Cleanup] Iniciando limpeza de arquivos órfãos...");
+    console.log("[Cleanup] Iniciando análise de arquivos órfãos...");
 
     // Listar arquivos em subpastas
     const folders = ["clientes", "aprovacao", "molde", "mockups"];
@@ -73,6 +100,7 @@ Deno.serve(async (req) => {
     console.log(`[Cleanup] Total de arquivos no storage: ${allStorageFiles.length}`);
 
     // Buscar todas as URLs referenciadas no banco
+    // Usar Set com variações de paths para comparação robusta
     const referencedPaths = new Set<string>();
 
     // 1. URLs dos pedidos
@@ -85,22 +113,22 @@ Deno.serve(async (req) => {
     }
 
     pedidos?.forEach((pedido: any) => {
-      if (pedido.fotos_cliente) {
+      // Fotos do cliente
+      if (pedido.fotos_cliente && Array.isArray(pedido.fotos_cliente)) {
         pedido.fotos_cliente.forEach((url: string) => {
-          const path = extractPath(url);
-          if (path) referencedPaths.add(normalizePath(path));
+          extractPathVariations(url).forEach(p => referencedPaths.add(p));
         });
       }
-      if (pedido.foto_aprovacao) {
+      // Fotos de aprovação
+      if (pedido.foto_aprovacao && Array.isArray(pedido.foto_aprovacao)) {
         pedido.foto_aprovacao.forEach((url: string) => {
-          const path = extractPath(url);
-          if (path) referencedPaths.add(normalizePath(path));
+          extractPathVariations(url).forEach(p => referencedPaths.add(p));
         });
       }
-      if (pedido.molde_producao) {
+      // Moldes de produção
+      if (pedido.molde_producao && Array.isArray(pedido.molde_producao)) {
         pedido.molde_producao.forEach((url: string) => {
-          const path = extractPath(url);
-          if (path) referencedPaths.add(normalizePath(path));
+          extractPathVariations(url).forEach(p => referencedPaths.add(p));
         });
       }
     });
@@ -118,11 +146,7 @@ Deno.serve(async (req) => {
 
     canvases?.forEach((canvas: any) => {
       if (canvas.imagem_base) {
-        const path = extractPath(canvas.imagem_base);
-        if (path) {
-          referencedPaths.add(normalizePath(path));
-          console.log(`[Cleanup] Canvas referencia: ${path}`);
-        }
+        extractPathVariations(canvas.imagem_base).forEach(p => referencedPaths.add(p));
       }
     });
 
@@ -139,10 +163,7 @@ Deno.serve(async (req) => {
 
     mockups?.forEach((mockup: any) => {
       if (mockup.imagem_base) {
-        const path = extractPath(mockup.imagem_base);
-        if (path) {
-          referencedPaths.add(normalizePath(path));
-        }
+        extractPathVariations(mockup.imagem_base).forEach(p => referencedPaths.add(p));
       }
     });
 
@@ -155,6 +176,13 @@ Deno.serve(async (req) => {
     for (const filePath of allStorageFiles) {
       const normalizedFilePath = normalizePath(filePath);
       const isReferenced = referencedPaths.has(normalizedFilePath);
+
+      // PROTEÇÃO: Arquivos na pasta clientes/ NUNCA são considerados órfãos
+      // Estes são as fotos originais dos clientes e devem ser protegidas
+      if (filePath.startsWith("clientes/")) {
+        protectedFiles.push(filePath);
+        continue;
+      }
 
       // PROTEÇÃO EXTRA: Arquivos na pasta mockups/ recebem verificação dupla
       if (filePath.startsWith("mockups/") && !isReferenced) {
