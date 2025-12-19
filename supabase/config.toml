@@ -17,3 +17,6 @@ verify_jwt = false
 
 [functions.check-instance-status]
 verify_jwt = false
+
+[functions.cleanup-old-pedido-files]
+verify_jwt = false
