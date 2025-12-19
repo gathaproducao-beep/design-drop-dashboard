@@ -1,5 +1,5 @@
 import { Link, useLocation, useNavigate } from "react-router-dom";
-import { LayoutDashboard, Image, MessageSquare, Settings, Users, LogOut, Layers, Cloud, Loader2 } from "lucide-react";
+import { LayoutDashboard, Image, MessageSquare, Settings, Users, LogOut, Layers, Cloud, Loader2, Wrench } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import { logout } from "@/lib/auth";
@@ -26,8 +26,9 @@ export function Navigation() {
     { to: "/templates", icon: Layers, label: "Templates", permission: "visualizar_mockups" },
     { to: "/mensagens", icon: MessageSquare, label: "Mensagens", permission: "visualizar_mensagens" },
     { to: "/fila-whatsapp", icon: MessageSquare, label: "Fila de Envios", permission: "visualizar_fila" },
-    { to: "/configuracoes-whatsapp", icon: Settings, label: "Configurações", permission: "visualizar_configuracoes" },
+    { to: "/configuracoes-whatsapp", icon: Settings, label: "Config. WhatsApp", permission: "visualizar_configuracoes" },
     { to: "/configuracoes-drive", icon: Cloud, label: "Google Drive", permission: "editar_configuracoes" },
+    { to: "/configuracoes", icon: Wrench, label: "Configurações", permission: "editar_configuracoes" },
     { to: "/gestao-usuarios", icon: Users, label: "Usuários", permission: "visualizar_usuarios" },
   ];
 
