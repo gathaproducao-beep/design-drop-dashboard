@@ -2,7 +2,7 @@ import { useState, useEffect } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Plus, Search, Filter, Trash2, Upload, FileSpreadsheet, Download, Archive, Edit, Loader2, Cloud, MessageSquare } from "lucide-react";
+import { Plus, Search, Filter, Trash2, Upload, FileSpreadsheet, Download, Archive, Edit, Loader2, Cloud, MessageSquare, HardDrive } from "lucide-react";
 import { AtualizarLoteDialog } from "@/components/pedidos/AtualizarLoteDialog";
 import { toast } from "sonner";
 import { PedidosTable } from "@/components/pedidos/PedidosTable";
@@ -16,6 +16,7 @@ import { PermissionGate } from "@/components/PermissionGate";
 import { getDataBrasilia } from "@/lib/utils";
 import { useMockupQueue } from "@/hooks/useMockupQueue";
 import { Badge } from "@/components/ui/badge";
+import { Card } from "@/components/ui/card";
 import {
   Select,
   SelectContent,
@@ -66,17 +67,34 @@ export default function Dashboard() {
   const [atualizarLoteOpen, setAtualizarLoteOpen] = useState(false);
   const [salvandoDrive, setSalvandoDrive] = useState(false);
   const [enviandoMensagens, setEnviandoMensagens] = useState(false);
-
+  const [storageInfo, setStorageInfo] = useState<{ totalFiles: number; orphanFiles: number } | null>(null);
   // Hook para fila de geração de mockups
   const mockupQueue = useMockupQueue(() => carregarPedidos());
 
   useEffect(() => {
     carregarPedidos();
+    carregarStorageInfo();
   }, [filterArquivado]);
 
   useEffect(() => {
     setPaginaAtual(1);
   }, [searchTerm, filterMensagem, filterLayout, filterDataInicio, filterDataFim, filterArquivado]);
+
+  const carregarStorageInfo = async () => {
+    try {
+      const { data, error } = await supabase.functions.invoke("cleanup-orphan-files", {
+        body: { action: "list" },
+      });
+      if (!error && data) {
+        setStorageInfo({
+          totalFiles: data.totalFiles || 0,
+          orphanFiles: data.orphanCount || 0,
+        });
+      }
+    } catch (error) {
+      console.error("Erro ao carregar info storage:", error);
+    }
+  };
 
   const carregarPedidos = async () => {
     try {
@@ -509,13 +527,29 @@ export default function Dashboard() {
       <div className="mx-auto px-6 py-6 max-w-[1800px]">
         <div className="mb-6 flex flex-col gap-4">
           <div className="flex items-center justify-between">
-            <div>
-              <h1 className="text-3xl font-bold text-foreground mb-1">
-                Gestão de Pedidos
-              </h1>
-              <p className="text-muted-foreground text-sm">
-                Gerencie pedidos e mockups de produção
-              </p>
+            <div className="flex items-center gap-6">
+              <div>
+                <h1 className="text-3xl font-bold text-foreground mb-1">
+                  Gestão de Pedidos
+                </h1>
+                <p className="text-muted-foreground text-sm">
+                  Gerencie pedidos e mockups de produção
+                </p>
+              </div>
+              {storageInfo && (
+                <Card className="flex items-center gap-3 px-4 py-2 bg-muted/50">
+                  <HardDrive className="h-4 w-4 text-muted-foreground" />
+                  <div className="text-sm">
+                    <span className="font-semibold text-primary">{storageInfo.totalFiles}</span>
+                    <span className="text-muted-foreground"> arquivos</span>
+                    {storageInfo.orphanFiles > 0 && (
+                      <span className="text-orange-500 ml-2">
+                        ({storageInfo.orphanFiles} órfãos)
+                      </span>
+                    )}
+                  </div>
+                </Card>
+              )}
             </div>
             <div className="flex gap-2">
               {selectedIds.size > 0 && (
