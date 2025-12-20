@@ -9,7 +9,8 @@ import { Badge } from "@/components/ui/badge";
 import { toast } from "@/hooks/use-toast";
 import { supabase } from "@/integrations/supabase/client";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { Loader2, Settings, MessageSquare, AlertCircle, Plus, Edit, Trash2, Copy, Wifi, WifiOff, RefreshCw, Webhook } from "lucide-react";
+import { Loader2, Settings, MessageSquare, AlertCircle, Plus, Edit, Trash2, Copy, Wifi, WifiOff, RefreshCw, Webhook, Clock, Calendar } from "lucide-react";
+import { Checkbox } from "@/components/ui/checkbox";
 import { TesteEnvioDialog } from "@/components/mensagens/TesteEnvioDialog";
 import { InstanciaDialog } from "@/components/mensagens/InstanciaDialog";
 import {
@@ -33,6 +34,10 @@ interface WhatsappSettings {
   envio_pausado: boolean;
   usar_todas_instancias: boolean;
   mensagens_por_instancia: number;
+  cron_ativo: boolean;
+  cron_dias_semana: number[];
+  cron_hora_inicio: string;
+  cron_hora_fim: string;
 }
 
 interface MensagemWhatsapp {
@@ -73,6 +78,10 @@ const ConfiguracoesWhatsapp = () => {
   const [delayMaximo, setDelayMaximo] = useState(15);
   const [usarTodasInstancias, setUsarTodasInstancias] = useState(false);
   const [mensagensPorInstancia, setMensagensPorInstancia] = useState(5);
+  const [cronAtivo, setCronAtivo] = useState(true);
+  const [cronDiasSemana, setCronDiasSemana] = useState<number[]>([1, 2, 3, 4, 5]);
+  const [cronHoraInicio, setCronHoraInicio] = useState("08:00");
+  const [cronHoraFim, setCronHoraFim] = useState("18:00");
   const [testeDialogOpen, setTesteDialogOpen] = useState(false);
   const [mensagemSelecionada, setMensagemSelecionada] = useState<MensagemWhatsapp | null>(null);
   const [instanciaDialogOpen, setInstanciaDialogOpen] = useState(false);
@@ -175,6 +184,10 @@ const ConfiguracoesWhatsapp = () => {
       setDelayMaximo(settings.delay_maximo || 15);
       setUsarTodasInstancias(settings.usar_todas_instancias || false);
       setMensagensPorInstancia(settings.mensagens_por_instancia || 5);
+      setCronAtivo(settings.cron_ativo ?? true);
+      setCronDiasSemana(settings.cron_dias_semana || [1, 2, 3, 4, 5]);
+      setCronHoraInicio(settings.cron_hora_inicio || "08:00");
+      setCronHoraFim(settings.cron_hora_fim || "18:00");
     }
   }, [settings]);
 
@@ -266,7 +279,29 @@ const ConfiguracoesWhatsapp = () => {
       delay_maximo: delayMaximo,
       usar_todas_instancias: usarTodasInstancias,
       mensagens_por_instancia: mensagensPorInstancia,
-    });
+      cron_ativo: cronAtivo,
+      cron_dias_semana: cronDiasSemana,
+      cron_hora_inicio: cronHoraInicio,
+      cron_hora_fim: cronHoraFim,
+    } as any);
+  };
+
+  const diasSemana = [
+    { value: 0, label: "Dom" },
+    { value: 1, label: "Seg" },
+    { value: 2, label: "Ter" },
+    { value: 3, label: "Qua" },
+    { value: 4, label: "Qui" },
+    { value: 5, label: "Sex" },
+    { value: 6, label: "Sáb" },
+  ];
+
+  const toggleDiaSemana = (dia: number) => {
+    if (cronDiasSemana.includes(dia)) {
+      setCronDiasSemana(cronDiasSemana.filter(d => d !== dia));
+    } else {
+      setCronDiasSemana([...cronDiasSemana, dia].sort());
+    }
   };
 
   const handleTestarMensagem = (mensagem: MensagemWhatsapp) => {
@@ -409,6 +444,127 @@ const ConfiguracoesWhatsapp = () => {
                     Nenhuma mensagem será enviada até você desativar esta opção.
                   </p>
                 </div>
+              )}
+            </CardContent>
+          </Card>
+
+          {/* Agendamento do CRON */}
+          <Card className={!cronAtivo ? "opacity-60" : ""}>
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2">
+                <Clock className="h-5 w-5" />
+                Agendamento de Envio
+              </CardTitle>
+              <CardDescription>
+                Configure os dias e horários em que o sistema processa a fila de mensagens
+              </CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-6">
+              <div className="flex items-center justify-between">
+                <div className="space-y-1">
+                  <Label htmlFor="cron-ativo" className="text-base font-medium">
+                    Ativar Agendamento
+                  </Label>
+                  <p className="text-sm text-muted-foreground">
+                    Quando desativado, mensagens serão processadas a qualquer momento
+                  </p>
+                </div>
+                <Switch
+                  id="cron-ativo"
+                  checked={cronAtivo}
+                  onCheckedChange={setCronAtivo}
+                />
+              </div>
+
+              {cronAtivo && (
+                <>
+                  {/* Dias da Semana */}
+                  <div className="space-y-3">
+                    <Label className="flex items-center gap-2">
+                      <Calendar className="h-4 w-4" />
+                      Dias da Semana
+                    </Label>
+                    <div className="flex flex-wrap gap-2">
+                      {diasSemana.map((dia) => (
+                        <div
+                          key={dia.value}
+                          className={`flex items-center gap-2 px-3 py-2 border rounded-lg cursor-pointer transition-colors ${
+                            cronDiasSemana.includes(dia.value)
+                              ? "bg-primary text-primary-foreground border-primary"
+                              : "bg-background hover:bg-accent"
+                          }`}
+                          onClick={() => toggleDiaSemana(dia.value)}
+                        >
+                          <Checkbox
+                            checked={cronDiasSemana.includes(dia.value)}
+                            onCheckedChange={() => toggleDiaSemana(dia.value)}
+                            className="pointer-events-none"
+                          />
+                          <span className="text-sm font-medium">{dia.label}</span>
+                        </div>
+                      ))}
+                    </div>
+                    {cronDiasSemana.length === 0 && (
+                      <p className="text-sm text-destructive">
+                        ⚠️ Selecione pelo menos um dia para o envio funcionar
+                      </p>
+                    )}
+                  </div>
+
+                  {/* Horário */}
+                  <div className="space-y-3">
+                    <Label className="flex items-center gap-2">
+                      <Clock className="h-4 w-4" />
+                      Horário de Funcionamento
+                    </Label>
+                    <div className="grid grid-cols-2 gap-4">
+                      <div className="space-y-2">
+                        <Label htmlFor="hora-inicio" className="text-sm text-muted-foreground">
+                          Início
+                        </Label>
+                        <Input
+                          id="hora-inicio"
+                          type="time"
+                          value={cronHoraInicio}
+                          onChange={(e) => setCronHoraInicio(e.target.value)}
+                        />
+                      </div>
+                      <div className="space-y-2">
+                        <Label htmlFor="hora-fim" className="text-sm text-muted-foreground">
+                          Fim
+                        </Label>
+                        <Input
+                          id="hora-fim"
+                          type="time"
+                          value={cronHoraFim}
+                          onChange={(e) => setCronHoraFim(e.target.value)}
+                        />
+                      </div>
+                    </div>
+                    <p className="text-sm text-muted-foreground">
+                      Mensagens só serão enviadas entre {cronHoraInicio} e {cronHoraFim}
+                    </p>
+                  </div>
+
+                  {/* Resumo */}
+                  <div className="bg-accent/50 rounded-lg p-4">
+                    <p className="text-sm font-medium mb-1">📅 Resumo do Agendamento</p>
+                    <p className="text-sm text-muted-foreground">
+                      Mensagens serão processadas nos dias:{" "}
+                      <span className="font-medium text-foreground">
+                        {cronDiasSemana.length === 7
+                          ? "Todos os dias"
+                          : cronDiasSemana.length === 0
+                          ? "Nenhum dia selecionado"
+                          : cronDiasSemana.map(d => diasSemana.find(ds => ds.value === d)?.label).join(", ")}
+                      </span>
+                      {" "}das{" "}
+                      <span className="font-medium text-foreground">{cronHoraInicio}</span>
+                      {" "}às{" "}
+                      <span className="font-medium text-foreground">{cronHoraFim}</span>
+                    </p>
+                  </div>
+                </>
               )}
             </CardContent>
           </Card>
