@@ -716,6 +716,10 @@ export type Database = {
         Row: {
           auto_send_enabled: boolean
           created_at: string | null
+          cron_ativo: boolean | null
+          cron_dias_semana: number[] | null
+          cron_hora_fim: string | null
+          cron_hora_inicio: string | null
           default_instance: string
           delay_maximo: number | null
           delay_minimo: number | null
@@ -731,6 +735,10 @@ export type Database = {
         Insert: {
           auto_send_enabled?: boolean
           created_at?: string | null
+          cron_ativo?: boolean | null
+          cron_dias_semana?: number[] | null
+          cron_hora_fim?: string | null
+          cron_hora_inicio?: string | null
           default_instance?: string
           delay_maximo?: number | null
           delay_minimo?: number | null
@@ -746,6 +754,10 @@ export type Database = {
         Update: {
           auto_send_enabled?: boolean
           created_at?: string | null
+          cron_ativo?: boolean | null
+          cron_dias_semana?: number[] | null
+          cron_hora_fim?: string | null
+          cron_hora_inicio?: string | null
           default_instance?: string
           delay_maximo?: number | null
           delay_minimo?: number | null

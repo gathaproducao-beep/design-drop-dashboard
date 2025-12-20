@@ -105,10 +105,10 @@ Deno.serve(async (req) => {
 
     console.log(`📨 ${pendingCount} mensagens pendentes encontradas (origem: ${source})`);
 
-    // 1. Buscar configurações de delay, rotação e estado persistido
+    // 1. Buscar configurações de delay, rotação, agendamento e estado persistido
     const { data: settings } = await supabase
       .from('whatsapp_settings')
-      .select('id, delay_minimo, delay_maximo, envio_pausado, usar_todas_instancias, mensagens_por_instancia, rotacao_instancia_atual, rotacao_contador')
+      .select('id, delay_minimo, delay_maximo, envio_pausado, usar_todas_instancias, mensagens_por_instancia, rotacao_instancia_atual, rotacao_contador, cron_ativo, cron_dias_semana, cron_hora_inicio, cron_hora_fim')
       .single();
 
     // Verificar se o envio está pausado
@@ -122,6 +122,52 @@ Deno.serve(async (req) => {
         }),
         { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
       );
+    }
+
+    // Verificar agendamento do CRON
+    if (settings?.cron_ativo) {
+      const agora = new Date();
+      // Ajustar para timezone de Brasília (UTC-3)
+      const brasiliaOffset = -3 * 60;
+      const localOffset = agora.getTimezoneOffset();
+      const brasiliaTime = new Date(agora.getTime() + (localOffset - brasiliaOffset) * 60000);
+      
+      const diaAtual = brasiliaTime.getDay(); // 0 = Domingo, 1 = Segunda, etc.
+      const horaAtual = brasiliaTime.getHours().toString().padStart(2, '0') + ':' + brasiliaTime.getMinutes().toString().padStart(2, '0');
+      
+      const diasPermitidos = settings.cron_dias_semana || [1, 2, 3, 4, 5];
+      const horaInicio = settings.cron_hora_inicio || '08:00';
+      const horaFim = settings.cron_hora_fim || '18:00';
+      
+      console.log(`📅 Verificando agendamento: dia=${diaAtual}, hora=${horaAtual}, diasPermitidos=${diasPermitidos}, horaInicio=${horaInicio}, horaFim=${horaFim}`);
+      
+      // Verificar se o dia atual está na lista de dias permitidos
+      if (!diasPermitidos.includes(diaAtual)) {
+        console.log(`📅 Dia ${diaAtual} não está nos dias permitidos (${diasPermitidos.join(', ')}) - processamento cancelado`);
+        return new Response(
+          JSON.stringify({ 
+            success: true, 
+            message: `Fora do horário de envio (dia ${diaAtual} não permitido)`,
+            processed: 0 
+          }),
+          { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        );
+      }
+      
+      // Verificar se está dentro do horário permitido
+      if (horaAtual < horaInicio || horaAtual > horaFim) {
+        console.log(`⏰ Hora ${horaAtual} fora do intervalo ${horaInicio}-${horaFim} - processamento cancelado`);
+        return new Response(
+          JSON.stringify({ 
+            success: true, 
+            message: `Fora do horário de envio (${horaAtual} não está entre ${horaInicio} e ${horaFim})`,
+            processed: 0 
+          }),
+          { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        );
+      }
+      
+      console.log(`✅ Dentro do horário de envio permitido`);
     }
 
     // Verificar se há instâncias ativas ANTES de buscar mensagens (economia de recursos)
