@@ -57,19 +57,33 @@ export const validatePhone = (phone: string): boolean => {
 
 /**
  * Normaliza número de telefone adicionando código do país (55) se necessário
+ * DDDs válidos no Brasil vão de 11 a 99 (não existe DDD 00-10)
+ * Números com 10-11 dígitos são sem código do país
+ * Números com 12-13 dígitos já têm código do país
  */
 export const normalizePhone = (phone: string): string => {
   if (!phone) return '';
   
   const cleanPhone = phone.replace(/\D/g, '');
   
-  // Se já começa com 55, retornar
-  if (cleanPhone.startsWith('55')) {
+  // Número com 10 ou 11 dígitos = sem código do país (DDD + número)
+  // Adicionar código do país 55
+  if (cleanPhone.length === 10 || cleanPhone.length === 11) {
+    return `55${cleanPhone}`;
+  }
+  
+  // Número com 12 ou 13 dígitos = já tem código do país
+  if (cleanPhone.length === 12 || cleanPhone.length === 13) {
     return cleanPhone;
   }
   
-  // Adicionar código do país 55
-  return `55${cleanPhone}`;
+  // Se já começa com 55 e tem tamanho errado, tentar ajustar
+  if (cleanPhone.startsWith('55') && cleanPhone.length > 13) {
+    // Número muito longo, remover excesso
+    return cleanPhone.slice(0, 13);
+  }
+  
+  return cleanPhone;
 };
 
 /**
@@ -80,16 +94,20 @@ export const formatPhone = (phone: string): string => {
   
   const cleanPhone = phone.replace(/\D/g, '');
   
-  // 5546999999999 -> +55 (46) 99999-9999
-  if (cleanPhone.length === 13) {
-    return `+${cleanPhone.slice(0, 2)} (${cleanPhone.slice(2, 4)}) ${cleanPhone.slice(4, 9)}-${cleanPhone.slice(9)}`;
+  // Normalizar primeiro para garantir o código do país
+  const normalizedPhone = normalizePhone(cleanPhone);
+  
+  // 5546999999999 (13 dígitos) -> +55 (46) 99999-9999
+  if (normalizedPhone.length === 13) {
+    return `+${normalizedPhone.slice(0, 2)} (${normalizedPhone.slice(2, 4)}) ${normalizedPhone.slice(4, 9)}-${normalizedPhone.slice(9)}`;
   }
   
-  // 5546999999999 -> +55 (46) 9999-9999
-  if (cleanPhone.length === 12) {
-    return `+${cleanPhone.slice(0, 2)} (${cleanPhone.slice(2, 4)}) ${cleanPhone.slice(4, 8)}-${cleanPhone.slice(8)}`;
+  // 554699999999 (12 dígitos) -> +55 (46) 9999-9999
+  if (normalizedPhone.length === 12) {
+    return `+${normalizedPhone.slice(0, 2)} (${normalizedPhone.slice(2, 4)}) ${normalizedPhone.slice(4, 8)}-${normalizedPhone.slice(8)}`;
   }
   
+  // Fallback: retornar original se não conseguir formatar
   return phone;
 };
 
