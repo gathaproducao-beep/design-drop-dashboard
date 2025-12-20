@@ -127,13 +127,12 @@ Deno.serve(async (req) => {
     // Verificar agendamento do CRON
     if (settings?.cron_ativo) {
       const agora = new Date();
-      // Ajustar para timezone de Brasília (UTC-3)
-      const brasiliaOffset = -3 * 60;
-      const localOffset = agora.getTimezoneOffset();
-      const brasiliaTime = new Date(agora.getTime() + (localOffset - brasiliaOffset) * 60000);
+      // Converter UTC para horário de Brasília (UTC-3)
+      // Subtrair 3 horas do UTC para obter horário de Brasília
+      const brasiliaTime = new Date(agora.getTime() - (3 * 60 * 60 * 1000));
       
-      const diaAtual = brasiliaTime.getDay(); // 0 = Domingo, 1 = Segunda, etc.
-      const horaAtual = brasiliaTime.getHours().toString().padStart(2, '0') + ':' + brasiliaTime.getMinutes().toString().padStart(2, '0');
+      const diaAtual = brasiliaTime.getUTCDay(); // 0 = Domingo, 1 = Segunda, etc.
+      const horaAtual = brasiliaTime.getUTCHours().toString().padStart(2, '0') + ':' + brasiliaTime.getUTCMinutes().toString().padStart(2, '0');
       
       const diasPermitidos = settings.cron_dias_semana || [1, 2, 3, 4, 5];
       const horaInicio = settings.cron_hora_inicio || '08:00';
