@@ -100,7 +100,16 @@ export default function Dashboard() {
     try {
       let query = supabase
         .from("pedidos")
-        .select("*")
+        .select(`
+          *,
+          whatsapp_queue!whatsapp_queue_pedido_id_fkey (
+            instance_id,
+            status,
+            whatsapp_instances!whatsapp_queue_instance_id_fkey (
+              nome
+            )
+          )
+        `)
         .order("created_at", { ascending: false });
       
       if (filterArquivado === "ativos") {
@@ -110,9 +119,20 @@ export default function Dashboard() {
       }
       
       const { data, error } = await query;
+      
+      // Processar dados para extrair nome da instância do último envio
+      const pedidosComInstancia = (data || []).map(pedido => {
+        const queueItems = pedido.whatsapp_queue || [];
+        const sentItem = queueItems.find((q: any) => q.status === 'sent' && q.whatsapp_instances?.nome);
+        return {
+          ...pedido,
+          instancia_envio: sentItem?.whatsapp_instances?.nome || null,
+          whatsapp_queue: undefined // Remove do objeto para não enviar dados desnecessários
+        };
+      });
 
       if (error) throw error;
-      setPedidos(data || []);
+      setPedidos(pedidosComInstancia);
     } catch (error) {
       console.error("Erro ao carregar pedidos:", error);
       toast.error("Erro ao carregar pedidos");

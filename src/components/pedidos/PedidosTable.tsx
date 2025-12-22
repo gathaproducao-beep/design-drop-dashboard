@@ -685,7 +685,12 @@ export function PedidosTable({
                     options={["pendente", "enviando", "enviada", "erro", "reenviar"]}
                     onSave={(value) => handleUpdateField(pedido.id, "mensagem_enviada", value)}
                     renderValue={(value) => (
-                      <Badge variant={getBadgeVariant(value)}>{value}</Badge>
+                      <div className="flex flex-col gap-0.5">
+                        <Badge variant={getBadgeVariant(value)}>{value}</Badge>
+                        {value === "enviada" && pedido.instancia_envio && (
+                          <span className="text-xs text-muted-foreground">{pedido.instancia_envio}</span>
+                        )}
+                      </div>
                     )}
                   />
                 </TableCell>
