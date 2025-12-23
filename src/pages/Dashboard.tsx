@@ -424,6 +424,7 @@ export default function Dashboard() {
     let gerados = 0;
     let erros = 0;
     let semMockup = 0;
+    const pedidosAtualizados: string[] = [];
     
     for (let i = 0; i < pedidosParaGerar.length; i++) {
       const pedido = pedidosParaGerar[i];
@@ -442,12 +443,30 @@ export default function Dashboard() {
         if ((tipo === 'aprovacao' && result.aprovacao?.length) || 
             (tipo === 'molde' && result.molde?.length)) {
           gerados++;
+          pedidosAtualizados.push(pedido.id);
         } else {
           semMockup++;
         }
       } catch (error) {
         console.error(`Erro ao gerar mockup para ${pedido.numero_pedido}:`, error);
         erros++;
+      }
+    }
+    
+    // Atualizar apenas os pedidos afetados no estado local (sem recarregar toda a lista)
+    if (pedidosAtualizados.length > 0) {
+      const { data: pedidosNovos } = await supabase
+        .from("pedidos")
+        .select("*")
+        .in("id", pedidosAtualizados);
+      
+      if (pedidosNovos) {
+        setPedidos(prevPedidos => 
+          prevPedidos.map(p => {
+            const atualizado = pedidosNovos.find(pn => pn.id === p.id);
+            return atualizado ? { ...p, ...atualizado } : p;
+          })
+        );
       }
     }
     
@@ -468,7 +487,6 @@ export default function Dashboard() {
     }
     
     setSelectedIds(new Set());
-    carregarPedidos();
   };
 
   // Verificar se há instâncias WhatsApp ativas
