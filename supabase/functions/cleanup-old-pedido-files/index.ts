@@ -71,31 +71,20 @@ Deno.serve(async (req) => {
 
     console.log(`[Cleanup] Starting cleanup with config:`, config);
 
-    // Calcular data limite
+    // Calcular data limite baseada no campo arquivado_em
     const cutoffDate = new Date();
     cutoffDate.setDate(cutoffDate.getDate() - config.days);
-    const cutoffDateStr = cutoffDate.toISOString().split("T")[0];
+    const cutoffDateStr = cutoffDate.toISOString();
 
     console.log(`[Cleanup] Cutoff date: ${cutoffDateStr}`);
 
-    // Buscar pedidos antigos que têm fotos para limpar
-    let query = supabase
+    // Buscar APENAS pedidos ARQUIVADOS que foram arquivados há mais de X dias
+    const { data: pedidos, error: queryError } = await supabase
       .from("pedidos")
-      .select("id, numero_pedido, data_pedido, foto_aprovacao, molde_producao")
-      .lt("data_pedido", cutoffDateStr);
-
-    // Filtrar apenas pedidos que têm as fotos que queremos limpar
-    const conditions: string[] = [];
-    if (config.cleanupFotoAprovacao) {
-      conditions.push("foto_aprovacao.neq.[]");
-      conditions.push("foto_aprovacao.not.is.null");
-    }
-    if (config.cleanupMoldeProducao) {
-      conditions.push("molde_producao.neq.[]");
-      conditions.push("molde_producao.not.is.null");
-    }
-
-    const { data: pedidos, error: queryError } = await query;
+      .select("id, numero_pedido, arquivado_em, foto_aprovacao, molde_producao")
+      .eq("arquivado", true)
+      .not("arquivado_em", "is", null)
+      .lt("arquivado_em", cutoffDateStr);
 
     if (queryError) {
       console.error("[Cleanup] Error fetching orders:", queryError);
@@ -111,7 +100,7 @@ Deno.serve(async (req) => {
       return temFotoAprovacao || temMolde;
     });
 
-    console.log(`[Cleanup] Found ${pedidosComArquivos.length} orders with files to clean`);
+    console.log(`[Cleanup] Found ${pedidosComArquivos.length} archived orders with files to clean`);
 
     // Coletar todos os arquivos para deletar
     const filesToDelete: string[] = [];
@@ -156,7 +145,7 @@ Deno.serve(async (req) => {
           summary: {
             pedidosCount: pedidosToUpdate.length,
             filesCount: filesToDelete.length,
-            cutoffDate: cutoffDateStr,
+            cutoffDate: cutoffDate.toISOString().split("T")[0],
             config,
           },
           pedidos: pedidosToUpdate.map((p) => p.numero_pedido),
@@ -187,7 +176,7 @@ Deno.serve(async (req) => {
       }
     }
 
-    // Atualizar os pedidos para limpar as referências
+    // Atualizar os pedidos para limpar as referências (foto_cliente NUNCA é tocada)
     for (const pedido of pedidosToUpdate) {
       const updateData: Record<string, unknown> = {};
       
@@ -219,7 +208,7 @@ Deno.serve(async (req) => {
         summary: {
           pedidosUpdated: updatedPedidosCount,
           filesDeleted: deletedFilesCount,
-          cutoffDate: cutoffDateStr,
+          cutoffDate: cutoffDate.toISOString().split("T")[0],
         },
       }),
       { headers: { ...corsHeaders, "Content-Type": "application/json" } }
