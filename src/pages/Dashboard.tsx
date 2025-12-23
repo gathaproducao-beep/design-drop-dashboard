@@ -68,6 +68,8 @@ export default function Dashboard() {
   const [salvandoDrive, setSalvandoDrive] = useState(false);
   const [enviandoMensagens, setEnviandoMensagens] = useState(false);
   const [storageInfo, setStorageInfo] = useState<{ totalFiles: number; orphanFiles: number } | null>(null);
+  const [gerandoMockupsLote, setGerandoMockupsLote] = useState(false);
+  const [progressoMockupsLote, setProgressoMockupsLote] = useState<{ atual: number; total: number; pedidoAtual?: string }>({ atual: 0, total: 0 });
   // Hook para fila de geração de mockups
   const mockupQueue = useMockupQueue(() => carregarPedidos());
 
@@ -396,6 +398,77 @@ export default function Dashboard() {
       toast.error("Erro ao atualizar pedidos");
       throw error;
     }
+  };
+
+  // Gerar mockups em lote para pedidos selecionados
+  const handleGerarMockupsLote = async (tipo: 'aprovacao' | 'molde') => {
+    const pedidoIds = Array.from(selectedIds);
+    
+    // Filtrar pedidos que têm foto do cliente
+    const pedidosParaGerar = pedidos.filter(p => 
+      pedidoIds.includes(p.id) && 
+      p.fotos_cliente && 
+      p.fotos_cliente.length > 0
+    );
+    
+    if (pedidosParaGerar.length === 0) {
+      toast.error("Nenhum pedido selecionado possui foto do cliente");
+      return;
+    }
+    
+    setGerandoMockupsLote(true);
+    setProgressoMockupsLote({ atual: 0, total: pedidosParaGerar.length });
+    
+    const { generateMockupsForPedido } = await import("@/lib/mockup-generator");
+    
+    let gerados = 0;
+    let erros = 0;
+    let semMockup = 0;
+    
+    for (let i = 0; i < pedidosParaGerar.length; i++) {
+      const pedido = pedidosParaGerar[i];
+      setProgressoMockupsLote({ 
+        atual: i + 1, 
+        total: pedidosParaGerar.length,
+        pedidoAtual: pedido.numero_pedido 
+      });
+      
+      try {
+        const result = await generateMockupsForPedido(pedido, tipo, (msg) => {
+          console.log(`[Lote ${pedido.numero_pedido}] ${msg}`);
+        });
+        
+        // Verificar se gerou algo
+        if ((tipo === 'aprovacao' && result.aprovacao?.length) || 
+            (tipo === 'molde' && result.molde?.length)) {
+          gerados++;
+        } else {
+          semMockup++;
+        }
+      } catch (error) {
+        console.error(`Erro ao gerar mockup para ${pedido.numero_pedido}:`, error);
+        erros++;
+      }
+    }
+    
+    setGerandoMockupsLote(false);
+    setProgressoMockupsLote({ atual: 0, total: 0 });
+    setAtualizarLoteOpen(false);
+    
+    const tipoLabel = tipo === 'aprovacao' ? 'foto(s) de aprovação' : 'molde(s)';
+    
+    if (erros > 0 || semMockup > 0) {
+      toast.warning(
+        `${gerados} ${tipoLabel} gerado(s). ${semMockup} sem mockup configurado. ${erros} erro(s).`
+      );
+    } else if (gerados > 0) {
+      toast.success(`${gerados} ${tipoLabel} gerado(s) com sucesso!`);
+    } else {
+      toast.info("Nenhum mockup foi gerado. Verifique se os produtos têm mockups configurados.");
+    }
+    
+    setSelectedIds(new Set());
+    carregarPedidos();
   };
 
   // Verificar se há instâncias WhatsApp ativas
@@ -925,6 +998,9 @@ export default function Dashboard() {
           onOpenChange={setAtualizarLoteOpen}
           selectedCount={selectedIds.size}
           onConfirm={handleAtualizarLote}
+          onGerarMockups={handleGerarMockupsLote}
+          gerandoMockups={gerandoMockupsLote}
+          progressoMockups={progressoMockupsLote}
         />
       </div>
     </div>
