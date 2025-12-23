@@ -6,15 +6,64 @@ const corsHeaders = {
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
 };
 
+// Validate folder name - alphanumeric, spaces, hyphens, underscores, dots, and accented characters
+const isValidFolderName = (name: string): boolean => {
+  if (!name || name.length > 255) return false;
+  // Allow alphanumeric, spaces, hyphens, underscores, dots, and common accented characters
+  return /^[\p{L}\p{N}\s_.\-]+$/u.test(name);
+};
+
+// Validate Google Drive ID format
+const isValidDriveId = (id: string): boolean => {
+  if (!id) return false;
+  if (id === 'root') return true;
+  // Google Drive IDs are alphanumeric with hyphens and underscores
+  return /^[a-zA-Z0-9_-]+$/.test(id);
+};
+
+// Escape single quotes for Drive API queries
+const escapeForDriveQuery = (str: string): string => {
+  return str.replace(/'/g, "\\'");
+};
+
 serve(async (req) => {
   if (req.method === 'OPTIONS') {
     return new Response(null, { headers: corsHeaders });
   }
 
   try {
+    // Authentication check
+    const authHeader = req.headers.get('Authorization');
+    if (!authHeader) {
+      console.error('[google-drive-operations] No authorization header provided');
+      return new Response(
+        JSON.stringify({ error: 'Unauthorized: Authentication required' }),
+        { status: 401, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      );
+    }
+
     const supabaseUrl = Deno.env.get('SUPABASE_URL')!;
-    const supabaseKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
-    const supabase = createClient(supabaseUrl, supabaseKey);
+    const supabaseAnonKey = Deno.env.get('SUPABASE_ANON_KEY')!;
+    const supabaseServiceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
+    
+    // Create client with user's auth token to verify user
+    const userClient = createClient(supabaseUrl, supabaseAnonKey, {
+      global: { headers: { Authorization: authHeader } }
+    });
+
+    const { data: { user }, error: userError } = await userClient.auth.getUser();
+    if (userError || !user) {
+      console.error('[google-drive-operations] Invalid user token:', userError);
+      return new Response(
+        JSON.stringify({ error: 'Unauthorized: Invalid authentication token' }),
+        { status: 401, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      );
+    }
+
+    console.log(`[google-drive-operations] Authenticated user: ${user.email}`);
+
+    // Use service role client for database operations
+    const supabase = createClient(supabaseUrl, supabaseServiceKey);
 
     const { action, ...params } = await req.json();
     console.log('Operação solicitada:', action);
@@ -36,6 +85,16 @@ serve(async (req) => {
     switch (action) {
       case 'list_files': {
         const folderId = params.folder_id || 'root';
+        
+        // Validate folder ID
+        if (!isValidDriveId(folderId)) {
+          console.error('[google-drive-operations] Invalid folder ID:', folderId);
+          return new Response(
+            JSON.stringify({ error: 'Invalid folder ID format' }),
+            { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+          );
+        }
+        
         console.log('Listando arquivos da pasta:', folderId);
 
         const listResponse = await fetch(
@@ -67,6 +126,25 @@ serve(async (req) => {
 
       case 'create_folder': {
         const { name, parent_folder_id } = params;
+        
+        // Validate folder name
+        if (!isValidFolderName(name)) {
+          console.error('[google-drive-operations] Invalid folder name:', name);
+          return new Response(
+            JSON.stringify({ error: 'Invalid folder name format. Use alphanumeric characters, spaces, hyphens, underscores, or dots.' }),
+            { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+          );
+        }
+        
+        // Validate parent folder ID if provided
+        if (parent_folder_id && parent_folder_id !== 'root' && !isValidDriveId(parent_folder_id)) {
+          console.error('[google-drive-operations] Invalid parent folder ID:', parent_folder_id);
+          return new Response(
+            JSON.stringify({ error: 'Invalid parent folder ID format' }),
+            { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+          );
+        }
+        
         console.log('Criando pasta:', name);
 
         const metadata: any = {
@@ -110,12 +188,34 @@ serve(async (req) => {
 
       case 'find_folder_by_name': {
         const { name, parent_id } = params;
+        
+        // Validate folder name
+        if (!isValidFolderName(name)) {
+          console.error('[google-drive-operations] Invalid folder name:', name);
+          return new Response(
+            JSON.stringify({ error: 'Invalid folder name format. Use alphanumeric characters, spaces, hyphens, underscores, or dots.' }),
+            { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+          );
+        }
+        
+        // Validate parent ID
+        if (!isValidDriveId(parent_id)) {
+          console.error('[google-drive-operations] Invalid parent ID:', parent_id);
+          return new Response(
+            JSON.stringify({ error: 'Invalid parent folder ID format' }),
+            { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+          );
+        }
+        
         console.log('Buscando pasta:', name, 'no parent:', parent_id);
 
-        // Montar query de busca
+        // Escape single quotes in name for Drive API query
+        const escapedName = escapeForDriveQuery(name);
+        
+        // Montar query de busca with escaped values
         const searchQuery = parent_id === 'root' 
-          ? `name='${name}' and 'root' in parents and mimeType='application/vnd.google-apps.folder' and trashed=false`
-          : `name='${name}' and '${parent_id}' in parents and mimeType='application/vnd.google-apps.folder' and trashed=false`;
+          ? `name='${escapedName}' and 'root' in parents and mimeType='application/vnd.google-apps.folder' and trashed=false`
+          : `name='${escapedName}' and '${parent_id}' in parents and mimeType='application/vnd.google-apps.folder' and trashed=false`;
         
         const searchResponse = await fetch(
           `https://www.googleapis.com/drive/v3/files?q=${encodeURIComponent(searchQuery)}&fields=files(id,name,webViewLink)`,
@@ -151,6 +251,25 @@ serve(async (req) => {
 
       case 'upload_file': {
         const { file_name, file_data_base64, mime_type, folder_id } = params;
+        
+        // Validate file name
+        if (!file_name || file_name.length > 255) {
+          console.error('[google-drive-operations] Invalid file name:', file_name);
+          return new Response(
+            JSON.stringify({ error: 'Invalid file name' }),
+            { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+          );
+        }
+        
+        // Validate folder ID if provided
+        if (folder_id && folder_id !== 'root' && !isValidDriveId(folder_id)) {
+          console.error('[google-drive-operations] Invalid folder ID:', folder_id);
+          return new Response(
+            JSON.stringify({ error: 'Invalid folder ID format' }),
+            { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+          );
+        }
+        
         console.log('Fazendo upload do arquivo:', file_name);
 
         // Converter base64 para bytes
