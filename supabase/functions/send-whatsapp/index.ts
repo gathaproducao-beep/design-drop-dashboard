@@ -224,7 +224,11 @@ serve(async (req) => {
   }
 
   try {
-    // Authentication check
+    const supabaseUrl = Deno.env.get('SUPABASE_URL')!;
+    const supabaseAnonKey = Deno.env.get('SUPABASE_ANON_KEY')!;
+    const supabaseServiceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
+    
+    // Authentication check - aceitar user token OU service role key
     const authHeader = req.headers.get('Authorization');
     if (!authHeader) {
       console.error('[send-whatsapp] No authorization header provided');
@@ -234,25 +238,29 @@ serve(async (req) => {
       );
     }
 
-    const supabaseUrl = Deno.env.get('SUPABASE_URL')!;
-    const supabaseAnonKey = Deno.env.get('SUPABASE_ANON_KEY')!;
-    const supabaseServiceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
+    // Verificar se é uma chamada com service role key (chamada interna do sistema/cron)
+    const token = authHeader.replace('Bearer ', '');
+    const isServiceRoleCall = token === supabaseServiceKey;
     
-    // Create client with user's auth token to verify user
-    const userClient = createClient(supabaseUrl, supabaseAnonKey, {
-      global: { headers: { Authorization: authHeader } }
-    });
+    if (isServiceRoleCall) {
+      console.log('[send-whatsapp] Authenticated via service role key (internal system call)');
+    } else {
+      // Tentar autenticar como usuário
+      const userClient = createClient(supabaseUrl, supabaseAnonKey, {
+        global: { headers: { Authorization: authHeader } }
+      });
 
-    const { data: { user }, error: userError } = await userClient.auth.getUser();
-    if (userError || !user) {
-      console.error('[send-whatsapp] Invalid user token:', userError);
-      return new Response(
-        JSON.stringify({ error: 'Unauthorized: Invalid authentication token' }),
-        { status: 401, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-      );
+      const { data: { user }, error: userError } = await userClient.auth.getUser();
+      if (userError || !user) {
+        console.error('[send-whatsapp] Invalid user token:', userError);
+        return new Response(
+          JSON.stringify({ error: 'Unauthorized: Invalid authentication token' }),
+          { status: 401, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        );
+      }
+
+      console.log(`[send-whatsapp] Authenticated user: ${user.email}`);
     }
-
-    console.log(`[send-whatsapp] Authenticated user: ${user.email}`);
 
     if (req.method !== 'POST') {
       return new Response(
