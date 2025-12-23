@@ -25,6 +25,7 @@ import { ImageUploadDialog } from "./ImageUploadDialog";
 import { ImageViewDialog } from "./ImageViewDialog";
 import { EditableCell } from "./EditableCell";
 import { EditarPedidoDialog } from "./EditarPedidoDialog";
+import { SafeImage } from "./SafeImage";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
@@ -244,6 +245,11 @@ export function PedidosTable({
 
   const handleUpdateField = async (pedidoId: string, field: string, value: any) => {
     try {
+      // Log detalhado para debug
+      const pedidoAtual = pedidos.find(p => p.id === pedidoId);
+      console.log(`[PedidosTable] Atualizando campo "${field}" para "${value}" no pedido ${pedidoAtual?.numero_pedido}`);
+      console.log(`[PedidosTable] Fotos cliente antes do update:`, pedidoAtual?.fotos_cliente);
+      
       // Se está mudando status de mensagem para "reenviar", processar envio
       if (field === "mensagem_enviada" && value === "reenviar") {
         toast.loading("Processando envio...", { id: `envio-${pedidoId}` });
@@ -261,13 +267,16 @@ export function PedidosTable({
         return;
       }
       
-      // Atualização normal para outros campos
+      // Atualização normal para outros campos - APENAS o campo específico
+      console.log(`[PedidosTable] Executando update apenas do campo: ${field}`);
       const { error } = await supabase
         .from("pedidos")
         .update({ [field]: value })
         .eq("id", pedidoId);
 
       if (error) throw error;
+      
+      console.log(`[PedidosTable] Update concluído com sucesso`);
       
       // Se geração automática estiver ativada e o campo atualizado for layout_aprovado
       if (gerarFotoAuto && field === "layout_aprovado" && value === "aprovado") {
@@ -630,7 +639,7 @@ export function PedidosTable({
                       className="relative inline-block cursor-pointer hover:opacity-80 transition"
                       onClick={() => handleImageClick(pedido, "cliente")}
                     >
-                      <img 
+                      <SafeImage 
                         src={pedido.fotos_cliente[0]} 
                         alt="Foto Cliente"
                         className="h-10 w-10 rounded object-cover border"

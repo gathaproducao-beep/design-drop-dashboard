@@ -102,21 +102,34 @@ Deno.serve(async (req) => {
     // Buscar todas as URLs referenciadas no banco
     // Usar Set com variações de paths para comparação robusta
     const referencedPaths = new Set<string>();
+    
+    // Set específico para fotos_cliente (proteção extra)
+    const clientePhotoPaths = new Set<string>();
 
     // 1. URLs dos pedidos
     const { data: pedidos, error: pedidosError } = await supabase
       .from("pedidos")
-      .select("fotos_cliente, foto_aprovacao, molde_producao");
+      .select("id, numero_pedido, fotos_cliente, foto_aprovacao, molde_producao");
 
     if (pedidosError) {
       throw new Error(`Erro ao buscar pedidos: ${pedidosError.message}`);
     }
 
+    console.log(`[Cleanup] Total de pedidos no banco: ${pedidos?.length || 0}`);
+
     pedidos?.forEach((pedido: any) => {
-      // Fotos do cliente
+      // Fotos do cliente - PROTEÇÃO ESPECIAL
       if (pedido.fotos_cliente && Array.isArray(pedido.fotos_cliente)) {
         pedido.fotos_cliente.forEach((url: string) => {
-          extractPathVariations(url).forEach(p => referencedPaths.add(p));
+          const variations = extractPathVariations(url);
+          variations.forEach(p => {
+            referencedPaths.add(p);
+            clientePhotoPaths.add(p);
+          });
+          // Log detalhado para debug
+          if (variations.length > 0) {
+            console.log(`[Cleanup] Pedido ${pedido.numero_pedido} - foto_cliente protegida: ${variations[0]}`);
+          }
         });
       }
       // Fotos de aprovação
@@ -132,6 +145,8 @@ Deno.serve(async (req) => {
         });
       }
     });
+    
+    console.log(`[Cleanup] Fotos de cliente protegidas: ${clientePhotoPaths.size}`);
 
     console.log(`[Cleanup] Paths referenciados em pedidos: ${referencedPaths.size}`);
 
@@ -176,10 +191,21 @@ Deno.serve(async (req) => {
     for (const filePath of allStorageFiles) {
       const normalizedFilePath = normalizePath(filePath);
       const isReferenced = referencedPaths.has(normalizedFilePath);
+      
+      // Verificar se é uma foto_cliente referenciada (verificação extra)
+      const isClientePhoto = clientePhotoPaths.has(normalizedFilePath);
 
       // PROTEÇÃO: Arquivos na pasta clientes/ NUNCA são considerados órfãos
       // Estes são as fotos originais dos clientes e devem ser protegidas
       if (filePath.startsWith("clientes/")) {
+        console.log(`[Cleanup] PROTEGIDO (pasta clientes/): ${filePath}`);
+        protectedFiles.push(filePath);
+        continue;
+      }
+      
+      // PROTEÇÃO EXTRA: Se é uma foto_cliente referenciada em qualquer pedido
+      if (isClientePhoto) {
+        console.log(`[Cleanup] PROTEGIDO (foto_cliente referenciada): ${filePath}`);
         protectedFiles.push(filePath);
         continue;
       }
