@@ -10,15 +10,24 @@ export function cn(...inputs: ClassValue[]) {
  * no formato YYYY-MM-DD para uso em inputs type="date"
  */
 export function getDataBrasilia(): string {
+  // Criar uma data baseada no horário UTC atual
   const now = new Date();
-  // Usar Intl.DateTimeFormat para obter a data no fuso de Brasília
-  const formatter = new Intl.DateTimeFormat('en-CA', {
+  
+  // Obter os componentes da data no fuso de Brasília
+  const options: Intl.DateTimeFormatOptions = {
     timeZone: 'America/Sao_Paulo',
     year: 'numeric',
     month: '2-digit',
     day: '2-digit',
-  });
-  return formatter.format(now); // Formato: YYYY-MM-DD
+  };
+  
+  // Usar formatToParts para garantir formato correto
+  const parts = new Intl.DateTimeFormat('en-US', options).formatToParts(now);
+  const year = parts.find(p => p.type === 'year')?.value;
+  const month = parts.find(p => p.type === 'month')?.value;
+  const day = parts.find(p => p.type === 'day')?.value;
+  
+  return `${year}-${month}-${day}`; // Formato: YYYY-MM-DD
 }
 
 /**
