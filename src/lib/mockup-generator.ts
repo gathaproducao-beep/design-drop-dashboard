@@ -133,9 +133,10 @@ export async function generateMockupsForPedido(
   onProgress?: (message: string) => void
 ): Promise<MockupGenerationResult> {
   try {
+    console.log(`[Mockup] Iniciando geração para pedido ${pedido.numero_pedido}, produto: ${pedido.codigo_produto}, tipo: ${tipoGerar}`);
     onProgress?.('Buscando configuração de mockups...');
 
-    // Buscar mockups principais
+    // Buscar mockups principais pelo código do produto
     const { data: mockupsPrincipais, error: mockupError } = await supabase
       .from("mockups")
       .select(`
@@ -148,13 +149,19 @@ export async function generateMockupsForPedido(
       .eq("codigo_mockup", pedido.codigo_produto)
       .order("tipo", { ascending: true });
 
-    if (mockupError) throw mockupError;
+    if (mockupError) {
+      console.error('[Mockup] Erro ao buscar mockups:', mockupError);
+      throw mockupError;
+    }
+
+    console.log(`[Mockup] Mockups encontrados pelo código "${pedido.codigo_produto}":`, mockupsPrincipais?.length || 0);
 
     let mockups = mockupsPrincipais || [];
 
     // Se houver mockup de molde vinculado a um de aprovação, buscar também
     const mockupPrincipal = mockups[0];
     if (mockupPrincipal?.mockup_aprovacao_vinculado_id) {
+      console.log(`[Mockup] Buscando mockup de aprovação vinculado: ${mockupPrincipal.mockup_aprovacao_vinculado_id}`);
       const { data: mockupAprovacao, error: aprovacaoError } = await supabase
         .from("mockups")
         .select(`
@@ -168,9 +175,14 @@ export async function generateMockupsForPedido(
         .single();
 
       if (!aprovacaoError && mockupAprovacao) {
+        console.log(`[Mockup] Mockup de aprovação encontrado: ${mockupAprovacao.codigo_mockup}`);
         mockups = [mockupAprovacao, ...mockupsPrincipais];
+      } else if (aprovacaoError) {
+        console.warn('[Mockup] Erro ao buscar mockup de aprovação vinculado:', aprovacaoError);
       }
     }
+
+    console.log(`[Mockup] Total de mockups antes do filtro: ${mockups.length}, tipos: ${mockups.map(m => m.tipo).join(', ')}`);
 
     // Filtrar mockups baseado no tipoGerar
     if (tipoGerar === 'aprovacao') {
@@ -179,9 +191,11 @@ export async function generateMockupsForPedido(
       mockups = mockups.filter(m => m.tipo === 'molde');
     }
 
+    console.log(`[Mockup] Mockups após filtro (${tipoGerar}): ${mockups.length}`);
+
     if (mockups.length === 0) {
       onProgress?.('Produto sem mockup configurado - nenhuma ação realizada');
-      console.log(`[Mockup] Produto ${pedido.codigo_produto} não possui mockup configurado`);
+      console.log(`[Mockup] Produto ${pedido.codigo_produto} não possui mockup configurado para tipo "${tipoGerar}"`);
       return {}; // Retorna vazio sem fazer nada
     }
 
