@@ -66,8 +66,37 @@ Deno.serve(async (req) => {
   }
 
   try {
+    // Authentication check
+    const authHeader = req.headers.get('Authorization');
+    if (!authHeader) {
+      console.error('[cleanup-orphan-files] No authorization header provided');
+      return new Response(
+        JSON.stringify({ error: 'Unauthorized: Authentication required' }),
+        { status: 401, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      );
+    }
+
     const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
+    const supabaseAnonKey = Deno.env.get("SUPABASE_ANON_KEY")!;
     const supabaseServiceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
+    
+    // Create client with user's auth token to verify user
+    const userClient = createClient(supabaseUrl, supabaseAnonKey, {
+      global: { headers: { Authorization: authHeader } }
+    });
+
+    const { data: { user }, error: userError } = await userClient.auth.getUser();
+    if (userError || !user) {
+      console.error('[cleanup-orphan-files] Invalid user token:', userError);
+      return new Response(
+        JSON.stringify({ error: 'Unauthorized: Invalid authentication token' }),
+        { status: 401, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      );
+    }
+
+    console.log(`[cleanup-orphan-files] Authenticated user: ${user.email}`);
+
+    // Use service role client for operations
     const supabase = createClient(supabaseUrl, supabaseServiceKey);
 
     console.log("[Cleanup] Iniciando análise de arquivos órfãos...");
