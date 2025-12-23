@@ -123,10 +123,12 @@ export default function Dashboard() {
       // Processar dados para extrair nome da instância do último envio
       const pedidosComInstancia = (data || []).map(pedido => {
         const queueItems = pedido.whatsapp_queue || [];
+        // Priorizar itens com status 'sent', depois qualquer um que tenha instância
         const sentItem = queueItems.find((q: any) => q.status === 'sent' && q.whatsapp_instances?.nome);
+        const anyItemWithInstance = queueItems.find((q: any) => q.whatsapp_instances?.nome);
         return {
           ...pedido,
-          instancia_envio: sentItem?.whatsapp_instances?.nome || null,
+          instancia_envio: sentItem?.whatsapp_instances?.nome || anyItemWithInstance?.whatsapp_instances?.nome || null,
           whatsapp_queue: undefined // Remove do objeto para não enviar dados desnecessários
         };
       });
