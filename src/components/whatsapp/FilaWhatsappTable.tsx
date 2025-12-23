@@ -4,12 +4,24 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
-import { RefreshCw, AlertCircle, Play, X, RotateCcw, ImageIcon, ChevronLeft, ChevronRight } from "lucide-react";
+import { Input } from "@/components/ui/input";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { RefreshCw, AlertCircle, Play, X, RotateCcw, ImageIcon, ChevronLeft, ChevronRight, Trash2, Filter, Search } from "lucide-react";
 import { format } from "date-fns";
 import { ptBR } from "date-fns/locale";
 import { ErrorDialog } from "./ErrorDialog";
-import { useState } from "react";
+import { useState, useMemo } from "react";
 import { toast } from "sonner";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
 
 const PAGE_SIZE = 50;
 
@@ -38,20 +50,56 @@ interface QueueItem {
   } | null;
 }
 
+interface Filters {
+  status: string;
+  data: string;
+  pedido: string;
+  telefone: string;
+}
+
 export function FilaWhatsappTable() {
   const [selectedError, setSelectedError] = useState<{ pedido: string; error: string } | null>(null);
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
   const [isProcessing, setIsProcessing] = useState(false);
   const [currentPage, setCurrentPage] = useState(1);
+  const [showDeleteDialog, setShowDeleteDialog] = useState(false);
+  const [showFilters, setShowFilters] = useState(false);
+  const [filters, setFilters] = useState<Filters>({
+    status: "all",
+    data: "",
+    pedido: "",
+    telefone: "",
+  });
 
-  // Query para contar total de registros
-  const { data: totalCount } = useQuery({
-    queryKey: ["whatsapp-queue-count"],
+  // Build filter conditions for count query
+  const buildFilterQuery = (query: any) => {
+    if (filters.status && filters.status !== "all") {
+      query = query.eq("status", filters.status);
+    }
+    if (filters.data) {
+      const startDate = new Date(filters.data);
+      startDate.setHours(0, 0, 0, 0);
+      const endDate = new Date(filters.data);
+      endDate.setHours(23, 59, 59, 999);
+      query = query.gte("created_at", startDate.toISOString()).lte("created_at", endDate.toISOString());
+    }
+    if (filters.telefone) {
+      query = query.ilike("phone", `%${filters.telefone.replace(/\D/g, "")}%`);
+    }
+    return query;
+  };
+
+  // Query para contar total de registros com filtros
+  const { data: totalCount, refetch: refetchCount } = useQuery({
+    queryKey: ["whatsapp-queue-count", filters],
     queryFn: async () => {
-      const { count, error } = await supabase
+      let query = supabase
         .from("whatsapp_queue")
         .select("*", { count: "exact", head: true });
 
+      query = buildFilterQuery(query);
+
+      const { count, error } = await query;
       if (error) throw error;
       return count || 0;
     },
@@ -61,12 +109,12 @@ export function FilaWhatsappTable() {
   const totalPages = Math.ceil((totalCount || 0) / PAGE_SIZE);
 
   const { data: queueItems, isLoading, refetch } = useQuery({
-    queryKey: ["whatsapp-queue", currentPage],
+    queryKey: ["whatsapp-queue", currentPage, filters],
     queryFn: async () => {
       const from = (currentPage - 1) * PAGE_SIZE;
       const to = from + PAGE_SIZE - 1;
 
-      const { data, error } = await supabase
+      let query = supabase
         .from("whatsapp_queue")
         .select(`
           *,
@@ -79,17 +127,43 @@ export function FilaWhatsappTable() {
             evolution_instance
           )
         `)
-        .order("created_at", { ascending: false })
-        .range(from, to);
+        .order("created_at", { ascending: false });
 
+      // Apply filters
+      if (filters.status && filters.status !== "all") {
+        query = query.eq("status", filters.status);
+      }
+      if (filters.data) {
+        const startDate = new Date(filters.data);
+        startDate.setHours(0, 0, 0, 0);
+        const endDate = new Date(filters.data);
+        endDate.setHours(23, 59, 59, 999);
+        query = query.gte("created_at", startDate.toISOString()).lte("created_at", endDate.toISOString());
+      }
+      if (filters.telefone) {
+        query = query.ilike("phone", `%${filters.telefone.replace(/\D/g, "")}%`);
+      }
+
+      query = query.range(from, to);
+
+      const { data, error } = await query;
       if (error) throw error;
-      return data as QueueItem[];
+      
+      // Filter by pedido on the client side (since we need to filter on related table)
+      let filteredData = data as QueueItem[];
+      if (filters.pedido) {
+        filteredData = filteredData.filter(item => 
+          item.pedidos?.numero_pedido?.toLowerCase().includes(filters.pedido.toLowerCase())
+        );
+      }
+      
+      return filteredData;
     },
     refetchInterval: 30000,
   });
 
   const handleProcessQueue = async () => {
-    if (isProcessing) return; // Prevenção extra contra cliques múltiplos
+    if (isProcessing) return;
     
     setIsProcessing(true);
     try {
@@ -97,11 +171,9 @@ export function FilaWhatsappTable() {
       if (error) throw error;
       
       toast.success("Fila processada com sucesso!");
-      
-      // Aguardar 2 segundos antes de permitir novo processamento
       await new Promise(resolve => setTimeout(resolve, 2000));
-      
       refetch();
+      refetchCount();
     } catch (error) {
       console.error("Erro ao processar fila:", error);
       toast.error("Erro ao processar fila");
@@ -125,9 +197,30 @@ export function FilaWhatsappTable() {
       toast.success(`${selectedIds.length} mensagens canceladas`);
       setSelectedIds([]);
       refetch();
+      refetchCount();
     } catch (error) {
       console.error("Erro ao cancelar mensagens:", error);
       toast.error("Erro ao cancelar mensagens");
+    }
+  };
+
+  const handleDeleteSelected = async () => {
+    if (selectedIds.length === 0) return;
+    try {
+      const { error } = await supabase
+        .from('whatsapp_queue')
+        .delete()
+        .in('id', selectedIds);
+      
+      if (error) throw error;
+      toast.success(`${selectedIds.length} mensagens excluídas`);
+      setSelectedIds([]);
+      setShowDeleteDialog(false);
+      refetch();
+      refetchCount();
+    } catch (error) {
+      console.error("Erro ao excluir mensagens:", error);
+      toast.error("Erro ao excluir mensagens");
     }
   };
 
@@ -136,7 +229,6 @@ export function FilaWhatsappTable() {
     
     setIsProcessing(true);
     try {
-      // 1. Marcar mensagens como pending
       const { error } = await supabase
         .from('whatsapp_queue')
         .update({ 
@@ -150,7 +242,6 @@ export function FilaWhatsappTable() {
       toast.success(`${selectedIds.length} mensagens marcadas para reprocessamento`);
       setSelectedIds([]);
       
-      // 2. Processar a fila automaticamente
       const { error: processError } = await supabase.functions.invoke('process-whatsapp-queue');
       if (processError) {
         console.error("Erro ao processar fila:", processError);
@@ -159,9 +250,9 @@ export function FilaWhatsappTable() {
         toast.success("Fila processada!");
       }
       
-      // 3. Aguardar um pouco e atualizar
       await new Promise(resolve => setTimeout(resolve, 2000));
       refetch();
+      refetchCount();
     } catch (error) {
       console.error("Erro ao reprocessar mensagens:", error);
       toast.error("Erro ao reprocessar mensagens");
@@ -190,6 +281,13 @@ export function FilaWhatsappTable() {
       setSelectedIds([]);
     }
   };
+
+  const clearFilters = () => {
+    setFilters({ status: "all", data: "", pedido: "", telefone: "" });
+    setCurrentPage(1);
+  };
+
+  const hasActiveFilters = filters.status !== "all" || filters.data || filters.pedido || filters.telefone;
 
   const getStatusBadge = (status: string) => {
     const variants: Record<string, { variant: "default" | "secondary" | "outline" | "destructive"; label: string }> = {
@@ -220,12 +318,69 @@ export function FilaWhatsappTable() {
     return format(new Date(dateStr), "dd/MM HH:mm", { locale: ptBR });
   };
 
+  // Componente de paginação reutilizável
+  const PaginationControls = () => (
+    totalPages > 1 ? (
+      <div className="flex items-center justify-between">
+        <div className="text-sm text-muted-foreground">
+          Página {currentPage} de {totalPages}
+        </div>
+        <div className="flex items-center gap-2">
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => goToPage(currentPage - 1)}
+            disabled={currentPage === 1}
+          >
+            <ChevronLeft className="h-4 w-4" />
+            Anterior
+          </Button>
+          <div className="flex gap-1">
+            {Array.from({ length: Math.min(5, totalPages) }, (_, i) => {
+              let pageNum: number;
+              if (totalPages <= 5) {
+                pageNum = i + 1;
+              } else if (currentPage <= 3) {
+                pageNum = i + 1;
+              } else if (currentPage >= totalPages - 2) {
+                pageNum = totalPages - 4 + i;
+              } else {
+                pageNum = currentPage - 2 + i;
+              }
+              return (
+                <Button
+                  key={pageNum}
+                  variant={pageNum === currentPage ? "default" : "outline"}
+                  size="sm"
+                  className="w-8"
+                  onClick={() => goToPage(pageNum)}
+                >
+                  {pageNum}
+                </Button>
+              );
+            })}
+          </div>
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => goToPage(currentPage + 1)}
+            disabled={currentPage === totalPages}
+          >
+            Próxima
+            <ChevronRight className="h-4 w-4" />
+          </Button>
+        </div>
+      </div>
+    ) : null
+  );
+
   if (isLoading) {
     return <div className="text-center py-8 text-muted-foreground">Carregando fila...</div>;
   }
 
   return (
     <div className="space-y-4">
+      {/* Header com contagem e ações */}
       <div className="flex justify-between items-center flex-wrap gap-2">
         <div className="text-sm text-muted-foreground">
           {totalCount || 0} mensagens na fila
@@ -236,6 +391,15 @@ export function FilaWhatsappTable() {
           )}
         </div>
         <div className="flex gap-2 flex-wrap">
+          <Button
+            variant={showFilters ? "secondary" : "outline"}
+            size="sm"
+            onClick={() => setShowFilters(!showFilters)}
+          >
+            <Filter className="h-4 w-4 mr-2" />
+            Filtros
+            {hasActiveFilters && <Badge variant="destructive" className="ml-2 h-5 w-5 p-0 text-xs">{Object.values(filters).filter(v => v && v !== "all").length}</Badge>}
+          </Button>
           {selectedIds.length > 0 && (
             <>
               <Button 
@@ -254,6 +418,14 @@ export function FilaWhatsappTable() {
                 <RotateCcw className="h-4 w-4 mr-2" />
                 Reprocessar
               </Button>
+              <Button 
+                variant="destructive" 
+                size="sm" 
+                onClick={() => setShowDeleteDialog(true)}
+              >
+                <Trash2 className="h-4 w-4 mr-2" />
+                Excluir
+              </Button>
             </>
           )}
           <Button 
@@ -265,12 +437,99 @@ export function FilaWhatsappTable() {
             <Play className="h-4 w-4 mr-2" />
             {isProcessing ? "Processando..." : "Processar Fila"}
           </Button>
-          <Button variant="outline" size="sm" onClick={() => refetch()}>
+          <Button variant="outline" size="sm" onClick={() => { refetch(); refetchCount(); }}>
             <RefreshCw className="h-4 w-4 mr-2" />
             Atualizar
           </Button>
         </div>
       </div>
+
+      {/* Filtros */}
+      {showFilters && (
+        <div className="flex flex-wrap gap-3 p-4 bg-muted/50 rounded-lg border">
+          <div className="flex flex-col gap-1">
+            <label className="text-xs font-medium text-muted-foreground">Status</label>
+            <Select
+              value={filters.status}
+              onValueChange={(value) => {
+                setFilters(prev => ({ ...prev, status: value }));
+                setCurrentPage(1);
+              }}
+            >
+              <SelectTrigger className="w-[140px] h-9">
+                <SelectValue placeholder="Todos" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">Todos</SelectItem>
+                <SelectItem value="pending">Pendente</SelectItem>
+                <SelectItem value="processing">Processando</SelectItem>
+                <SelectItem value="sent">Enviada</SelectItem>
+                <SelectItem value="failed">Falhou</SelectItem>
+                <SelectItem value="cancelled">Cancelado</SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
+
+          <div className="flex flex-col gap-1">
+            <label className="text-xs font-medium text-muted-foreground">Data</label>
+            <Input
+              type="date"
+              value={filters.data}
+              onChange={(e) => {
+                setFilters(prev => ({ ...prev, data: e.target.value }));
+                setCurrentPage(1);
+              }}
+              className="w-[150px] h-9"
+            />
+          </div>
+
+          <div className="flex flex-col gap-1">
+            <label className="text-xs font-medium text-muted-foreground">Pedido</label>
+            <div className="relative">
+              <Search className="absolute left-2 top-2.5 h-4 w-4 text-muted-foreground" />
+              <Input
+                type="text"
+                placeholder="Nº pedido..."
+                value={filters.pedido}
+                onChange={(e) => {
+                  setFilters(prev => ({ ...prev, pedido: e.target.value }));
+                  setCurrentPage(1);
+                }}
+                className="w-[140px] h-9 pl-8"
+              />
+            </div>
+          </div>
+
+          <div className="flex flex-col gap-1">
+            <label className="text-xs font-medium text-muted-foreground">Telefone</label>
+            <div className="relative">
+              <Search className="absolute left-2 top-2.5 h-4 w-4 text-muted-foreground" />
+              <Input
+                type="text"
+                placeholder="Telefone..."
+                value={filters.telefone}
+                onChange={(e) => {
+                  setFilters(prev => ({ ...prev, telefone: e.target.value }));
+                  setCurrentPage(1);
+                }}
+                className="w-[140px] h-9 pl-8"
+              />
+            </div>
+          </div>
+
+          {hasActiveFilters && (
+            <div className="flex items-end">
+              <Button variant="ghost" size="sm" onClick={clearFilters} className="h-9">
+                <X className="h-4 w-4 mr-1" />
+                Limpar
+              </Button>
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* Paginação Superior */}
+      <PaginationControls />
 
       <div className="border rounded-lg overflow-x-auto">
         <Table>
@@ -389,7 +648,7 @@ export function FilaWhatsappTable() {
             ) : (
               <TableRow>
                 <TableCell colSpan={12} className="text-center py-8 text-muted-foreground">
-                  Nenhuma mensagem na fila
+                  {hasActiveFilters ? "Nenhuma mensagem encontrada com os filtros aplicados" : "Nenhuma mensagem na fila"}
                 </TableCell>
               </TableRow>
             )}
@@ -397,59 +656,8 @@ export function FilaWhatsappTable() {
         </Table>
       </div>
 
-      {/* Paginação */}
-      {totalPages > 1 && (
-        <div className="flex items-center justify-between">
-          <div className="text-sm text-muted-foreground">
-            Página {currentPage} de {totalPages}
-          </div>
-          <div className="flex items-center gap-2">
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={() => goToPage(currentPage - 1)}
-              disabled={currentPage === 1}
-            >
-              <ChevronLeft className="h-4 w-4" />
-              Anterior
-            </Button>
-            <div className="flex gap-1">
-              {Array.from({ length: Math.min(5, totalPages) }, (_, i) => {
-                let pageNum: number;
-                if (totalPages <= 5) {
-                  pageNum = i + 1;
-                } else if (currentPage <= 3) {
-                  pageNum = i + 1;
-                } else if (currentPage >= totalPages - 2) {
-                  pageNum = totalPages - 4 + i;
-                } else {
-                  pageNum = currentPage - 2 + i;
-                }
-                return (
-                  <Button
-                    key={pageNum}
-                    variant={pageNum === currentPage ? "default" : "outline"}
-                    size="sm"
-                    className="w-8"
-                    onClick={() => goToPage(pageNum)}
-                  >
-                    {pageNum}
-                  </Button>
-                );
-              })}
-            </div>
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={() => goToPage(currentPage + 1)}
-              disabled={currentPage === totalPages}
-            >
-              Próxima
-              <ChevronRight className="h-4 w-4" />
-            </Button>
-          </div>
-        </div>
-      )}
+      {/* Paginação Inferior */}
+      <PaginationControls />
 
       {selectedError && (
         <ErrorDialog
@@ -459,6 +667,24 @@ export function FilaWhatsappTable() {
           errorMessage={selectedError.error}
         />
       )}
+
+      {/* Dialog de confirmação de exclusão */}
+      <AlertDialog open={showDeleteDialog} onOpenChange={setShowDeleteDialog}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Confirmar exclusão</AlertDialogTitle>
+            <AlertDialogDescription>
+              Tem certeza que deseja excluir {selectedIds.length} mensagem(ns)? Esta ação não pode ser desfeita.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancelar</AlertDialogCancel>
+            <AlertDialogAction onClick={handleDeleteSelected} className="bg-destructive text-destructive-foreground hover:bg-destructive/90">
+              Excluir
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 }
