@@ -131,14 +131,14 @@ export default function CleanupPedidosDialog({
             Limpar Arquivos de Pedidos Antigos
           </DialogTitle>
           <DialogDescription>
-            Esta ação irá remover permanentemente os arquivos selecionados do Storage.
+            Esta ação irá remover permanentemente os arquivos de pedidos <strong>arquivados</strong> há mais de {config.days} dias. A Foto do Cliente nunca será removida.
           </DialogDescription>
         </DialogHeader>
 
         <div className="space-y-4 py-4">
           {/* Configuração atual */}
           <div className="flex flex-wrap gap-2">
-            <Badge variant="outline">Pedidos com mais de {config.days} dias</Badge>
+            <Badge variant="outline">Arquivados há mais de {config.days} dias</Badge>
             {config.cleanupFotoAprovacao && <Badge>Fotos de Aprovação</Badge>}
             {config.cleanupMoldeProducao && <Badge>Moldes de Produção</Badge>}
           </div>
@@ -200,7 +200,7 @@ export default function CleanupPedidosDialog({
                 <div className="text-center py-8 text-muted-foreground">
                   <p>Nenhum arquivo encontrado para limpeza.</p>
                   <p className="text-sm mt-1">
-                    Não há pedidos com mais de {config.days} dias que tenham os arquivos selecionados.
+                    Não há pedidos arquivados há mais de {config.days} dias que tenham os arquivos selecionados.
                   </p>
                 </div>
               )}
