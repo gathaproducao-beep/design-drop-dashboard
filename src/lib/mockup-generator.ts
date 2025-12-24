@@ -481,9 +481,19 @@ export async function generateMockupsForPedido(
         .select('auto_send_enabled')
         .single();
       
-      if (settings?.auto_send_enabled && pedido.mensagem_enviada !== 'enviada') {
+      // Buscar status ATUAL do pedido no banco (não usar o objeto pedido que pode estar desatualizado)
+      const { data: pedidoAtualizado } = await supabase
+        .from('pedidos')
+        .select('mensagem_enviada')
+        .eq('id', pedido.id)
+        .single();
+      
+      const statusAtual = pedidoAtualizado?.mensagem_enviada;
+      
+      // Só envia se auto_send está ativo E mensagem ainda não foi enviada/enviando
+      if (settings?.auto_send_enabled && !['enviada', 'enviando'].includes(statusAtual || '')) {
         try {
-          console.log('📱 Iniciando auto-envio WhatsApp para pedido:', pedido.numero_pedido);
+          console.log('📱 Iniciando auto-envio WhatsApp para pedido:', pedido.numero_pedido, 'status atual:', statusAtual);
           onProgress?.('Adicionando mensagem à fila de envio...');
           
           const { processarEnvioPedido } = await import('./whatsapp');
@@ -501,7 +511,7 @@ export async function generateMockupsForPedido(
       } else {
         console.log('⏭️ Auto-envio pulado:', {
           autoSendEnabled: settings?.auto_send_enabled,
-          mensagemStatus: pedido.mensagem_enviada
+          mensagemStatus: statusAtual
         });
       }
     }
