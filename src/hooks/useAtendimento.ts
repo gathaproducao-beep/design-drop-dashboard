@@ -91,7 +91,7 @@ export function useAtendimento(options: UseAtendimentoOptions = {}) {
   }, [selectedGroup, selectedInstanceId]);
 
   // Buscar conversas
-  const fetchConversations = useCallback(async () => {
+  const fetchConversations = useCallback(async (selectedPhoneToUpdate?: string) => {
     try {
       let query = supabase
         .from('whatsapp_conversations')
@@ -152,10 +152,10 @@ export function useAtendimento(options: UseAtendimentoOptions = {}) {
 
       setConversations(filtered);
 
-      // Atualizar o grupo selecionado se existir
-      if (selectedGroup) {
+      // Atualizar o grupo selecionado se existir (usando parâmetro para evitar dependência circular)
+      if (selectedPhoneToUpdate) {
         const updatedGroup = groupConversationsByContact(filtered).find(
-          g => g.contactPhone === selectedGroup.contactPhone
+          g => g.contactPhone === selectedPhoneToUpdate
         );
         if (updatedGroup) {
           setSelectedGroup(updatedGroup);
@@ -166,7 +166,7 @@ export function useAtendimento(options: UseAtendimentoOptions = {}) {
     } finally {
       setLoading(false);
     }
-  }, [instanceFilter, statusFilter, assignedFilter, searchQuery, hideFinalized, selectedGroup?.contactPhone]);
+  }, [instanceFilter, statusFilter, assignedFilter, searchQuery, hideFinalized]);
 
   // Buscar mensagens de uma conversa
   const fetchMessages = useCallback(async (conversationId: string) => {
@@ -254,7 +254,7 @@ export function useAtendimento(options: UseAtendimentoOptions = {}) {
 
       // Recarregar mensagens e conversas
       await fetchMessages(selectedConversation.id);
-      await fetchConversations();
+      await fetchConversations(selectedGroup?.contactPhone);
       
       return true;
     } catch (error: any) {
@@ -266,7 +266,7 @@ export function useAtendimento(options: UseAtendimentoOptions = {}) {
       });
       return false;
     }
-  }, [selectedConversation, fetchMessages, fetchConversations, toast]);
+  }, [selectedConversation, selectedGroup?.contactPhone, fetchMessages, fetchConversations, toast]);
 
   // Atualizar status
   const updateStatus = useCallback(async (conversationId: string, status: ConversationStatus) => {
@@ -311,13 +311,19 @@ export function useAtendimento(options: UseAtendimentoOptions = {}) {
     }
   }, [fetchConversations, toast]);
 
-  // Polling para atualização
+  // Polling para atualização - usar ref para evitar recriação do interval
   useEffect(() => {
     fetchConversations();
-    
-    const interval = setInterval(fetchConversations, refreshInterval);
+  }, [instanceFilter, statusFilter, assignedFilter, searchQuery, hideFinalized]);
+
+  // Interval separado para evitar loop
+  useEffect(() => {
+    const interval = setInterval(() => {
+      // Não passar selectedGroup aqui para evitar re-trigger
+      fetchConversations();
+    }, refreshInterval);
     return () => clearInterval(interval);
-  }, [fetchConversations, refreshInterval]);
+  }, [refreshInterval]);
 
   // Realtime para mensagens
   useEffect(() => {
