@@ -112,6 +112,17 @@ export interface Pedido {
   foto_aprovacao: string[] | null;
 }
 
+// Grouped conversation - múltiplas conversas do mesmo contato (diferentes instâncias)
+export interface GroupedConversation {
+  contactPhone: string;
+  contact: WhatsappContact | null;
+  conversations: WhatsappConversation[];
+  totalUnreadCount: number;
+  lastMessageAt: string | null;
+  lastMessagePreview: string | null;
+  primaryStatus: ConversationStatus;
+}
+
 export const STATUS_LABELS: Record<ConversationStatus, string> = {
   novo: 'Novo',
   em_atendimento: 'Em atendimento',

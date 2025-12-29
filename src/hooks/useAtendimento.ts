@@ -1,6 +1,6 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useMemo } from 'react';
 import { supabase } from '@/integrations/supabase/client';
-import { WhatsappConversation, WhatsappMessage, ConversationStatus } from '@/types/atendimento';
+import { WhatsappConversation, WhatsappMessage, ConversationStatus, GroupedConversation } from '@/types/atendimento';
 import { useToast } from '@/hooks/use-toast';
 
 interface UseAtendimentoOptions {
@@ -9,6 +9,52 @@ interface UseAtendimentoOptions {
   assignedFilter?: string | null;
   searchQuery?: string;
   refreshInterval?: number;
+}
+
+// Helper para agrupar conversas por telefone do contato
+function groupConversationsByContact(conversations: WhatsappConversation[]): GroupedConversation[] {
+  const groups = new Map<string, WhatsappConversation[]>();
+
+  for (const conv of conversations) {
+    const phone = conv.contact?.phone || 'unknown';
+    if (!groups.has(phone)) {
+      groups.set(phone, []);
+    }
+    groups.get(phone)!.push(conv);
+  }
+
+  const result: GroupedConversation[] = [];
+
+  for (const [phone, convs] of groups) {
+    // Ordenar por última mensagem
+    convs.sort((a, b) => {
+      const dateA = a.last_message_at ? new Date(a.last_message_at).getTime() : 0;
+      const dateB = b.last_message_at ? new Date(b.last_message_at).getTime() : 0;
+      return dateB - dateA;
+    });
+
+    const primaryConv = convs[0];
+    const totalUnread = convs.reduce((sum, c) => sum + (c.unread_count || 0), 0);
+
+    result.push({
+      contactPhone: phone,
+      contact: primaryConv.contact || null,
+      conversations: convs,
+      totalUnreadCount: totalUnread,
+      lastMessageAt: primaryConv.last_message_at,
+      lastMessagePreview: primaryConv.last_message_preview,
+      primaryStatus: primaryConv.status
+    });
+  }
+
+  // Ordenar grupos por última mensagem
+  result.sort((a, b) => {
+    const dateA = a.lastMessageAt ? new Date(a.lastMessageAt).getTime() : 0;
+    const dateB = b.lastMessageAt ? new Date(b.lastMessageAt).getTime() : 0;
+    return dateB - dateA;
+  });
+
+  return result;
 }
 
 export function useAtendimento(options: UseAtendimentoOptions = {}) {
@@ -21,11 +67,26 @@ export function useAtendimento(options: UseAtendimentoOptions = {}) {
   } = options;
   
   const [conversations, setConversations] = useState<WhatsappConversation[]>([]);
-  const [selectedConversation, setSelectedConversation] = useState<WhatsappConversation | null>(null);
+  const [selectedGroup, setSelectedGroup] = useState<GroupedConversation | null>(null);
+  const [selectedInstanceId, setSelectedInstanceId] = useState<string | null>(null);
   const [messages, setMessages] = useState<WhatsappMessage[]>([]);
   const [loading, setLoading] = useState(true);
   const [messagesLoading, setMessagesLoading] = useState(false);
   const { toast } = useToast();
+
+  // Conversas agrupadas
+  const groupedConversations = useMemo(() => {
+    return groupConversationsByContact(conversations);
+  }, [conversations]);
+
+  // Conversa selecionada atual (baseado no grupo + instância)
+  const selectedConversation = useMemo(() => {
+    if (!selectedGroup) return null;
+    if (selectedInstanceId) {
+      return selectedGroup.conversations.find(c => c.instance_id === selectedInstanceId) || selectedGroup.conversations[0];
+    }
+    return selectedGroup.conversations[0];
+  }, [selectedGroup, selectedInstanceId]);
 
   // Buscar conversas
   const fetchConversations = useCallback(async () => {
@@ -66,12 +127,22 @@ export function useAtendimento(options: UseAtendimentoOptions = {}) {
       }
 
       setConversations(filtered);
+
+      // Atualizar o grupo selecionado se existir
+      if (selectedGroup) {
+        const updatedGroup = groupConversationsByContact(filtered).find(
+          g => g.contactPhone === selectedGroup.contactPhone
+        );
+        if (updatedGroup) {
+          setSelectedGroup(updatedGroup);
+        }
+      }
     } catch (error) {
       console.error('Erro ao buscar conversas:', error);
     } finally {
       setLoading(false);
     }
-  }, [instanceFilter, statusFilter, assignedFilter, searchQuery]);
+  }, [instanceFilter, statusFilter, assignedFilter, searchQuery, selectedGroup?.contactPhone]);
 
   // Buscar mensagens de uma conversa
   const fetchMessages = useCallback(async (conversationId: string) => {
@@ -86,12 +157,7 @@ export function useAtendimento(options: UseAtendimentoOptions = {}) {
 
       if (error) throw error;
       setMessages(data || []);
-
-      // Marcar como lida
-      await supabase
-        .from('whatsapp_conversations')
-        .update({ unread_count: 0 })
-        .eq('id', conversationId);
+      // NÃO marca como lida aqui - apenas ao responder
 
     } catch (error) {
       console.error('Erro ao buscar mensagens:', error);
@@ -100,11 +166,31 @@ export function useAtendimento(options: UseAtendimentoOptions = {}) {
     }
   }, []);
 
-  // Selecionar conversa
-  const selectConversation = useCallback(async (conversation: WhatsappConversation) => {
-    setSelectedConversation(conversation);
-    await fetchMessages(conversation.id);
+  // Selecionar grupo de conversas
+  const selectGroup = useCallback(async (group: GroupedConversation, instanceId?: string) => {
+    setSelectedGroup(group);
+    const targetInstance = instanceId || group.conversations[0]?.instance_id;
+    setSelectedInstanceId(targetInstance || null);
+    
+    const targetConv = instanceId 
+      ? group.conversations.find(c => c.instance_id === instanceId) 
+      : group.conversations[0];
+    
+    if (targetConv) {
+      await fetchMessages(targetConv.id);
+    }
   }, [fetchMessages]);
+
+  // Trocar instância (aba) dentro do mesmo grupo
+  const switchInstance = useCallback(async (instanceId: string) => {
+    if (!selectedGroup) return;
+    setSelectedInstanceId(instanceId);
+    
+    const targetConv = selectedGroup.conversations.find(c => c.instance_id === instanceId);
+    if (targetConv) {
+      await fetchMessages(targetConv.id);
+    }
+  }, [selectedGroup, fetchMessages]);
 
   // Enviar mensagem
   const sendMessage = useCallback(async (content: string, mediaUrl?: string, messageType: string = 'text') => {
@@ -136,7 +222,13 @@ export function useAtendimento(options: UseAtendimentoOptions = {}) {
         throw new Error(response.data?.error || 'Erro ao enviar mensagem');
       }
 
-      // Recarregar mensagens
+      // Marcar como lida ao responder
+      await supabase
+        .from('whatsapp_conversations')
+        .update({ unread_count: 0 })
+        .eq('id', selectedConversation.id);
+
+      // Recarregar mensagens e conversas
       await fetchMessages(selectedConversation.id);
       await fetchConversations();
       
@@ -180,10 +272,6 @@ export function useAtendimento(options: UseAtendimentoOptions = {}) {
       });
 
       await fetchConversations();
-      
-      if (selectedConversation?.id === conversationId) {
-        setSelectedConversation(prev => prev ? { ...prev, status } : null);
-      }
 
       toast({
         title: 'Status atualizado',
@@ -197,7 +285,7 @@ export function useAtendimento(options: UseAtendimentoOptions = {}) {
         variant: 'destructive'
       });
     }
-  }, [fetchConversations, selectedConversation, toast]);
+  }, [fetchConversations, toast]);
 
   // Polling para atualização
   useEffect(() => {
@@ -234,14 +322,18 @@ export function useAtendimento(options: UseAtendimentoOptions = {}) {
 
   return {
     conversations,
+    groupedConversations,
+    selectedGroup,
     selectedConversation,
+    selectedInstanceId,
     messages,
     loading,
     messagesLoading,
-    selectConversation,
+    selectGroup,
+    switchInstance,
     sendMessage,
     updateStatus,
     refresh: fetchConversations,
-    setSelectedConversation
+    setSelectedGroup
   };
 }
