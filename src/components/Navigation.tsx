@@ -55,6 +55,71 @@ export function Navigation() {
     }
   };
 
+  // Verifica se está dentro de um Sheet (modo compacto/sidebar)
+  const isSidebarMode = typeof window !== 'undefined' && 
+    document.querySelector('[data-state="open"][role="dialog"]');
+
+  // Modo sidebar (dentro do Sheet)
+  if (isSidebarMode !== null) {
+    return (
+      <nav className="flex flex-col h-full bg-card">
+        <div className="p-4 border-b">
+          <Link to="/" className="flex items-center gap-2">
+            <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-primary to-accent flex items-center justify-center">
+              <span className="text-white font-bold text-lg">M</span>
+            </div>
+            <span className="font-bold text-lg">Mockup Manager</span>
+          </Link>
+        </div>
+        
+        <div className="flex-1 overflow-y-auto py-2">
+          {isLoading ? (
+            <div className="flex items-center gap-2 px-4 py-2 text-muted-foreground">
+              <Loader2 className="h-4 w-4 animate-spin" />
+              Carregando...
+            </div>
+          ) : (
+            <div className="flex flex-col gap-1 px-2">
+              {visibleLinks.map((link) => {
+                const Icon = link.icon;
+                const isActive = location.pathname === link.to;
+                return (
+                  <Link
+                    key={link.to}
+                    to={link.to}
+                    className={cn(
+                      "flex items-center gap-3 px-3 py-2.5 rounded-lg transition-all text-sm",
+                      isActive
+                        ? "bg-primary text-primary-foreground shadow-sm"
+                        : "text-muted-foreground hover:bg-muted hover:text-foreground"
+                    )}
+                  >
+                    <Icon className="h-4 w-4" />
+                    {link.label}
+                  </Link>
+                );
+              })}
+            </div>
+          )}
+        </div>
+        
+        <div className="border-t p-2">
+          <Button
+            variant="ghost"
+            size="sm"
+            onClick={handleLogout}
+            disabled={isLoggingOut}
+            className="w-full justify-start gap-2"
+          >
+            <LogOut className="h-4 w-4" />
+            Sair
+          </Button>
+        </div>
+      </nav>
+    );
+  }
+
+  // Modo horizontal (nav bar normal)
   return (
     <nav className="border-b bg-card shadow-sm">
       <div className="container mx-auto px-4">

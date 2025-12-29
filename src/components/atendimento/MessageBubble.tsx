@@ -125,11 +125,21 @@ export function MessageBubble({ message }: MessageBubbleProps) {
   return (
     <div className={cn("flex", isOutbound ? "justify-end" : "justify-start")}>
       <div className={cn(
-        "max-w-[70%] rounded-lg px-3 py-2",
-        isOutbound ? "bg-primary text-primary-foreground" : "bg-muted"
+        "max-w-[75%] rounded-lg px-3 py-1.5 shadow-sm relative",
+        isOutbound 
+          ? "bg-[#d9fdd3] text-[#111b21] rounded-tr-none" 
+          : "bg-white text-[#111b21] rounded-tl-none"
       )}>
+        {/* Tail da bolha estilo WhatsApp */}
+        <div className={cn(
+          "absolute top-0 w-2 h-2",
+          isOutbound 
+            ? "-right-1.5 border-l-[8px] border-l-[#d9fdd3] border-t-[8px] border-t-transparent" 
+            : "-left-1.5 border-r-[8px] border-r-white border-t-[8px] border-t-transparent"
+        )} />
+        
         {!isOutbound && message.sender_name && (
-          <p className="text-xs font-medium mb-1 opacity-70">{message.sender_name}</p>
+          <p className="text-xs font-medium mb-1 text-[#1fa855]">{message.sender_name}</p>
         )}
         
         {/* Renderizar mídia */}
@@ -138,15 +148,15 @@ export function MessageBubble({ message }: MessageBubbleProps) {
         
         {/* Texto/caption */}
         {hasTextContent && (
-          <p className="whitespace-pre-wrap break-words text-sm">{message.content}</p>
+          <p className="whitespace-pre-wrap break-words text-sm leading-relaxed">{message.content}</p>
         )}
         {message.caption && message.caption !== message.content && (
-          <p className="whitespace-pre-wrap break-words text-sm">{message.caption}</p>
+          <p className="whitespace-pre-wrap break-words text-sm leading-relaxed mt-1">{message.caption}</p>
         )}
         
         <div className={cn(
-          "flex items-center gap-1 mt-1 text-xs",
-          isOutbound ? "justify-end opacity-70" : "text-muted-foreground"
+          "flex items-center gap-1 mt-0.5 text-[11px] text-[#667781]",
+          isOutbound ? "justify-end" : ""
         )}>
           <span>{format(new Date(message.created_at), 'HH:mm')}</span>
           {isOutbound && <StatusIcon />}
