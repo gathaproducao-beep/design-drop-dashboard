@@ -1,5 +1,5 @@
 import { Link, useLocation, useNavigate } from "react-router-dom";
-import { LayoutDashboard, Image, MessageSquare, Settings, Users, LogOut, Layers, Cloud, Loader2, Wrench } from "lucide-react";
+import { LayoutDashboard, Image, MessageSquare, Settings, Users, LogOut, Layers, Cloud, Loader2, Wrench, Headphones, Zap } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import { logout } from "@/lib/auth";
@@ -22,9 +22,11 @@ export function Navigation() {
 
   const allLinks: NavLink[] = [
     { to: "/", icon: LayoutDashboard, label: "Pedidos", permission: "visualizar_pedidos" },
+    { to: "/atendimento", icon: Headphones, label: "Atendimento", permission: "visualizar_fila" },
     { to: "/mockups", icon: Image, label: "Mockups", permission: "visualizar_mockups" },
     { to: "/templates", icon: Layers, label: "Templates", permission: "visualizar_mockups" },
     { to: "/mensagens", icon: MessageSquare, label: "Mensagens", permission: "visualizar_mensagens" },
+    { to: "/respostas-rapidas", icon: Zap, label: "Respostas Rápidas", permission: "visualizar_mensagens" },
     { to: "/fila-whatsapp", icon: MessageSquare, label: "Fila de Envios", permission: "visualizar_fila" },
     { to: "/configuracoes-whatsapp", icon: Settings, label: "Config. WhatsApp", permission: "visualizar_configuracoes" },
     { to: "/configuracoes-drive", icon: Cloud, label: "Google Drive", permission: "editar_configuracoes" },
