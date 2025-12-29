@@ -1,9 +1,10 @@
 import { useState, useRef, useEffect, useCallback } from 'react';
-import { ArrowLeft, Send, Paperclip, X, Zap } from 'lucide-react';
+import { ArrowLeft, Send, Paperclip, X, Zap, Phone } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Textarea } from '@/components/ui/textarea';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import { Badge } from '@/components/ui/badge';
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '@/components/ui/dropdown-menu';
 import { GroupedConversation, WhatsappMessage, ConversationStatus, STATUS_LABELS, WhatsappConversation } from '@/types/atendimento';
 import { MessageBubble } from './MessageBubble';
@@ -191,31 +192,42 @@ export function ChatArea({
           </DropdownMenu>
         </div>
 
-        {/* Abas de instâncias */}
-        {group.conversations.length > 1 && (
-          <Tabs 
-            value={selectedInstanceId || group.conversations[0]?.instance_id || ''} 
-            onValueChange={onSwitchInstance}
-            className="mt-2"
-          >
-            <TabsList className="h-8 w-full justify-start overflow-x-auto">
-              {group.conversations.map(conv => (
-                <TabsTrigger 
-                  key={conv.id} 
-                  value={conv.instance_id || ''}
-                  className="text-xs h-7 px-3 relative"
-                >
-                  {conv.instance?.nome || 'Sem número'}
-                  {(conv.unread_count || 0) > 0 && (
-                    <span className="ml-1.5 h-4 min-w-4 bg-primary text-primary-foreground text-[10px] rounded-full flex items-center justify-center">
-                      {conv.unread_count}
-                    </span>
-                  )}
-                </TabsTrigger>
-              ))}
-            </TabsList>
-          </Tabs>
-        )}
+        {/* Abas de instâncias - sempre mostrar para identificar qual número */}
+        <div className="mt-2">
+          {group.conversations.length > 1 ? (
+            <Tabs 
+              value={selectedInstanceId || group.conversations[0]?.instance_id || ''} 
+              onValueChange={onSwitchInstance}
+            >
+              <TabsList className="h-9 w-full justify-start gap-1 bg-muted/50 p-1">
+                {group.conversations.map(conv => (
+                  <TabsTrigger 
+                    key={conv.id} 
+                    value={conv.instance_id || ''}
+                    className="text-xs h-7 px-3 data-[state=active]:bg-primary data-[state=active]:text-primary-foreground data-[state=active]:shadow-md gap-1.5 font-medium"
+                  >
+                    <Phone className="h-3 w-3" />
+                    {conv.instance?.nome || 'Sem número'}
+                    {(conv.unread_count || 0) > 0 && (
+                      <Badge variant="secondary" className="ml-1 h-4 min-w-4 text-[10px] px-1 bg-destructive text-destructive-foreground">
+                        {conv.unread_count}
+                      </Badge>
+                    )}
+                  </TabsTrigger>
+                ))}
+              </TabsList>
+            </Tabs>
+          ) : (
+            /* Mostrar qual instância mesmo quando há apenas uma */
+            <div className="flex items-center gap-2 px-2 py-1.5 bg-muted/50 rounded-md text-xs text-muted-foreground">
+              <Phone className="h-3.5 w-3.5" />
+              <span>Conversa via:</span>
+              <Badge variant="secondary" className="font-medium">
+                {group.conversations[0]?.instance?.nome || 'Número não identificado'}
+              </Badge>
+            </div>
+          )}
+        </div>
       </div>
 
       {/* Messages */}

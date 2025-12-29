@@ -64,7 +64,26 @@ export const validatePhone = (phone: string): boolean => {
 export const normalizePhone = (phone: string): string => {
   if (!phone) return '';
   
-  const cleanPhone = phone.replace(/\D/g, '');
+  let cleanPhone = phone.replace(/\D/g, '');
+  
+  // Números muito longos (>13 dígitos) geralmente são IDs internos do WhatsApp
+  // Tentar extrair os últimos 12-13 dígitos que podem ser o número real
+  if (cleanPhone.length > 13) {
+    // Se o número começa com 55, pode ter zeros ou dígitos extras no início
+    if (cleanPhone.startsWith('55')) {
+      cleanPhone = cleanPhone.slice(0, 13);
+    } else {
+      // Tentar pegar os últimos 13 dígitos e verificar se faz sentido
+      const lastDigits = cleanPhone.slice(-13);
+      if (lastDigits.startsWith('55')) {
+        cleanPhone = lastDigits;
+      } else {
+        // Tentar os últimos 11 dígitos (sem código do país)
+        const last11 = cleanPhone.slice(-11);
+        cleanPhone = `55${last11}`;
+      }
+    }
+  }
   
   // Número com 10 ou 11 dígitos = sem código do país (DDD + número)
   // Adicionar código do país 55
@@ -75,12 +94,6 @@ export const normalizePhone = (phone: string): string => {
   // Número com 12 ou 13 dígitos = já tem código do país
   if (cleanPhone.length === 12 || cleanPhone.length === 13) {
     return cleanPhone;
-  }
-  
-  // Se já começa com 55 e tem tamanho errado, tentar ajustar
-  if (cleanPhone.startsWith('55') && cleanPhone.length > 13) {
-    // Número muito longo, remover excesso
-    return cleanPhone.slice(0, 13);
   }
   
   return cleanPhone;
@@ -105,6 +118,15 @@ export const formatPhone = (phone: string): string => {
   // 554699999999 (12 dígitos) -> +55 (46) 9999-9999
   if (normalizedPhone.length === 12) {
     return `+${normalizedPhone.slice(0, 2)} (${normalizedPhone.slice(2, 4)}) ${normalizedPhone.slice(4, 8)}-${normalizedPhone.slice(8)}`;
+  }
+  
+  // Para números com tamanho não padrão, tentar formatar de forma básica
+  if (normalizedPhone.length > 0) {
+    // Mostrar apenas últimos 8 dígitos formatados
+    if (normalizedPhone.length >= 8) {
+      const last8 = normalizedPhone.slice(-8);
+      return `***-${last8.slice(0, 4)}-${last8.slice(4)}`;
+    }
   }
   
   // Fallback: retornar original se não conseguir formatar
