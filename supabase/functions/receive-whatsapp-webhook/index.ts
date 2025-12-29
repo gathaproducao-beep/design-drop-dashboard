@@ -105,13 +105,11 @@ serve(async (req) => {
     const pushName = message.pushName || message.name || '';
     const fromMe = key.fromMe || false;
 
-    // Ignorar mensagens enviadas por nós mesmos
-    if (fromMe) {
-      console.log('⏭️ Mensagem própria ignorada');
-      return new Response(JSON.stringify({ success: true, fromMe: true }), {
-        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-      });
-    }
+    // Mensagens enviadas por nós são salvas como outbound
+    console.log(`📤 Mensagem ${fromMe ? 'ENVIADA' : 'RECEBIDA'}`);
+    
+    // Definir direção baseada em fromMe
+    const direction = fromMe ? 'outbound' : 'inbound';
 
     // Ignorar grupos
     if (remoteJid.includes('@g.us')) {
@@ -121,7 +119,7 @@ serve(async (req) => {
       });
     }
 
-    // Extrair telefone do JID
+    // Extrair telefone do JID (para mensagens enviadas, remoteJid é o destinatário)
     const phone = normalizePhone(remoteJid);
     if (!phone || phone.length < 10) {
       console.log('⚠️ Telefone inválido:', remoteJid);
@@ -171,13 +169,19 @@ serve(async (req) => {
       contact = newContact;
       console.log('✅ Contato criado:', contact.id);
     } else {
-      // Atualizar nome e last_message_at
+      // Atualizar nome (apenas se tiver pushName e for inbound) e last_message_at
+      const updateData: any = {
+        last_message_at: new Date().toISOString()
+      };
+      
+      // Só atualiza nome se for mensagem recebida com pushName
+      if (!fromMe && pushName) {
+        updateData.name = pushName;
+      }
+      
       await supabase
         .from('whatsapp_contacts')
-        .update({ 
-          name: pushName || contact.name,
-          last_message_at: new Date().toISOString()
-        })
+        .update(updateData)
         .eq('id', contact.id);
     }
 
@@ -214,7 +218,8 @@ serve(async (req) => {
           contact_id: contact.id,
           instance_id: instanceId,
           status: 'novo',
-          unread_count: 1,
+          // Só incrementa unread se for mensagem recebida
+          unread_count: fromMe ? 0 : 1,
           last_message_at: new Date().toISOString(),
           last_message_preview: content.substring(0, 100)
         })
@@ -231,23 +236,32 @@ serve(async (req) => {
       // Verificar se conversa estava finalizada
       const wasFinalized = conversation.status === 'finalizado';
       
+      // Só incrementa unread e reabre se for mensagem recebida (não enviada por nós)
+      const updateData: any = {
+        last_message_at: new Date().toISOString(),
+        last_message_preview: content.substring(0, 100),
+      };
+      
+      if (!fromMe) {
+        // Mensagem recebida: incrementa unread e reabre se finalizado
+        updateData.unread_count = (conversation.unread_count || 0) + 1;
+        if (wasFinalized) {
+          updateData.status = 'novo';
+          updateData.assigned_to = null;
+          updateData.assigned_at = null;
+        }
+      }
+      
       const { error: updateError } = await supabase
         .from('whatsapp_conversations')
-        .update({
-          status: wasFinalized ? 'novo' : conversation.status,
-          unread_count: (conversation.unread_count || 0) + 1,
-          last_message_at: new Date().toISOString(),
-          last_message_preview: content.substring(0, 100),
-          // Se estava finalizado e recebeu nova msg, limpar assigned
-          ...(wasFinalized ? { assigned_to: null, assigned_at: null } : {})
-        })
+        .update(updateData)
         .eq('id', conversation.id);
 
       if (updateError) {
         console.error('❌ Erro ao atualizar conversa:', updateError);
       }
 
-      if (wasFinalized) {
+      if (wasFinalized && !fromMe) {
         console.log('🔄 Conversa reaberta:', conversation.id);
       }
     }
@@ -257,15 +271,15 @@ serve(async (req) => {
       .from('whatsapp_messages')
       .insert({
         conversation_id: conversation.id,
-        direction: 'inbound',
+        direction: direction,
         message_type: type,
         content,
         caption,
         media_mime_type: mimeType,
-        sender_phone: phone,
-        sender_name: pushName,
+        sender_phone: fromMe ? null : phone,
+        sender_name: fromMe ? null : pushName,
         external_id: messageId,
-        status: 'delivered'
+        status: fromMe ? 'sent' : 'delivered'
       })
       .select()
       .single();
