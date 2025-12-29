@@ -18,8 +18,11 @@ function normalizePhone(phone: string): string {
   return cleaned;
 }
 
-// Extrai texto da mensagem
-function extractMessageContent(message: any): { content: string; type: string; mediaUrl?: string; caption?: string; mimeType?: string } {
+// Extrai texto da mensagem - Evolution API envia base64 ou url no payload
+function extractMessageContent(message: any, fullPayload?: any): { content: string; type: string; mediaUrl?: string; caption?: string; mimeType?: string } {
+  // Evolution API pode enviar a mídia no nível do data
+  const mediaData = fullPayload?.data || {};
+  
   if (message.conversation) {
     return { content: message.conversation, type: 'text' };
   }
@@ -27,34 +30,56 @@ function extractMessageContent(message: any): { content: string; type: string; m
     return { content: message.extendedTextMessage.text, type: 'text' };
   }
   if (message.imageMessage) {
+    // Evolution API envia a URL/base64 em diferentes lugares
+    const mediaUrl = mediaData.media?.url || 
+                     mediaData.base64 || 
+                     message.imageMessage.url ||
+                     (mediaData.base64 ? `data:${message.imageMessage.mimetype};base64,${mediaData.base64}` : null);
+    
     return { 
       content: message.imageMessage.caption || '[Imagem]',
       type: 'image',
+      mediaUrl,
       caption: message.imageMessage.caption,
       mimeType: message.imageMessage.mimetype
     };
   }
   if (message.documentMessage) {
+    const mediaUrl = mediaData.media?.url || message.documentMessage.url;
     return { 
       content: message.documentMessage.fileName || '[Documento]',
       type: 'document',
+      mediaUrl,
       caption: message.documentMessage.caption,
       mimeType: message.documentMessage.mimetype
     };
   }
   if (message.audioMessage) {
-    return { content: '[Áudio]', type: 'audio', mimeType: message.audioMessage.mimetype };
+    const mediaUrl = mediaData.media?.url || message.audioMessage.url;
+    return { 
+      content: '[Áudio]', 
+      type: 'audio', 
+      mediaUrl,
+      mimeType: message.audioMessage.mimetype 
+    };
   }
   if (message.videoMessage) {
+    const mediaUrl = mediaData.media?.url || message.videoMessage.url;
     return { 
       content: message.videoMessage.caption || '[Vídeo]',
       type: 'video',
+      mediaUrl,
       caption: message.videoMessage.caption,
       mimeType: message.videoMessage.mimetype
     };
   }
   if (message.stickerMessage) {
-    return { content: '[Sticker]', type: 'sticker' };
+    const mediaUrl = mediaData.media?.url || message.stickerMessage.url;
+    return { content: '[Sticker]', type: 'sticker', mediaUrl };
+  }
+  // Verificar reação
+  if (message.reactionMessage) {
+    return { content: message.reactionMessage.text || '👍', type: 'reaction' };
   }
   return { content: '[Mensagem não suportada]', type: 'text' };
 }
@@ -130,9 +155,9 @@ serve(async (req) => {
 
     // Extrair conteúdo da mensagem
     const messageContent = message.message || message;
-    const { content, type, caption, mimeType } = extractMessageContent(messageContent);
+    const { content, type, mediaUrl, caption, mimeType } = extractMessageContent(messageContent, payload);
 
-    console.log('📱 Processando mensagem:', { phone, pushName, type, content: content.substring(0, 50) });
+    console.log('📱 Processando mensagem:', { phone, pushName, type, content: content.substring(0, 50), hasMedia: !!mediaUrl });
 
     // 1. Buscar ou criar contato
     let { data: contact } = await supabase
@@ -275,6 +300,7 @@ serve(async (req) => {
         message_type: type,
         content,
         caption,
+        media_url: mediaUrl || null,
         media_mime_type: mimeType,
         sender_phone: fromMe ? null : phone,
         sender_name: fromMe ? null : pushName,
