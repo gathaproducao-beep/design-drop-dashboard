@@ -13,6 +13,8 @@ import FilaWhatsapp from "./pages/FilaWhatsapp";
 import Auth from "./pages/Auth";
 import GestaoUsuarios from "./pages/GestaoUsuarios";
 import Templates from "./pages/Templates";
+import Atendimento from "./pages/Atendimento";
+import RespostasRapidas from "./pages/RespostasRapidas";
 import NotFound from "./pages/NotFound";
 import ProtectedRoute from "./components/ProtectedRoute";
 
@@ -35,6 +37,8 @@ const App = () => (
           <Route path="/configuracoes-drive" element={<ProtectedRoute><ConfiguracoesDrive /></ProtectedRoute>} />
           <Route path="/configuracoes" element={<ProtectedRoute><Configuracoes /></ProtectedRoute>} />
           <Route path="/gestao-usuarios" element={<ProtectedRoute><GestaoUsuarios /></ProtectedRoute>} />
+          <Route path="/atendimento" element={<ProtectedRoute><Atendimento /></ProtectedRoute>} />
+          <Route path="/respostas-rapidas" element={<ProtectedRoute><RespostasRapidas /></ProtectedRoute>} />
           {/* ADD ALL CUSTOM ROUTES ABOVE THE CATCH-ALL "*" ROUTE */}
           <Route path="*" element={<NotFound />} />
         </Routes>
