@@ -10,6 +10,7 @@ import { supabase } from '@/integrations/supabase/client';
 import { useToast } from '@/hooks/use-toast';
 import { Phone, Package, CheckCircle, XCircle, Plus, StickyNote } from 'lucide-react';
 import { format } from 'date-fns';
+import { formatPhone } from '@/lib/whatsapp';
 
 interface CustomerPanelProps {
   contact?: WhatsappContact;
@@ -66,7 +67,7 @@ export function CustomerPanel({ contact, conversationId }: CustomerPanelProps) {
             <p className="font-medium">{contact.name || 'Sem nome'}</p>
             <div className="flex items-center gap-2 text-sm text-muted-foreground">
               <Phone className="h-4 w-4" />
-              {contact.phone}
+              {formatPhone(contact.phone)}
             </div>
             {contact.is_lead && (
               <Badge variant="outline" className="bg-yellow-100 text-yellow-800">Lead</Badge>

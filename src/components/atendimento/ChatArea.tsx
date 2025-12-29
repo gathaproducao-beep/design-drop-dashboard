@@ -1,5 +1,5 @@
 import { useState, useRef, useEffect, useCallback } from 'react';
-import { ArrowLeft, Send, Paperclip, Image, Zap } from 'lucide-react';
+import { ArrowLeft, Send, Paperclip, X, Zap } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Textarea } from '@/components/ui/textarea';
 import { ScrollArea } from '@/components/ui/scroll-area';
@@ -40,6 +40,7 @@ export function ChatArea({
   const [message, setMessage] = useState('');
   const [sending, setSending] = useState(false);
   const [uploading, setUploading] = useState(false);
+  const [imagePreview, setImagePreview] = useState<{ file: File; url: string } | null>(null);
   const scrollRef = useRef<HTMLDivElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -66,8 +67,8 @@ export function ChatArea({
     }
   };
 
-  // Upload de imagem
-  const uploadImage = useCallback(async (file: File) => {
+  // Mostrar preview de imagem
+  const showImagePreview = useCallback((file: File) => {
     if (!file.type.startsWith('image/')) {
       toast({
         title: 'Arquivo inválido',
@@ -76,9 +77,25 @@ export function ChatArea({
       });
       return;
     }
+    const url = URL.createObjectURL(file);
+    setImagePreview({ file, url });
+  }, [toast]);
+
+  // Cancelar preview
+  const cancelImagePreview = useCallback(() => {
+    if (imagePreview) {
+      URL.revokeObjectURL(imagePreview.url);
+      setImagePreview(null);
+    }
+  }, [imagePreview]);
+
+  // Enviar imagem do preview
+  const sendImageFromPreview = useCallback(async () => {
+    if (!imagePreview) return;
 
     setUploading(true);
     try {
+      const file = imagePreview.file;
       const fileExt = file.name.split('.').pop();
       const fileName = `${Date.now()}-${Math.random().toString(36).substring(7)}.${fileExt}`;
       const filePath = `chat-images/${fileName}`;
@@ -93,9 +110,9 @@ export function ChatArea({
         .from('mockup-images')
         .getPublicUrl(filePath);
 
-      // Enviar como mensagem de imagem
       await onSend('', publicUrl, 'image');
       
+      cancelImagePreview();
       toast({
         title: 'Imagem enviada',
         description: 'A imagem foi enviada com sucesso'
@@ -110,7 +127,7 @@ export function ChatArea({
     } finally {
       setUploading(false);
     }
-  }, [onSend, toast]);
+  }, [imagePreview, onSend, cancelImagePreview, toast]);
 
   // Handler para colar imagem
   const handlePaste = useCallback(async (e: React.ClipboardEvent) => {
@@ -122,20 +139,19 @@ export function ChatArea({
         e.preventDefault();
         const file = item.getAsFile();
         if (file) {
-          await uploadImage(file);
+          showImagePreview(file);
         }
         break;
       }
     }
-  }, [uploadImage]);
+  }, [showImagePreview]);
 
   // Handler para selecionar arquivo
-  const handleFileSelect = async (e: React.ChangeEvent<HTMLInputElement>) => {
+  const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (file) {
-      await uploadImage(file);
+      showImagePreview(file);
     }
-    // Limpar input
     if (fileInputRef.current) {
       fileInputRef.current.value = '';
     }
@@ -224,6 +240,36 @@ export function ChatArea({
           </div>
         )}
       </ScrollArea>
+
+      {/* Preview de imagem */}
+      {imagePreview && (
+        <div className="border-t p-3 bg-muted/50">
+          <div className="flex items-center gap-3">
+            <div className="relative">
+              <img 
+                src={imagePreview.url} 
+                alt="Preview" 
+                className="h-20 w-20 object-cover rounded-lg border"
+              />
+              <Button
+                variant="destructive"
+                size="icon"
+                className="absolute -top-2 -right-2 h-6 w-6"
+                onClick={cancelImagePreview}
+              >
+                <X className="h-3 w-3" />
+              </Button>
+            </div>
+            <div className="flex-1">
+              <p className="text-sm font-medium">Enviar imagem?</p>
+              <p className="text-xs text-muted-foreground">{imagePreview.file.name}</p>
+            </div>
+            <Button onClick={sendImageFromPreview} disabled={uploading}>
+              {uploading ? 'Enviando...' : 'Enviar'}
+            </Button>
+          </div>
+        </div>
+      )}
 
       {/* Input */}
       <div className="border-t p-3 bg-card">

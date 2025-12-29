@@ -8,6 +8,7 @@ interface UseAtendimentoOptions {
   statusFilter?: ConversationStatus | null;
   assignedFilter?: string | null;
   searchQuery?: string;
+  hideFinalized?: boolean;
   refreshInterval?: number;
 }
 
@@ -63,6 +64,7 @@ export function useAtendimento(options: UseAtendimentoOptions = {}) {
     statusFilter, 
     assignedFilter, 
     searchQuery,
+    hideFinalized = true,
     refreshInterval = 5000 
   } = options;
   
@@ -106,17 +108,39 @@ export function useAtendimento(options: UseAtendimentoOptions = {}) {
       }
       if (statusFilter) {
         query = query.eq('status', statusFilter);
+      } else if (hideFinalized) {
+        // Por padrão, ocultar finalizados (a menos que tenham mensagens não lidas)
+        query = query.neq('status', 'finalizado');
       }
       if (assignedFilter) {
         query = query.eq('assigned_to', assignedFilter);
       }
 
       const { data, error } = await query;
+      
+      // Se ocultando finalizados, ainda mostrar os que têm mensagens não lidas
+      let finalData = data || [];
+      if (hideFinalized && !statusFilter) {
+        const { data: unreadFinalized } = await supabase
+          .from('whatsapp_conversations')
+          .select(`
+            *,
+            contact:whatsapp_contacts(*),
+            instance:whatsapp_instances(id, nome, is_active),
+            assigned_profile:profiles!whatsapp_conversations_assigned_to_fkey(id, full_name)
+          `)
+          .eq('status', 'finalizado')
+          .gt('unread_count', 0);
+        
+        if (unreadFinalized) {
+          finalData = [...finalData, ...unreadFinalized];
+        }
+      }
 
       if (error) throw error;
 
       // Filtrar por busca se necessário
-      let filtered = (data || []) as unknown as WhatsappConversation[];
+      let filtered = finalData as unknown as WhatsappConversation[];
       if (searchQuery) {
         const lowerSearch = searchQuery.toLowerCase();
         filtered = filtered.filter(conv => 
@@ -142,7 +166,7 @@ export function useAtendimento(options: UseAtendimentoOptions = {}) {
     } finally {
       setLoading(false);
     }
-  }, [instanceFilter, statusFilter, assignedFilter, searchQuery, selectedGroup?.contactPhone]);
+  }, [instanceFilter, statusFilter, assignedFilter, searchQuery, hideFinalized, selectedGroup?.contactPhone]);
 
   // Buscar mensagens de uma conversa
   const fetchMessages = useCallback(async (conversationId: string) => {

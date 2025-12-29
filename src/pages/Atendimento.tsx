@@ -8,8 +8,12 @@ import { CustomerPanel } from '@/components/atendimento/CustomerPanel';
 import { AtendimentoHeader } from '@/components/atendimento/AtendimentoHeader';
 import { NewConversationDialog } from '@/components/atendimento/NewConversationDialog';
 import { QuickRepliesDialog } from '@/components/atendimento/QuickRepliesDialog';
+import { Navigation } from '@/components/Navigation';
 import { ConversationStatus, GroupedConversation } from '@/types/atendimento';
 import { useIsMobile } from '@/hooks/use-mobile';
+import { Button } from '@/components/ui/button';
+import { Menu } from 'lucide-react';
+import { Sheet, SheetContent, SheetTrigger } from '@/components/ui/sheet';
 
 interface WhatsappInstance {
   id: string;
@@ -31,6 +35,8 @@ const Atendimento = () => {
   const [statusFilter, setStatusFilter] = useState<ConversationStatus | null>(null);
   const [assignedFilter, setAssignedFilter] = useState<string | null>(null);
   const [searchQuery, setSearchQuery] = useState('');
+  const [readFilter, setReadFilter] = useState<'all' | 'unread'>('all');
+  const [showFinalized, setShowFinalized] = useState(false);
   
   // Dados auxiliares
   const [instances, setInstances] = useState<WhatsappInstance[]>([]);
@@ -39,6 +45,7 @@ const Atendimento = () => {
   // Dialogs
   const [newConversationOpen, setNewConversationOpen] = useState(false);
   const [quickRepliesOpen, setQuickRepliesOpen] = useState(false);
+  const [menuOpen, setMenuOpen] = useState(false);
   
   // View control para mobile
   const [mobileView, setMobileView] = useState<'list' | 'chat'>('list');
@@ -62,6 +69,7 @@ const Atendimento = () => {
     statusFilter,
     assignedFilter,
     searchQuery,
+    hideFinalized: !showFinalized,
     refreshInterval: 5000
   });
 
@@ -94,8 +102,37 @@ const Atendimento = () => {
     setSelectedGroup(null);
   };
 
+  // Handler para finalizar conversa
+  const handleFinalize = async (group: GroupedConversation) => {
+    for (const conv of group.conversations) {
+      await updateStatus(conv.id, 'finalizado');
+    }
+  };
+
+  // Handler para status filter incluindo finalizados
+  const handleStatusFilterChange = (value: ConversationStatus | null) => {
+    setStatusFilter(value);
+    // Se selecionar "Todos os status" ou "Finalizado", mostrar finalizados
+    setShowFinalized(value === null || value === 'finalizado');
+  };
+
   return (
     <div className="h-screen flex flex-col bg-background">
+      {/* Menu recolhido */}
+      <div className="border-b bg-card px-2 py-1.5 flex items-center gap-2">
+        <Sheet open={menuOpen} onOpenChange={setMenuOpen}>
+          <SheetTrigger asChild>
+            <Button variant="ghost" size="icon" className="h-8 w-8">
+              <Menu className="h-4 w-4" />
+            </Button>
+          </SheetTrigger>
+          <SheetContent side="left" className="p-0 w-64">
+            <Navigation />
+          </SheetContent>
+        </Sheet>
+        <span className="text-sm font-medium">Atendimento</span>
+      </div>
+
       {/* Header com filtros */}
       <AtendimentoHeader
         instances={instances}
@@ -105,7 +142,7 @@ const Atendimento = () => {
         assignedFilter={assignedFilter}
         searchQuery={searchQuery}
         onInstanceChange={setInstanceFilter}
-        onStatusChange={setStatusFilter}
+        onStatusChange={handleStatusFilterChange}
         onAssignedChange={setAssignedFilter}
         onSearchChange={setSearchQuery}
         onNewConversation={() => setNewConversationOpen(true)}
@@ -122,6 +159,9 @@ const Atendimento = () => {
               selectedPhone={selectedGroup?.contactPhone}
               loading={loading}
               onSelect={handleSelectGroup}
+              onFinalize={handleFinalize}
+              readFilter={readFilter}
+              onReadFilterChange={setReadFilter}
             />
           </div>
         )}
