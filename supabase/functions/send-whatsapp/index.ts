@@ -348,6 +348,104 @@ serve(async (req) => {
         if (result.success) {
           console.log(`Mensagem enviada com sucesso pela instância: ${instance.nome} (${apiType})`);
           
+          // Sincronizar com o CRM - salvar mensagem enviada
+          try {
+            // Buscar ou criar contato
+            let contact;
+            const { data: existingContact } = await supabase
+              .from('whatsapp_contacts')
+              .select('id')
+              .eq('phone', normalizedPhone)
+              .maybeSingle();
+            
+            if (existingContact) {
+              contact = existingContact;
+            } else {
+              // Criar novo contato
+              const { data: newContact, error: contactError } = await supabase
+                .from('whatsapp_contacts')
+                .insert({
+                  phone: normalizedPhone,
+                  is_lead: true
+                })
+                .select('id')
+                .single();
+              
+              if (contactError) {
+                console.error('[CRM Sync] Erro ao criar contato:', contactError);
+              } else {
+                contact = newContact;
+              }
+            }
+            
+            if (contact) {
+              // Buscar ou criar conversa
+              let conversation;
+              const { data: existingConv } = await supabase
+                .from('whatsapp_conversations')
+                .select('id')
+                .eq('contact_id', contact.id)
+                .eq('instance_id', instance.id)
+                .maybeSingle();
+              
+              if (existingConv) {
+                conversation = existingConv;
+                // Atualizar last_message_at
+                await supabase
+                  .from('whatsapp_conversations')
+                  .update({
+                    last_message_at: new Date().toISOString(),
+                    last_message_preview: message?.substring(0, 100) || '[Mídia]'
+                  })
+                  .eq('id', existingConv.id);
+              } else {
+                // Criar nova conversa
+                const { data: newConv, error: convError } = await supabase
+                  .from('whatsapp_conversations')
+                  .insert({
+                    contact_id: contact.id,
+                    instance_id: instance.id,
+                    status: 'novo',
+                    last_message_at: new Date().toISOString(),
+                    last_message_preview: message?.substring(0, 100) || '[Mídia]',
+                    unread_count: 0
+                  })
+                  .select('id')
+                  .single();
+                
+                if (convError) {
+                  console.error('[CRM Sync] Erro ao criar conversa:', convError);
+                } else {
+                  conversation = newConv;
+                }
+              }
+              
+              if (conversation) {
+                // Salvar mensagem
+                const { error: msgError } = await supabase
+                  .from('whatsapp_messages')
+                  .insert({
+                    conversation_id: conversation.id,
+                    content: media_url ? (caption || message) : message,
+                    direction: 'outbound',
+                    message_type: media_type || 'text',
+                    media_url: media_url || null,
+                    caption: caption || null,
+                    status: 'sent'
+                  });
+                
+                if (msgError) {
+                  console.error('[CRM Sync] Erro ao salvar mensagem:', msgError);
+                } else {
+                  console.log('[CRM Sync] Mensagem sincronizada com CRM');
+                }
+              }
+            }
+          } catch (syncError) {
+            console.error('[CRM Sync] Erro na sincronização:', syncError);
+            // Não falhar o envio por erro de sync
+          }
+          
           return new Response(
             JSON.stringify({ 
               success: true, 
