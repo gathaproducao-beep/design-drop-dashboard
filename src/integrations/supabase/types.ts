@@ -586,6 +586,144 @@ export type Database = {
           },
         ]
       }
+      whatsapp_audit_log: {
+        Row: {
+          action: string
+          created_at: string
+          details: Json | null
+          entity_id: string | null
+          entity_type: string
+          id: string
+          ip_address: string | null
+          user_id: string | null
+          user_name: string | null
+        }
+        Insert: {
+          action: string
+          created_at?: string
+          details?: Json | null
+          entity_id?: string | null
+          entity_type: string
+          id?: string
+          ip_address?: string | null
+          user_id?: string | null
+          user_name?: string | null
+        }
+        Update: {
+          action?: string
+          created_at?: string
+          details?: Json | null
+          entity_id?: string | null
+          entity_type?: string
+          id?: string
+          ip_address?: string | null
+          user_id?: string | null
+          user_name?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "whatsapp_audit_log_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      whatsapp_contacts: {
+        Row: {
+          created_at: string
+          id: string
+          is_lead: boolean | null
+          last_message_at: string | null
+          name: string | null
+          phone: string
+          updated_at: string
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          is_lead?: boolean | null
+          last_message_at?: string | null
+          name?: string | null
+          phone: string
+          updated_at?: string
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          is_lead?: boolean | null
+          last_message_at?: string | null
+          name?: string | null
+          phone?: string
+          updated_at?: string
+        }
+        Relationships: []
+      }
+      whatsapp_conversations: {
+        Row: {
+          assigned_at: string | null
+          assigned_to: string | null
+          contact_id: string
+          created_at: string
+          id: string
+          instance_id: string | null
+          last_message_at: string | null
+          last_message_preview: string | null
+          status: string
+          unread_count: number | null
+          updated_at: string
+        }
+        Insert: {
+          assigned_at?: string | null
+          assigned_to?: string | null
+          contact_id: string
+          created_at?: string
+          id?: string
+          instance_id?: string | null
+          last_message_at?: string | null
+          last_message_preview?: string | null
+          status?: string
+          unread_count?: number | null
+          updated_at?: string
+        }
+        Update: {
+          assigned_at?: string | null
+          assigned_to?: string | null
+          contact_id?: string
+          created_at?: string
+          id?: string
+          instance_id?: string | null
+          last_message_at?: string | null
+          last_message_preview?: string | null
+          status?: string
+          unread_count?: number | null
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "whatsapp_conversations_assigned_to_fkey"
+            columns: ["assigned_to"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "whatsapp_conversations_contact_id_fkey"
+            columns: ["contact_id"]
+            isOneToOne: false
+            referencedRelation: "whatsapp_contacts"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "whatsapp_conversations_instance_id_fkey"
+            columns: ["instance_id"]
+            isOneToOne: false
+            referencedRelation: "whatsapp_instances"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       whatsapp_instances: {
         Row: {
           access_token: string | null
@@ -639,6 +777,134 @@ export type Database = {
           webhook_url?: string | null
         }
         Relationships: []
+      }
+      whatsapp_internal_notes: {
+        Row: {
+          contact_id: string | null
+          content: string
+          conversation_id: string | null
+          created_at: string
+          id: string
+          pedido_id: string | null
+          user_id: string
+        }
+        Insert: {
+          contact_id?: string | null
+          content: string
+          conversation_id?: string | null
+          created_at?: string
+          id?: string
+          pedido_id?: string | null
+          user_id: string
+        }
+        Update: {
+          contact_id?: string | null
+          content?: string
+          conversation_id?: string | null
+          created_at?: string
+          id?: string
+          pedido_id?: string | null
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "whatsapp_internal_notes_contact_id_fkey"
+            columns: ["contact_id"]
+            isOneToOne: false
+            referencedRelation: "whatsapp_contacts"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "whatsapp_internal_notes_conversation_id_fkey"
+            columns: ["conversation_id"]
+            isOneToOne: false
+            referencedRelation: "whatsapp_conversations"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "whatsapp_internal_notes_pedido_id_fkey"
+            columns: ["pedido_id"]
+            isOneToOne: false
+            referencedRelation: "pedidos"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "whatsapp_internal_notes_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      whatsapp_messages: {
+        Row: {
+          caption: string | null
+          content: string | null
+          conversation_id: string
+          created_at: string
+          direction: string
+          error_message: string | null
+          external_id: string | null
+          id: string
+          media_mime_type: string | null
+          media_url: string | null
+          message_type: string
+          sender_name: string | null
+          sender_phone: string | null
+          sent_by_user_id: string | null
+          status: string | null
+        }
+        Insert: {
+          caption?: string | null
+          content?: string | null
+          conversation_id: string
+          created_at?: string
+          direction: string
+          error_message?: string | null
+          external_id?: string | null
+          id?: string
+          media_mime_type?: string | null
+          media_url?: string | null
+          message_type?: string
+          sender_name?: string | null
+          sender_phone?: string | null
+          sent_by_user_id?: string | null
+          status?: string | null
+        }
+        Update: {
+          caption?: string | null
+          content?: string | null
+          conversation_id?: string
+          created_at?: string
+          direction?: string
+          error_message?: string | null
+          external_id?: string | null
+          id?: string
+          media_mime_type?: string | null
+          media_url?: string | null
+          message_type?: string
+          sender_name?: string | null
+          sender_phone?: string | null
+          sent_by_user_id?: string | null
+          status?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "whatsapp_messages_conversation_id_fkey"
+            columns: ["conversation_id"]
+            isOneToOne: false
+            referencedRelation: "whatsapp_conversations"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "whatsapp_messages_sent_by_user_id_fkey"
+            columns: ["sent_by_user_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       whatsapp_queue: {
         Row: {
@@ -714,6 +980,39 @@ export type Database = {
             referencedColumns: ["id"]
           },
         ]
+      }
+      whatsapp_quick_replies: {
+        Row: {
+          category: string | null
+          content: string
+          created_at: string
+          id: string
+          is_active: boolean | null
+          name: string
+          shortcut: string | null
+          updated_at: string
+        }
+        Insert: {
+          category?: string | null
+          content: string
+          created_at?: string
+          id?: string
+          is_active?: boolean | null
+          name: string
+          shortcut?: string | null
+          updated_at?: string
+        }
+        Update: {
+          category?: string | null
+          content?: string
+          created_at?: string
+          id?: string
+          is_active?: boolean | null
+          name?: string
+          shortcut?: string | null
+          updated_at?: string
+        }
+        Relationships: []
       }
       whatsapp_settings: {
         Row: {
@@ -857,6 +1156,17 @@ export type Database = {
         }
       }
       is_admin: { Args: { check_user_id: string }; Returns: boolean }
+      search_whatsapp_messages: {
+        Args: { search_query: string }
+        Returns: {
+          contact_name: string
+          contact_phone: string
+          content: string
+          conversation_id: string
+          created_at: string
+          message_id: string
+        }[]
+      }
       user_has_permission: {
         Args: { check_user_id: string; permission_code: string }
         Returns: boolean
