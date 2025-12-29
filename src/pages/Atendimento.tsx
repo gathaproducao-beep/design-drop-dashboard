@@ -8,7 +8,7 @@ import { CustomerPanel } from '@/components/atendimento/CustomerPanel';
 import { AtendimentoHeader } from '@/components/atendimento/AtendimentoHeader';
 import { NewConversationDialog } from '@/components/atendimento/NewConversationDialog';
 import { QuickRepliesDialog } from '@/components/atendimento/QuickRepliesDialog';
-import { ConversationStatus } from '@/types/atendimento';
+import { ConversationStatus, GroupedConversation } from '@/types/atendimento';
 import { useIsMobile } from '@/hooks/use-mobile';
 
 interface WhatsappInstance {
@@ -44,16 +44,19 @@ const Atendimento = () => {
   const [mobileView, setMobileView] = useState<'list' | 'chat'>('list');
   
   const {
-    conversations,
+    groupedConversations,
+    selectedGroup,
     selectedConversation,
+    selectedInstanceId,
     messages,
     loading,
     messagesLoading,
-    selectConversation,
+    selectGroup,
+    switchInstance,
     sendMessage,
     updateStatus,
     refresh,
-    setSelectedConversation
+    setSelectedGroup
   } = useAtendimento({
     instanceFilter,
     statusFilter,
@@ -77,26 +80,18 @@ const Atendimento = () => {
     fetchData();
   }, []);
 
-  // Handler para selecionar conversa
-  const handleSelectConversation = async (conversation: typeof selectedConversation) => {
-    if (conversation) {
-      await selectConversation(conversation);
-      if (isMobile) {
-        setMobileView('chat');
-      }
+  // Handler para selecionar grupo de conversas
+  const handleSelectGroup = async (group: GroupedConversation) => {
+    await selectGroup(group);
+    if (isMobile) {
+      setMobileView('chat');
     }
   };
 
   // Handler para voltar (mobile)
   const handleBack = () => {
     setMobileView('list');
-    setSelectedConversation(null);
-  };
-
-  // Handler para inserir template
-  const handleInsertTemplate = (content: string) => {
-    // O QuickRepliesDialog vai passar o conteúdo para o ChatArea
-    setQuickRepliesOpen(false);
+    setSelectedGroup(null);
   };
 
   return (
@@ -121,26 +116,29 @@ const Atendimento = () => {
       <div className="flex-1 flex overflow-hidden">
         {/* Lista de conversas */}
         {(!isMobile || mobileView === 'list') && (
-          <div className={`${isMobile ? 'w-full' : 'w-80 border-r'} flex-shrink-0`}>
+          <div className={`${isMobile ? 'w-full' : 'w-72 border-r'} flex-shrink-0`}>
             <ConversationList
-              conversations={conversations}
-              selectedId={selectedConversation?.id}
+              groupedConversations={groupedConversations}
+              selectedPhone={selectedGroup?.contactPhone}
               loading={loading}
-              onSelect={handleSelectConversation}
+              onSelect={handleSelectGroup}
             />
           </div>
         )}
 
         {/* Área do chat */}
-        {(!isMobile || mobileView === 'chat') && selectedConversation && (
+        {(!isMobile || mobileView === 'chat') && selectedGroup && selectedConversation && (
           <>
             <div className="flex-1 flex flex-col min-w-0">
               <ChatArea
-                conversation={selectedConversation}
+                group={selectedGroup}
+                selectedConversation={selectedConversation}
+                selectedInstanceId={selectedInstanceId}
                 messages={messages}
                 loading={messagesLoading}
                 onSend={sendMessage}
                 onStatusChange={(status) => updateStatus(selectedConversation.id, status)}
+                onSwitchInstance={switchInstance}
                 onBack={isMobile ? handleBack : undefined}
                 onQuickReply={() => setQuickRepliesOpen(true)}
               />
@@ -148,9 +146,9 @@ const Atendimento = () => {
 
             {/* Painel do cliente */}
             {!isMobile && (
-              <div className="w-80 border-l flex-shrink-0">
+              <div className="w-72 border-l flex-shrink-0">
                 <CustomerPanel
-                  contact={selectedConversation.contact}
+                  contact={selectedGroup.contact}
                   conversationId={selectedConversation.id}
                 />
               </div>
@@ -159,7 +157,7 @@ const Atendimento = () => {
         )}
 
         {/* Placeholder quando não há conversa selecionada */}
-        {!isMobile && !selectedConversation && (
+        {!isMobile && !selectedGroup && (
           <div className="flex-1 flex items-center justify-center text-muted-foreground">
             <div className="text-center">
               <p className="text-lg">Selecione uma conversa</p>
@@ -184,13 +182,12 @@ const Atendimento = () => {
         open={quickRepliesOpen}
         onOpenChange={setQuickRepliesOpen}
         onSelect={(content) => {
-          // Este callback será usado para inserir o template no chat
           if (selectedConversation) {
             sendMessage(content);
           }
           setQuickRepliesOpen(false);
         }}
-        contactName={selectedConversation?.contact?.name}
+        contactName={selectedGroup?.contact?.name}
       />
     </div>
   );
