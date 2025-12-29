@@ -20,3 +20,9 @@ verify_jwt = false
 
 [functions.cleanup-old-pedido-files]
 verify_jwt = false
+
+[functions.receive-whatsapp-webhook]
+verify_jwt = false
+
+[functions.send-chat-message]
+verify_jwt = false
