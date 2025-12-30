@@ -1,5 +1,5 @@
 import { useState, useRef, useEffect, useCallback } from 'react';
-import { ArrowLeft, Send, Paperclip, X, Zap, Phone } from 'lucide-react';
+import { ArrowLeft, Send, Paperclip, X, Zap, Phone, CheckCircle } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Textarea } from '@/components/ui/textarea';
 import { ScrollArea } from '@/components/ui/scroll-area';
@@ -185,6 +185,13 @@ export function ChatArea({
               {group.contact?.phone}
             </p>
           </div>
+          <Button 
+            onClick={() => onStatusChange('finalizado')}
+            className="bg-red-500 hover:bg-red-600 text-white font-medium h-9 px-4"
+          >
+            <CheckCircle className="h-4 w-4 mr-2" />
+            Finalizar Atendimento
+          </Button>
           <DropdownMenu>
             <DropdownMenuTrigger asChild>
               <Button variant="ghost" size="sm" className="text-xs h-8 bg-white border border-[#d1d7db] hover:bg-[#f5f6f6]">
@@ -303,12 +310,6 @@ export function ChatArea({
         </div>
       )}
 
-      {/* Botões de respostas rápidas */}
-      <QuickReplyButtons 
-        onSelect={(content) => setMessage(content)} 
-        contactName={group.contact?.name}
-      />
-
       {/* Input - estilo WhatsApp */}
       <div className="bg-[#f0f2f5] border-t border-[#d1d7db] px-4 py-2">
         <div className="flex gap-2 items-end">
@@ -359,6 +360,12 @@ export function ChatArea({
           </Button>
         </div>
       </div>
+
+      {/* Botões de respostas rápidas - abaixo do input */}
+      <QuickReplyButtons 
+        onSelect={(content) => setMessage(content)} 
+        contactName={group.contact?.name}
+      />
     </div>
   );
 }
