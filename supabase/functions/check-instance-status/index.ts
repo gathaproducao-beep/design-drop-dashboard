@@ -20,12 +20,42 @@ serve(async (req) => {
   }
 
   try {
-    console.log('Verificando status das instâncias WhatsApp...');
-
     // Inicializar cliente Supabase
     const supabaseUrl = Deno.env.get('SUPABASE_URL')!;
     const supabaseServiceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
     const supabase = createClient(supabaseUrl, supabaseServiceKey);
+
+    // Authentication check - require either user JWT or service role key
+    const authHeader = req.headers.get('Authorization');
+    if (!authHeader) {
+      console.error('Missing Authorization header');
+      return new Response(
+        JSON.stringify({ error: 'Autorização necessária' }),
+        { status: 401, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      );
+    }
+
+    const token = authHeader.replace('Bearer ', '');
+    
+    // Check if it's the service role key (for internal calls)
+    const isServiceRole = token === supabaseServiceKey;
+    
+    if (!isServiceRole) {
+      // Validate user JWT
+      const { data: { user }, error: authError } = await supabase.auth.getUser(token);
+      if (authError || !user) {
+        console.error('Invalid authentication:', authError?.message);
+        return new Response(
+          JSON.stringify({ error: 'Token inválido ou expirado' }),
+          { status: 401, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        );
+      }
+      console.log(`Verificando status - usuário: ${user.email}`);
+    } else {
+      console.log('Verificando status - chamada via service role');
+    }
+
+    console.log('Verificando status das instâncias WhatsApp...');
 
     // Buscar todas as instâncias (ativas e inativas)
     const { data: instances, error: instanceError } = await supabase
