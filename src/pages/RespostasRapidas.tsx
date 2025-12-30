@@ -235,12 +235,73 @@ const RespostasRapidas = () => {
                 <Textarea
                   value={formData.content}
                   onChange={(e) => setFormData({ ...formData, content: e.target.value })}
-                  placeholder="Use {nome} para o nome do cliente, {numero_pedido} para o número do pedido"
+                  placeholder="Digite o conteúdo da mensagem..."
                   rows={5}
+                  id="content-textarea"
                 />
-                <p className="text-xs text-muted-foreground mt-1">
-                  Variáveis: {'{nome}'}, {'{numero_pedido}'}, {'{codigo_produto}'}
-                </p>
+                <div className="flex flex-wrap gap-2 mt-2">
+                  <span className="text-xs text-muted-foreground">Inserir variável:</span>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    className="h-6 text-xs"
+                    onClick={() => {
+                      const textarea = document.getElementById('content-textarea') as HTMLTextAreaElement;
+                      const start = textarea?.selectionStart || formData.content.length;
+                      const before = formData.content.substring(0, start);
+                      const after = formData.content.substring(start);
+                      setFormData({ ...formData, content: before + '{nome}' + after });
+                    }}
+                  >
+                    {'{nome}'}
+                  </Button>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    className="h-6 text-xs"
+                    onClick={() => {
+                      const textarea = document.getElementById('content-textarea') as HTMLTextAreaElement;
+                      const start = textarea?.selectionStart || formData.content.length;
+                      const before = formData.content.substring(0, start);
+                      const after = formData.content.substring(start);
+                      setFormData({ ...formData, content: before + '{numero_pedido}' + after });
+                    }}
+                  >
+                    {'{numero_pedido}'}
+                  </Button>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    className="h-6 text-xs"
+                    onClick={() => {
+                      const textarea = document.getElementById('content-textarea') as HTMLTextAreaElement;
+                      const start = textarea?.selectionStart || formData.content.length;
+                      const before = formData.content.substring(0, start);
+                      const after = formData.content.substring(start);
+                      setFormData({ ...formData, content: before + '{codigo_produto}' + after });
+                    }}
+                  >
+                    {'{codigo_produto}'}
+                  </Button>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    className="h-6 text-xs"
+                    onClick={() => {
+                      const textarea = document.getElementById('content-textarea') as HTMLTextAreaElement;
+                      const start = textarea?.selectionStart || formData.content.length;
+                      const before = formData.content.substring(0, start);
+                      const after = formData.content.substring(start);
+                      setFormData({ ...formData, content: before + '{data_pedido}' + after });
+                    }}
+                  >
+                    {'{data_pedido}'}
+                  </Button>
+                </div>
               </div>
               <div className="grid grid-cols-2 gap-4">
                 <div>
