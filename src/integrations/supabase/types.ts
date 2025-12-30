@@ -412,6 +412,7 @@ export type Database = {
           nome_cliente: string
           numero_pedido: string
           observacao: string | null
+          observacao_interna: string | null
           pasta_drive_url: string | null
           salvar_drive: boolean | null
           telefone: string | null
@@ -436,6 +437,7 @@ export type Database = {
           nome_cliente: string
           numero_pedido: string
           observacao?: string | null
+          observacao_interna?: string | null
           pasta_drive_url?: string | null
           salvar_drive?: boolean | null
           telefone?: string | null
@@ -460,6 +462,7 @@ export type Database = {
           nome_cliente?: string
           numero_pedido?: string
           observacao?: string | null
+          observacao_interna?: string | null
           pasta_drive_url?: string | null
           salvar_drive?: boolean | null
           telefone?: string | null
