@@ -6,15 +6,32 @@ const corsHeaders = {
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
 };
 
+// Verifica se é um LID (Local ID) do WhatsApp - não é telefone válido
+function isLidId(jid: string): boolean {
+  // LIDs terminam com @lid ou são números muito grandes (>13 dígitos)
+  if (jid.includes('@lid')) return true;
+  const cleaned = jid.replace(/\D/g, '').replace(/@.*$/, '');
+  // LIDs geralmente são IDs internos com muitos dígitos
+  return cleaned.length > 13;
+}
+
 // Normaliza telefone removendo caracteres especiais
 function normalizePhone(phone: string): string {
   let cleaned = phone.replace(/\D/g, '');
-  // Remove @s.whatsapp.net ou @c.us
+  // Remove @s.whatsapp.net ou @c.us ou @lid
   cleaned = cleaned.replace(/@.*$/, '');
-  // Garante que começa com 55
-  if (!cleaned.startsWith('55') && cleaned.length <= 11) {
+  
+  // Se for um LID (número muito grande), retorna vazio
+  if (cleaned.length > 13) {
+    console.log('⚠️ Detectado LID (não é telefone):', cleaned.substring(0, 10) + '...');
+    return '';
+  }
+  
+  // Garante que começa com 55 (Brasil)
+  if (!cleaned.startsWith('55') && cleaned.length >= 10 && cleaned.length <= 11) {
     cleaned = '55' + cleaned;
   }
+  
   return cleaned;
 }
 
@@ -226,13 +243,28 @@ serve(async (req) => {
 
     // Extrair informações
     const key = message.key || {};
-    const remoteJid = key.remoteJid || message.from || '';
     const messageId = key.id || message.id || crypto.randomUUID();
     const pushName = message.pushName || message.name || '';
     const fromMe = key.fromMe || false;
 
+    // IMPORTANTE: WhatsApp pode usar LID (Local ID) em key.remoteJid
+    // O telefone real fica em key.remoteJidAlt quando isso acontece
+    let remoteJid = key.remoteJid || message.from || '';
+    
+    // Se remoteJid é um LID, tentar usar remoteJidAlt
+    if (isLidId(remoteJid)) {
+      console.log('🔍 Detectado LID em remoteJid, buscando remoteJidAlt...');
+      const altJid = key.remoteJidAlt || message.remoteJidAlt || '';
+      if (altJid && !isLidId(altJid)) {
+        console.log('✅ Usando remoteJidAlt:', altJid);
+        remoteJid = altJid;
+      } else {
+        console.log('⚠️ remoteJidAlt não disponível ou também é LID');
+      }
+    }
+
     // Mensagens enviadas por nós são salvas como outbound
-    console.log(`📤 Mensagem ${fromMe ? 'ENVIADA' : 'RECEBIDA'}`);
+    console.log(`📤 Mensagem ${fromMe ? 'ENVIADA' : 'RECEBIDA'} - JID: ${remoteJid}`);
     
     // Definir direção baseada em fromMe
     const direction = fromMe ? 'outbound' : 'inbound';
@@ -245,14 +277,34 @@ serve(async (req) => {
       });
     }
 
-    // Extrair telefone do JID (para mensagens enviadas, remoteJid é o destinatário)
-    const phone = normalizePhone(remoteJid);
+    // Extrair telefone do JID
+    let phone = normalizePhone(remoteJid);
+    
+    // Se ainda não conseguiu telefone válido, tentar outros campos
     if (!phone || phone.length < 10) {
-      console.log('⚠️ Telefone inválido:', remoteJid);
-      return new Response(JSON.stringify({ success: false, error: 'Invalid phone' }), {
+      // Tentar remoteJidAlt diretamente
+      const altPhone = normalizePhone(key.remoteJidAlt || '');
+      if (altPhone && altPhone.length >= 10) {
+        console.log('✅ Telefone extraído de remoteJidAlt:', altPhone);
+        phone = altPhone;
+      } else {
+        // Tentar participant (para mensagens enviadas)
+        const participantPhone = normalizePhone(key.participant || message.participant || '');
+        if (participantPhone && participantPhone.length >= 10) {
+          console.log('✅ Telefone extraído de participant:', participantPhone);
+          phone = participantPhone;
+        }
+      }
+    }
+    
+    if (!phone || phone.length < 10) {
+      console.log('⚠️ Telefone inválido após todas tentativas:', remoteJid, '| Alt:', key.remoteJidAlt);
+      return new Response(JSON.stringify({ success: false, error: 'Invalid phone - could not extract valid number' }), {
         headers: { ...corsHeaders, 'Content-Type': 'application/json' },
       });
     }
+    
+    console.log('📞 Telefone extraído:', phone);
 
     // Extrair conteúdo da mensagem
     const messageContent = message.message || message;
