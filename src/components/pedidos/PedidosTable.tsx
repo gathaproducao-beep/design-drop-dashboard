@@ -722,7 +722,6 @@ export function PedidosTable({
                     onSave={(value) => handleUpdateField(pedido.id, "observacao_interna", value)}
                   />
                 </TableCell>
-                </TableCell>
                 <TableCell>
                   {pedido.molde_producao && pedido.molde_producao.length > 0 ? (
                     <Button
