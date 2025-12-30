@@ -23,6 +23,9 @@ function extractMessageContent(message: any, fullPayload?: any): { content: stri
   // Evolution API pode enviar a mídia no nível do data
   const mediaData = fullPayload?.data || {};
   
+  // Para mensagens enviadas externamente, Evolution API pode colocar a URL em mediaUrl no nível do data
+  const externalMediaUrl = mediaData.mediaUrl || mediaData.message?.mediaUrl;
+  
   if (message.conversation) {
     return { content: message.conversation, type: 'text' };
   }
@@ -31,8 +34,7 @@ function extractMessageContent(message: any, fullPayload?: any): { content: stri
   }
   if (message.imageMessage) {
     // Evolution API envia a URL/base64 em diferentes lugares
-    const mediaUrl = mediaData.media?.url || 
-                     message.imageMessage.url;
+    const mediaUrl = externalMediaUrl || mediaData.media?.url || message.imageMessage.url;
     const base64 = mediaData.base64 || mediaData.media?.base64;
     
     return { 
@@ -45,7 +47,7 @@ function extractMessageContent(message: any, fullPayload?: any): { content: stri
     };
   }
   if (message.documentMessage) {
-    const mediaUrl = mediaData.media?.url || message.documentMessage.url;
+    const mediaUrl = externalMediaUrl || mediaData.media?.url || message.documentMessage.url;
     const base64 = mediaData.base64 || mediaData.media?.base64;
     return { 
       content: message.documentMessage.fileName || '[Documento]',
@@ -57,7 +59,7 @@ function extractMessageContent(message: any, fullPayload?: any): { content: stri
     };
   }
   if (message.audioMessage) {
-    const mediaUrl = mediaData.media?.url || message.audioMessage.url;
+    const mediaUrl = externalMediaUrl || mediaData.media?.url || message.audioMessage.url;
     const base64 = mediaData.base64 || mediaData.media?.base64;
     return { 
       content: '[Áudio]', 
@@ -68,7 +70,7 @@ function extractMessageContent(message: any, fullPayload?: any): { content: stri
     };
   }
   if (message.videoMessage) {
-    const mediaUrl = mediaData.media?.url || message.videoMessage.url;
+    const mediaUrl = externalMediaUrl || mediaData.media?.url || message.videoMessage.url;
     const base64 = mediaData.base64 || mediaData.media?.base64;
     return { 
       content: message.videoMessage.caption || '[Vídeo]',
@@ -80,7 +82,7 @@ function extractMessageContent(message: any, fullPayload?: any): { content: stri
     };
   }
   if (message.stickerMessage) {
-    const mediaUrl = mediaData.media?.url || message.stickerMessage.url;
+    const mediaUrl = externalMediaUrl || mediaData.media?.url || message.stickerMessage.url;
     const base64 = mediaData.base64 || mediaData.media?.base64;
     return { content: '[Sticker]', type: 'sticker', mediaUrl, base64 };
   }

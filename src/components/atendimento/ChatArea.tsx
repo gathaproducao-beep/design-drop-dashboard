@@ -8,6 +8,7 @@ import { Badge } from '@/components/ui/badge';
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '@/components/ui/dropdown-menu';
 import { GroupedConversation, WhatsappMessage, ConversationStatus, STATUS_LABELS, WhatsappConversation } from '@/types/atendimento';
 import { MessageBubble } from './MessageBubble';
+import { QuickReplyButtons } from './QuickReplyButtons';
 import { Skeleton } from '@/components/ui/skeleton';
 import { cn } from '@/lib/utils';
 import { supabase } from '@/integrations/supabase/client';
@@ -47,11 +48,19 @@ export function ChatArea({
   const fileInputRef = useRef<HTMLInputElement>(null);
   const { toast } = useToast();
 
+  // Scroll para o final quando mensagens carregam ou mudam
   useEffect(() => {
-    if (scrollRef.current) {
-      scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
-    }
-  }, [messages]);
+    // Usa setTimeout para garantir que o DOM foi renderizado
+    const timeoutId = setTimeout(() => {
+      if (scrollRef.current) {
+        const scrollContainer = scrollRef.current.querySelector('[data-radix-scroll-area-viewport]');
+        if (scrollContainer) {
+          scrollContainer.scrollTop = scrollContainer.scrollHeight;
+        }
+      }
+    }, 100);
+    return () => clearTimeout(timeoutId);
+  }, [messages, loading]);
 
   const handleSend = async () => {
     if (!message.trim() || sending) return;
@@ -294,6 +303,12 @@ export function ChatArea({
         </div>
       )}
 
+      {/* Botões de respostas rápidas */}
+      <QuickReplyButtons 
+        onSelect={(content) => setMessage(content)} 
+        contactName={group.contact?.name}
+      />
+
       {/* Input - estilo WhatsApp */}
       <div className="bg-[#f0f2f5] border-t border-[#d1d7db] px-4 py-2">
         <div className="flex gap-2 items-end">
@@ -318,7 +333,7 @@ export function ChatArea({
             variant="ghost" 
             size="icon" 
             onClick={onQuickReply} 
-            title="Respostas rápidas"
+            title="Todas as respostas rápidas"
             className="flex-shrink-0 h-10 w-10 text-[#54656f] hover:bg-[#d9dbdc]"
           >
             <Zap className="h-5 w-5" />
