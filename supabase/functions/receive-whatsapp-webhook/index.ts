@@ -19,7 +19,7 @@ function normalizePhone(phone: string): string {
 }
 
 // Extrai texto da mensagem - Evolution API envia base64 ou url no payload
-function extractMessageContent(message: any, fullPayload?: any): { content: string; type: string; mediaUrl?: string; caption?: string; mimeType?: string } {
+function extractMessageContent(message: any, fullPayload?: any): { content: string; type: string; mediaUrl?: string; caption?: string; mimeType?: string; base64?: string } {
   // Evolution API pode enviar a mídia no nível do data
   const mediaData = fullPayload?.data || {};
   
@@ -32,56 +32,155 @@ function extractMessageContent(message: any, fullPayload?: any): { content: stri
   if (message.imageMessage) {
     // Evolution API envia a URL/base64 em diferentes lugares
     const mediaUrl = mediaData.media?.url || 
-                     mediaData.base64 || 
-                     message.imageMessage.url ||
-                     (mediaData.base64 ? `data:${message.imageMessage.mimetype};base64,${mediaData.base64}` : null);
+                     message.imageMessage.url;
+    const base64 = mediaData.base64 || mediaData.media?.base64;
     
     return { 
       content: message.imageMessage.caption || '[Imagem]',
       type: 'image',
       mediaUrl,
+      base64,
       caption: message.imageMessage.caption,
       mimeType: message.imageMessage.mimetype
     };
   }
   if (message.documentMessage) {
     const mediaUrl = mediaData.media?.url || message.documentMessage.url;
+    const base64 = mediaData.base64 || mediaData.media?.base64;
     return { 
       content: message.documentMessage.fileName || '[Documento]',
       type: 'document',
       mediaUrl,
+      base64,
       caption: message.documentMessage.caption,
       mimeType: message.documentMessage.mimetype
     };
   }
   if (message.audioMessage) {
     const mediaUrl = mediaData.media?.url || message.audioMessage.url;
+    const base64 = mediaData.base64 || mediaData.media?.base64;
     return { 
       content: '[Áudio]', 
       type: 'audio', 
       mediaUrl,
+      base64,
       mimeType: message.audioMessage.mimetype 
     };
   }
   if (message.videoMessage) {
     const mediaUrl = mediaData.media?.url || message.videoMessage.url;
+    const base64 = mediaData.base64 || mediaData.media?.base64;
     return { 
       content: message.videoMessage.caption || '[Vídeo]',
       type: 'video',
       mediaUrl,
+      base64,
       caption: message.videoMessage.caption,
       mimeType: message.videoMessage.mimetype
     };
   }
   if (message.stickerMessage) {
     const mediaUrl = mediaData.media?.url || message.stickerMessage.url;
-    return { content: '[Sticker]', type: 'sticker', mediaUrl };
+    const base64 = mediaData.base64 || mediaData.media?.base64;
+    return { content: '[Sticker]', type: 'sticker', mediaUrl, base64 };
   }
   // Verificar reação
   if (message.reactionMessage) {
     return { content: message.reactionMessage.text || '👍', type: 'reaction' };
   }
   return { content: '[Mensagem não suportada]', type: 'text' };
+}
+
+// Função para fazer download e upload de mídia para o Storage
+async function downloadAndUploadMedia(
+  supabase: any,
+  mediaUrl: string | undefined,
+  base64Data: string | undefined,
+  mimeType: string | undefined,
+  messageId: string,
+  type: string
+): Promise<string | null> {
+  try {
+    let fileData: Uint8Array | null = null;
+    
+    // Prioriza base64 se disponível (mais confiável)
+    if (base64Data) {
+      console.log('📦 Usando dados base64 para upload');
+      // Decodificar base64
+      const binaryString = atob(base64Data);
+      const bytes = new Uint8Array(binaryString.length);
+      for (let i = 0; i < binaryString.length; i++) {
+        bytes[i] = binaryString.charCodeAt(i);
+      }
+      fileData = bytes;
+    } else if (mediaUrl) {
+      console.log('🌐 Fazendo download de:', mediaUrl.substring(0, 50) + '...');
+      
+      // Fazer download da URL
+      const response = await fetch(mediaUrl, {
+        headers: {
+          'User-Agent': 'WhatsApp/2.0'
+        }
+      });
+      
+      if (!response.ok) {
+        console.error('❌ Erro ao baixar mídia:', response.status, response.statusText);
+        return null;
+      }
+      
+      const arrayBuffer = await response.arrayBuffer();
+      fileData = new Uint8Array(arrayBuffer);
+    }
+    
+    if (!fileData || fileData.length === 0) {
+      console.log('⚠️ Sem dados de mídia para upload');
+      return null;
+    }
+    
+    // Determinar extensão baseado no mimeType
+    let extension = 'bin';
+    if (mimeType) {
+      if (mimeType.includes('jpeg') || mimeType.includes('jpg')) extension = 'jpg';
+      else if (mimeType.includes('png')) extension = 'png';
+      else if (mimeType.includes('gif')) extension = 'gif';
+      else if (mimeType.includes('webp')) extension = 'webp';
+      else if (mimeType.includes('mp4')) extension = 'mp4';
+      else if (mimeType.includes('ogg')) extension = 'ogg';
+      else if (mimeType.includes('opus')) extension = 'opus';
+      else if (mimeType.includes('mpeg') && type === 'audio') extension = 'mp3';
+      else if (mimeType.includes('pdf')) extension = 'pdf';
+      else if (mimeType.includes('webm')) extension = 'webm';
+    }
+    
+    const fileName = `${Date.now()}_${messageId}.${extension}`;
+    const filePath = `messages/${fileName}`;
+    
+    console.log(`📤 Uploading para Storage: ${filePath} (${fileData.length} bytes)`);
+    
+    const { data: uploadData, error: uploadError } = await supabase.storage
+      .from('whatsapp-media')
+      .upload(filePath, fileData, {
+        contentType: mimeType || 'application/octet-stream',
+        upsert: false
+      });
+    
+    if (uploadError) {
+      console.error('❌ Erro ao fazer upload:', uploadError);
+      return null;
+    }
+    
+    // Gerar URL pública
+    const { data: { publicUrl } } = supabase.storage
+      .from('whatsapp-media')
+      .getPublicUrl(filePath);
+    
+    console.log('✅ Mídia salva no Storage:', publicUrl);
+    return publicUrl;
+    
+  } catch (error) {
+    console.error('❌ Erro ao processar mídia:', error);
+    return null;
+  }
 }
 
 serve(async (req) => {
@@ -126,7 +225,7 @@ serve(async (req) => {
     // Extrair informações
     const key = message.key || {};
     const remoteJid = key.remoteJid || message.from || '';
-    const messageId = key.id || message.id;
+    const messageId = key.id || message.id || crypto.randomUUID();
     const pushName = message.pushName || message.name || '';
     const fromMe = key.fromMe || false;
 
@@ -155,9 +254,15 @@ serve(async (req) => {
 
     // Extrair conteúdo da mensagem
     const messageContent = message.message || message;
-    const { content, type, mediaUrl, caption, mimeType } = extractMessageContent(messageContent, payload);
+    const { content, type, mediaUrl, caption, mimeType, base64 } = extractMessageContent(messageContent, payload);
 
-    console.log('📱 Processando mensagem:', { phone, pushName, type, content: content.substring(0, 50), hasMedia: !!mediaUrl });
+    console.log('📱 Processando mensagem:', { phone, pushName, type, content: content.substring(0, 50), hasMedia: !!(mediaUrl || base64) });
+
+    // Download e upload de mídia para Storage (se houver)
+    let storedMediaUrl: string | null = null;
+    if (mediaUrl || base64) {
+      storedMediaUrl = await downloadAndUploadMedia(supabase, mediaUrl, base64, mimeType, messageId, type);
+    }
 
     // 1. Buscar ou criar contato
     let { data: contact } = await supabase
@@ -291,7 +396,9 @@ serve(async (req) => {
       }
     }
 
-    // 4. Salvar mensagem
+    // 4. Salvar mensagem (usar URL do Storage se disponível, senão URL original)
+    const finalMediaUrl = storedMediaUrl || mediaUrl || null;
+    
     const { data: savedMessage, error: msgError } = await supabase
       .from('whatsapp_messages')
       .insert({
@@ -300,7 +407,7 @@ serve(async (req) => {
         message_type: type,
         content,
         caption,
-        media_url: mediaUrl || null,
+        media_url: finalMediaUrl,
         media_mime_type: mimeType,
         sender_phone: fromMe ? null : phone,
         sender_name: fromMe ? null : pushName,
@@ -315,13 +422,14 @@ serve(async (req) => {
       throw msgError;
     }
 
-    console.log('✅ Mensagem salva:', savedMessage.id);
+    console.log('✅ Mensagem salva:', savedMessage.id, storedMediaUrl ? '(com mídia no Storage)' : '');
 
     return new Response(JSON.stringify({ 
       success: true, 
       contact_id: contact.id,
       conversation_id: conversation.id,
-      message_id: savedMessage.id
+      message_id: savedMessage.id,
+      media_stored: !!storedMediaUrl
     }), {
       headers: { ...corsHeaders, 'Content-Type': 'application/json' },
     });
