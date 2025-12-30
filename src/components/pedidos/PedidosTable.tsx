@@ -609,6 +609,7 @@ export function PedidosTable({
               <TableHead className="font-semibold">Foto Aprovação</TableHead>
               <TableHead className="font-semibold">Mensagem</TableHead>
               <TableHead className="font-semibold">Layout</TableHead>
+              <TableHead className="font-semibold">Obs. Interna</TableHead>
               <TableHead className="font-semibold">Molde</TableHead>
               <TableHead className="font-semibold">Data Impressão</TableHead>
               <TableHead className="font-semibold">Observação</TableHead>
@@ -713,6 +714,14 @@ export function PedidosTable({
                       <Badge variant={getBadgeVariant(value)}>{value}</Badge>
                     )}
                   />
+                </TableCell>
+                <TableCell>
+                  <EditableCell
+                    value={pedido.observacao_interna || ""}
+                    type="text"
+                    onSave={(value) => handleUpdateField(pedido.id, "observacao_interna", value)}
+                  />
+                </TableCell>
                 </TableCell>
                 <TableCell>
                   {pedido.molde_producao && pedido.molde_producao.length > 0 ? (
