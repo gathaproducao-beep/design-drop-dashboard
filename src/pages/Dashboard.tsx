@@ -2,7 +2,7 @@ import { useState, useEffect } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Plus, Search, Filter, Trash2, Upload, FileSpreadsheet, Download, Archive, Edit, Loader2, Cloud, MessageSquare, HardDrive, FolderArchive } from "lucide-react";
+import { Plus, Search, Filter, Trash2, Upload, FileSpreadsheet, Download, Archive, Edit, Loader2, Cloud, MessageSquare, HardDrive } from "lucide-react";
 import { AtualizarLoteDialog } from "@/components/pedidos/AtualizarLoteDialog";
 import { toast } from "sonner";
 import { PedidosTable } from "@/components/pedidos/PedidosTable";
@@ -11,7 +11,7 @@ import { ImportarPedidosDialog } from "@/components/pedidos/ImportarPedidosDialo
 import { ImportarFotosDialog } from "@/components/pedidos/ImportarFotosDialog";
 import { Navigation } from "@/components/Navigation";
 import { StorageCleanupDialog } from "@/components/drive/StorageCleanupDialog";
-import { StorageDownloadDialog } from "@/components/backup/StorageDownloadDialog";
+
 import { Checkbox } from "@/components/ui/checkbox";
 import { PermissionGate } from "@/components/PermissionGate";
 import { getDataBrasilia } from "@/lib/utils";
@@ -69,7 +69,7 @@ export default function Dashboard() {
   const [salvandoDrive, setSalvandoDrive] = useState(false);
   const [enviandoMensagens, setEnviandoMensagens] = useState(false);
   const [storageInfo, setStorageInfo] = useState<{ totalFiles: number; orphanFiles: number } | null>(null);
-  const [storageDownloadOpen, setStorageDownloadOpen] = useState(false);
+  
   const [gerandoMockupsLote, setGerandoMockupsLote] = useState(false);
   const [progressoMockupsLote, setProgressoMockupsLote] = useState<{ atual: number; total: number; pedidoAtual?: string }>({ atual: 0, total: 0 });
   // Hook para fila de geração de mockups
@@ -781,14 +781,6 @@ export default function Dashboard() {
               )}
             </div>
             <div className="flex gap-2">
-              <Button
-                onClick={() => setStorageDownloadOpen(true)}
-                variant="outline"
-                size="sm"
-              >
-                <FolderArchive className="mr-2 h-4 w-4" />
-                Baixar Storage
-              </Button>
               <StorageCleanupDialog />
               <PermissionGate permission="importar_fotos">
                 <Button
@@ -1031,10 +1023,6 @@ export default function Dashboard() {
           progressoMockups={progressoMockupsLote}
         />
 
-        <StorageDownloadDialog 
-          open={storageDownloadOpen} 
-          onOpenChange={setStorageDownloadOpen} 
-        />
       </div>
     </div>
   );

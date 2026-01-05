@@ -2,6 +2,7 @@ import { useState } from "react";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { Progress } from "@/components/ui/progress";
+import { Checkbox } from "@/components/ui/checkbox";
 import { supabase } from "@/integrations/supabase/client";
 import { Download, Loader2, FolderArchive, CheckCircle2, AlertCircle } from "lucide-react";
 import { toast } from "sonner";
@@ -19,13 +20,25 @@ interface DownloadProgress {
   currentFile: string;
 }
 
+const AVAILABLE_BUCKETS = [
+  { id: "mockup-images", label: "Mockup Images" },
+  { id: "whatsapp-media", label: "WhatsApp Media" },
+];
+
 export function StorageDownloadDialog({ open, onOpenChange }: StorageDownloadDialogProps) {
   const [downloading, setDownloading] = useState(false);
   const [progress, setProgress] = useState<DownloadProgress | null>(null);
   const [completed, setCompleted] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [selectedBuckets, setSelectedBuckets] = useState<string[]>(["mockup-images", "whatsapp-media"]);
 
-  const buckets = ["mockup-images", "whatsapp-media"];
+  const toggleBucket = (bucketId: string) => {
+    setSelectedBuckets((prev) =>
+      prev.includes(bucketId)
+        ? prev.filter((b) => b !== bucketId)
+        : [...prev, bucketId]
+    );
+  };
 
   async function listAllFiles(bucket: string, folder: string = ""): Promise<string[]> {
     const allFiles: string[] = [];
@@ -69,6 +82,11 @@ export function StorageDownloadDialog({ open, onOpenChange }: StorageDownloadDia
   }
 
   async function handleDownload() {
+    if (selectedBuckets.length === 0) {
+      toast.error("Selecione pelo menos um bucket");
+      return;
+    }
+
     setDownloading(true);
     setCompleted(false);
     setError(null);
@@ -78,10 +96,10 @@ export function StorageDownloadDialog({ open, onOpenChange }: StorageDownloadDia
       let totalFiles = 0;
       let processedFiles = 0;
 
-      // Primeiro, listar todos os arquivos de todos os buckets
+      // Primeiro, listar todos os arquivos dos buckets selecionados
       const bucketFiles: Record<string, string[]> = {};
       
-      for (const bucket of buckets) {
+      for (const bucket of selectedBuckets) {
         setProgress({ bucket, current: 0, total: 0, currentFile: "Listando arquivos..." });
         const files = await listAllFiles(bucket);
         bucketFiles[bucket] = files;
@@ -90,13 +108,13 @@ export function StorageDownloadDialog({ open, onOpenChange }: StorageDownloadDia
       }
 
       if (totalFiles === 0) {
-        toast.info("Nenhum arquivo encontrado nos buckets");
+        toast.info("Nenhum arquivo encontrado nos buckets selecionados");
         setDownloading(false);
         return;
       }
 
       // Agora baixar cada arquivo e adicionar ao ZIP
-      for (const bucket of buckets) {
+      for (const bucket of selectedBuckets) {
         const files = bucketFiles[bucket];
         const bucketFolder = zip.folder(bucket);
         
@@ -134,8 +152,6 @@ export function StorageDownloadDialog({ open, onOpenChange }: StorageDownloadDia
         type: "blob",
         compression: "DEFLATE",
         compressionOptions: { level: 6 }
-      }, (metadata) => {
-        // Progress callback do ZIP
       });
 
       // Download do arquivo
@@ -167,22 +183,32 @@ export function StorageDownloadDialog({ open, onOpenChange }: StorageDownloadDia
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
             <FolderArchive className="h-5 w-5" />
-            Baixar Storage Completo
+            Baixar Storage
           </DialogTitle>
           <DialogDescription>
-            Baixa todos os arquivos dos buckets como um arquivo ZIP mantendo a estrutura de pastas.
+            Baixa os arquivos dos buckets selecionados como um arquivo ZIP mantendo a estrutura de pastas.
           </DialogDescription>
         </DialogHeader>
 
         <div className="space-y-4 py-4">
-          {/* Lista de buckets */}
-          <div className="space-y-2">
-            <p className="text-sm font-medium">Buckets incluídos:</p>
-            <div className="space-y-1">
-              {buckets.map((bucket) => (
-                <div key={bucket} className="flex items-center gap-2 text-sm text-muted-foreground">
-                  <span className="w-2 h-2 rounded-full bg-primary" />
-                  {bucket}
+          {/* Seleção de buckets */}
+          <div className="space-y-3">
+            <p className="text-sm font-medium">Selecione os buckets:</p>
+            <div className="space-y-2">
+              {AVAILABLE_BUCKETS.map((bucket) => (
+                <div key={bucket.id} className="flex items-center space-x-2">
+                  <Checkbox
+                    id={bucket.id}
+                    checked={selectedBuckets.includes(bucket.id)}
+                    onCheckedChange={() => toggleBucket(bucket.id)}
+                    disabled={downloading}
+                  />
+                  <label
+                    htmlFor={bucket.id}
+                    className="text-sm font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70"
+                  >
+                    {bucket.label}
+                  </label>
                 </div>
               ))}
             </div>
@@ -223,7 +249,7 @@ export function StorageDownloadDialog({ open, onOpenChange }: StorageDownloadDia
           <Button variant="outline" onClick={() => onOpenChange(false)} disabled={downloading}>
             Fechar
           </Button>
-          <Button onClick={handleDownload} disabled={downloading}>
+          <Button onClick={handleDownload} disabled={downloading || selectedBuckets.length === 0}>
             {downloading ? (
               <>
                 <Loader2 className="h-4 w-4 mr-2 animate-spin" />

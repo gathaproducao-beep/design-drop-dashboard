@@ -7,13 +7,15 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { Slider } from "@/components/ui/slider";
 import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
-import { Settings, Trash2, Loader2, HardDrive } from "lucide-react";
+import { Settings, Trash2, Loader2, HardDrive, Download } from "lucide-react";
 import CleanupPedidosDialog from "@/components/drive/CleanupPedidosDialog";
+import { StorageDownloadDialog } from "@/components/backup/StorageDownloadDialog";
 
 export default function Configuracoes() {
   const { toast } = useToast();
   const [loading, setLoading] = useState(false);
   const [showCleanupDialog, setShowCleanupDialog] = useState(false);
+  const [storageDownloadOpen, setStorageDownloadOpen] = useState(false);
 
   // Configurações de limpeza automática
   const [storageCleanupDays, setStorageCleanupDays] = useState(15);
@@ -175,10 +177,16 @@ export default function Configuracoes() {
               ) : (
                 <p className="text-muted-foreground">Não foi possível carregar informações do storage</p>
               )}
-              <Button variant="outline" onClick={carregarInfoStorage} className="mt-4" disabled={loadingStorage}>
-                {loadingStorage ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : null}
-                Atualizar
-              </Button>
+              <div className="flex gap-2 mt-4">
+                <Button variant="outline" onClick={carregarInfoStorage} disabled={loadingStorage}>
+                  {loadingStorage ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : null}
+                  Atualizar
+                </Button>
+                <Button variant="outline" onClick={() => setStorageDownloadOpen(true)}>
+                  <Download className="h-4 w-4 mr-2" />
+                  Baixar Storage
+                </Button>
+              </div>
             </CardContent>
           </Card>
 
@@ -283,6 +291,11 @@ export default function Configuracoes() {
           cleanupFotoAprovacao,
           cleanupMoldeProducao,
         }}
+      />
+
+      <StorageDownloadDialog
+        open={storageDownloadOpen}
+        onOpenChange={setStorageDownloadOpen}
       />
     </div>
   );
