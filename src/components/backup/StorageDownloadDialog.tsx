@@ -23,7 +23,6 @@ interface DownloadProgress {
 // Pastas disponíveis para download dentro do bucket mockup-images
 const AVAILABLE_FOLDERS = [
   { id: "mockups", label: "Mockups", path: "mockups" },
-  { id: "molde", label: "Molde", path: "molde" },
 ];
 
 export function StorageDownloadDialog({ open, onOpenChange }: StorageDownloadDialogProps) {
@@ -31,7 +30,7 @@ export function StorageDownloadDialog({ open, onOpenChange }: StorageDownloadDia
   const [progress, setProgress] = useState<DownloadProgress | null>(null);
   const [completed, setCompleted] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [selectedFolders, setSelectedFolders] = useState<string[]>(["mockups", "molde"]);
+  const [selectedFolders, setSelectedFolders] = useState<string[]>(["mockups"]);
 
   const toggleFolder = (folderId: string) => {
     setSelectedFolders((prev) =>
