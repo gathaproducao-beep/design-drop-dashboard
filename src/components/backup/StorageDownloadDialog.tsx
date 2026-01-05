@@ -14,15 +14,16 @@ interface StorageDownloadDialogProps {
 }
 
 interface DownloadProgress {
-  bucket: string;
+  folder: string;
   current: number;
   total: number;
   currentFile: string;
 }
 
-const AVAILABLE_BUCKETS = [
-  { id: "mockup-images", label: "Mockup Images" },
-  { id: "whatsapp-media", label: "WhatsApp Media" },
+// Pastas disponíveis para download dentro do bucket mockup-images
+const AVAILABLE_FOLDERS = [
+  { id: "mockups", label: "Mockups", path: "mockups" },
+  { id: "molde", label: "Molde", path: "molde" },
 ];
 
 export function StorageDownloadDialog({ open, onOpenChange }: StorageDownloadDialogProps) {
@@ -30,34 +31,34 @@ export function StorageDownloadDialog({ open, onOpenChange }: StorageDownloadDia
   const [progress, setProgress] = useState<DownloadProgress | null>(null);
   const [completed, setCompleted] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [selectedBuckets, setSelectedBuckets] = useState<string[]>(["mockup-images", "whatsapp-media"]);
+  const [selectedFolders, setSelectedFolders] = useState<string[]>(["mockups", "molde"]);
 
-  const toggleBucket = (bucketId: string) => {
-    setSelectedBuckets((prev) =>
-      prev.includes(bucketId)
-        ? prev.filter((b) => b !== bucketId)
-        : [...prev, bucketId]
+  const toggleFolder = (folderId: string) => {
+    setSelectedFolders((prev) =>
+      prev.includes(folderId)
+        ? prev.filter((f) => f !== folderId)
+        : [...prev, folderId]
     );
   };
 
-  async function listAllFiles(bucket: string, folder: string = ""): Promise<string[]> {
+  async function listAllFiles(folderPath: string): Promise<string[]> {
     const allFiles: string[] = [];
     
     const { data, error } = await supabase.storage
-      .from(bucket)
-      .list(folder, { limit: 1000 });
+      .from("mockup-images")
+      .list(folderPath, { limit: 1000 });
     
     if (error) {
-      console.error(`Erro ao listar ${bucket}/${folder}:`, error);
+      console.error(`Erro ao listar ${folderPath}:`, error);
       return allFiles;
     }
 
     for (const item of data || []) {
-      const path = folder ? `${folder}/${item.name}` : item.name;
+      const path = `${folderPath}/${item.name}`;
       
       if (item.id === null) {
         // É uma pasta, listar recursivamente
-        const subFiles = await listAllFiles(bucket, path);
+        const subFiles = await listAllFiles(path);
         allFiles.push(...subFiles);
       } else {
         // É um arquivo
@@ -68,13 +69,13 @@ export function StorageDownloadDialog({ open, onOpenChange }: StorageDownloadDia
     return allFiles;
   }
 
-  async function downloadFile(bucket: string, path: string): Promise<Blob | null> {
+  async function downloadFile(path: string): Promise<Blob | null> {
     const { data, error } = await supabase.storage
-      .from(bucket)
+      .from("mockup-images")
       .download(path);
     
     if (error) {
-      console.error(`Erro ao baixar ${bucket}/${path}:`, error);
+      console.error(`Erro ao baixar ${path}:`, error);
       return null;
     }
 
@@ -82,8 +83,8 @@ export function StorageDownloadDialog({ open, onOpenChange }: StorageDownloadDia
   }
 
   async function handleDownload() {
-    if (selectedBuckets.length === 0) {
-      toast.error("Selecione pelo menos um bucket");
+    if (selectedFolders.length === 0) {
+      toast.error("Selecione pelo menos uma pasta");
       return;
     }
 
@@ -96,49 +97,46 @@ export function StorageDownloadDialog({ open, onOpenChange }: StorageDownloadDia
       let totalFiles = 0;
       let processedFiles = 0;
 
-      // Primeiro, listar todos os arquivos dos buckets selecionados
-      const bucketFiles: Record<string, string[]> = {};
+      // Primeiro, listar todos os arquivos das pastas selecionadas
+      const folderFiles: Record<string, string[]> = {};
       
-      for (const bucket of selectedBuckets) {
-        setProgress({ bucket, current: 0, total: 0, currentFile: "Listando arquivos..." });
-        const files = await listAllFiles(bucket);
-        bucketFiles[bucket] = files;
+      for (const folderId of selectedFolders) {
+        const folder = AVAILABLE_FOLDERS.find(f => f.id === folderId);
+        if (!folder) continue;
+
+        setProgress({ folder: folder.label, current: 0, total: 0, currentFile: "Listando arquivos..." });
+        const files = await listAllFiles(folder.path);
+        folderFiles[folderId] = files;
         totalFiles += files.length;
-        console.log(`[Storage] ${bucket}: ${files.length} arquivos encontrados`);
+        console.log(`[Storage] ${folder.label}: ${files.length} arquivos encontrados`);
       }
 
       if (totalFiles === 0) {
-        toast.info("Nenhum arquivo encontrado nos buckets selecionados");
+        toast.info("Nenhum arquivo encontrado nas pastas selecionadas");
         setDownloading(false);
         return;
       }
 
       // Agora baixar cada arquivo e adicionar ao ZIP
-      for (const bucket of selectedBuckets) {
-        const files = bucketFiles[bucket];
-        const bucketFolder = zip.folder(bucket);
+      for (const folderId of selectedFolders) {
+        const folder = AVAILABLE_FOLDERS.find(f => f.id === folderId);
+        if (!folder) continue;
+
+        const files = folderFiles[folderId];
         
         for (const filePath of files) {
           setProgress({
-            bucket,
+            folder: folder.label,
             current: processedFiles + 1,
             total: totalFiles,
             currentFile: filePath
           });
 
-          const blob = await downloadFile(bucket, filePath);
+          const blob = await downloadFile(filePath);
           
           if (blob) {
-            // Criar estrutura de pastas no ZIP
-            const pathParts = filePath.split("/");
-            let currentFolder = bucketFolder;
-            
-            for (let i = 0; i < pathParts.length - 1; i++) {
-              currentFolder = currentFolder!.folder(pathParts[i]);
-            }
-            
-            const fileName = pathParts[pathParts.length - 1];
-            currentFolder!.file(fileName, blob);
+            // Adicionar ao ZIP mantendo a estrutura de pastas
+            zip.file(filePath, blob);
           }
 
           processedFiles++;
@@ -146,7 +144,7 @@ export function StorageDownloadDialog({ open, onOpenChange }: StorageDownloadDia
       }
 
       // Gerar o ZIP
-      setProgress({ bucket: "Gerando ZIP", current: totalFiles, total: totalFiles, currentFile: "Comprimindo arquivos..." });
+      setProgress({ folder: "Gerando ZIP", current: totalFiles, total: totalFiles, currentFile: "Comprimindo arquivos..." });
       
       const zipBlob = await zip.generateAsync({ 
         type: "blob",
@@ -158,7 +156,8 @@ export function StorageDownloadDialog({ open, onOpenChange }: StorageDownloadDia
       const url = URL.createObjectURL(zipBlob);
       const a = document.createElement("a");
       a.href = url;
-      a.download = `storage-backup-${new Date().toISOString().split("T")[0]}.zip`;
+      const folderNames = selectedFolders.join("-");
+      a.download = `storage-${folderNames}-${new Date().toISOString().split("T")[0]}.zip`;
       document.body.appendChild(a);
       a.click();
       document.body.removeChild(a);
@@ -186,28 +185,28 @@ export function StorageDownloadDialog({ open, onOpenChange }: StorageDownloadDia
             Baixar Storage
           </DialogTitle>
           <DialogDescription>
-            Baixa os arquivos dos buckets selecionados como um arquivo ZIP mantendo a estrutura de pastas.
+            Baixa as pastas selecionadas do bucket mockup-images como um arquivo ZIP.
           </DialogDescription>
         </DialogHeader>
 
         <div className="space-y-4 py-4">
-          {/* Seleção de buckets */}
+          {/* Seleção de pastas */}
           <div className="space-y-3">
-            <p className="text-sm font-medium">Selecione os buckets:</p>
+            <p className="text-sm font-medium">Selecione as pastas:</p>
             <div className="space-y-2">
-              {AVAILABLE_BUCKETS.map((bucket) => (
-                <div key={bucket.id} className="flex items-center space-x-2">
+              {AVAILABLE_FOLDERS.map((folder) => (
+                <div key={folder.id} className="flex items-center space-x-2">
                   <Checkbox
-                    id={bucket.id}
-                    checked={selectedBuckets.includes(bucket.id)}
-                    onCheckedChange={() => toggleBucket(bucket.id)}
+                    id={folder.id}
+                    checked={selectedFolders.includes(folder.id)}
+                    onCheckedChange={() => toggleFolder(folder.id)}
                     disabled={downloading}
                   />
                   <label
-                    htmlFor={bucket.id}
+                    htmlFor={folder.id}
                     className="text-sm font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70"
                   >
-                    {bucket.label}
+                    {folder.label}
                   </label>
                 </div>
               ))}
@@ -218,7 +217,7 @@ export function StorageDownloadDialog({ open, onOpenChange }: StorageDownloadDia
           {downloading && progress && (
             <div className="space-y-2">
               <div className="flex justify-between text-sm">
-                <span className="text-muted-foreground">{progress.bucket}</span>
+                <span className="text-muted-foreground">{progress.folder}</span>
                 <span className="font-medium">{progress.current} / {progress.total}</span>
               </div>
               <Progress value={progressPercent} className="h-2" />
@@ -249,7 +248,7 @@ export function StorageDownloadDialog({ open, onOpenChange }: StorageDownloadDia
           <Button variant="outline" onClick={() => onOpenChange(false)} disabled={downloading}>
             Fechar
           </Button>
-          <Button onClick={handleDownload} disabled={downloading || selectedBuckets.length === 0}>
+          <Button onClick={handleDownload} disabled={downloading || selectedFolders.length === 0}>
             {downloading ? (
               <>
                 <Loader2 className="h-4 w-4 mr-2 animate-spin" />
