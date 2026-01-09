@@ -412,8 +412,9 @@ export async function generateMockupsForPedido(
         console.log(`💾 Blob final criado: ${processedBlob.size} bytes`);
 
         // Upload para storage
-        const timestamp = Date.now();
-        const filename = `${pedido.numero_pedido}_${mockup.tipo}_${canvasData.nome}_${timestamp}.png`;
+        // Formatar nome do canvas para maiúsculo e remover espaços
+        const canvasNomeFormatado = canvasData.nome.toUpperCase().replace(/\s+/g, '-');
+        const filename = `${pedido.numero_pedido}-${pedido.codigo_produto}-${canvasNomeFormatado}.png`;
         const filepath = `${mockup.tipo}/${filename}`;
 
         const { data: uploadData, error: uploadError } = await supabase.storage
