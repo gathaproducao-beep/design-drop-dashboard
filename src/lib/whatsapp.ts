@@ -245,6 +245,25 @@ export const sendWhatsappMessage = async (
  */
 export const processarEnvioPedido = async (pedidoId: string) => {
   try {
+    // 0. ANTI-DUPLICIDADE: Verificar se já existe mensagem recente para este pedido
+    const { data: existingQueue } = await supabase
+      .from('whatsapp_queue')
+      .select('id, status, created_at')
+      .eq('pedido_id', pedidoId)
+      .in('status', ['pending', 'processing', 'sent'])
+      .gte('created_at', new Date(Date.now() - 5 * 60 * 1000).toISOString()) // últimos 5 minutos
+      .limit(1);
+    
+    if (existingQueue && existingQueue.length > 0) {
+      console.log(`⚠️ Mensagem já existe para pedido ${pedidoId} (status: ${existingQueue[0].status})`);
+      return {
+        success: true,
+        skipped: true,
+        reason: 'Mensagem já enfileirada recentemente',
+        existingStatus: existingQueue[0].status
+      };
+    }
+    
     // 1. Buscar dados do pedido
     const { data: pedido, error: pedidoError } = await supabase
       .from('pedidos')

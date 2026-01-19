@@ -280,6 +280,35 @@ Deno.serve(async (req) => {
     // Rastrear telefone anterior para manter mesma instância por cliente
     let lastPhone: string | null = null;
     let clientInstance: WhatsappInstance | null = null;
+    
+    // Cache de afinidade de instância por telefone (consultado do histórico)
+    const phoneInstanceCache: Record<string, string> = {};
+    
+    // Função para buscar instância histórica do telefone
+    const getHistoricalInstanceForPhone = async (phone: string): Promise<string | null> => {
+      // Verificar cache primeiro
+      if (phoneInstanceCache[phone]) {
+        return phoneInstanceCache[phone];
+      }
+      
+      // Buscar última mensagem enviada com sucesso para este telefone nas últimas 24h
+      const { data: lastMessage } = await supabase
+        .from('whatsapp_queue')
+        .select('instance_id')
+        .eq('phone', phone)
+        .eq('status', 'sent')
+        .not('instance_id', 'is', null)
+        .gte('created_at', new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString())
+        .order('created_at', { ascending: false })
+        .limit(1);
+      
+      if (lastMessage && lastMessage.length > 0 && lastMessage[0].instance_id) {
+        phoneInstanceCache[phone] = lastMessage[0].instance_id;
+        return lastMessage[0].instance_id;
+      }
+      
+      return null;
+    };
 
     // 5. Processar cada mensagem (usando lista ordenada por telefone)
     for (let i = 0; i < sortedMessages.length; i++) {
@@ -308,20 +337,42 @@ Deno.serve(async (req) => {
           // Mesmo cliente: manter a mesma instância
           activeInstance = clientInstance;
           console.log(`📱 Mesmo cliente (${msg.phone}), mantendo instância ${activeInstance.nome}`);
-        } else if (usarTodasInstancias && instances.length > 1) {
-          // Novo cliente + rotação ativa: usar próxima instância baseado no estado
-          const rotation = getNextInstance(instances, rotationState, mensagensPorInstancia);
-          activeInstance = rotation.instance;
-          rotationState = rotation.newState;
+        } else {
+          // Novo cliente: verificar histórico primeiro
+          const historicalInstanceId = await getHistoricalInstanceForPhone(msg.phone);
+          
+          if (historicalInstanceId) {
+            // Usar instância histórica se ainda estiver ativa
+            const historicalInstance = instances.find(i => i.id === historicalInstanceId);
+            if (historicalInstance) {
+              activeInstance = historicalInstance;
+              console.log(`📜 Cliente (${msg.phone}) tem histórico, usando instância ${activeInstance.nome}`);
+            } else if (usarTodasInstancias && instances.length > 1) {
+              // Instância histórica não está mais ativa, usar rotação
+              const rotation = getNextInstance(instances, rotationState, mensagensPorInstancia);
+              activeInstance = rotation.instance;
+              rotationState = rotation.newState;
+              console.log(`🔄 Instância histórica inativa, rotacionando para ${activeInstance.nome}`);
+            } else {
+              activeInstance = instances[0];
+            }
+          } else if (usarTodasInstancias && instances.length > 1) {
+            // Sem histórico + rotação ativa: usar próxima instância
+            const rotation = getNextInstance(instances, rotationState, mensagensPorInstancia);
+            activeInstance = rotation.instance;
+            rotationState = rotation.newState;
+            console.log(`🔄 Novo cliente (${msg.phone}), usando instância ${activeInstance.nome}`);
+          } else {
+            // Modo padrão: usar primeira instância
+            activeInstance = instances[0];
+          }
+          
           // Salvar como instância do cliente atual
           clientInstance = activeInstance;
           lastPhone = msg.phone;
-          console.log(`🔄 Novo cliente (${msg.phone}), usando instância ${activeInstance.nome}`);
-        } else {
-          // Modo padrão: usar primeira instância
-          activeInstance = instances[0];
-          clientInstance = activeInstance;
-          lastPhone = msg.phone;
+          
+          // Atualizar cache
+          phoneInstanceCache[msg.phone] = activeInstance.id;
         }
 
         // Marcar como processando
