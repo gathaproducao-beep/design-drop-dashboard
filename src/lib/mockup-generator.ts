@@ -422,7 +422,7 @@ export async function generateMockupsForPedido(
           .upload(filepath, processedBlob, {
             contentType: "image/png",
             cacheControl: "3600",
-            upsert: false,
+            upsert: true, // Permite sobrescrever arquivos existentes ao regenerar
           });
 
         if (uploadError) throw uploadError;
